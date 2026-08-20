@@ -2,25 +2,55 @@
 
 ## Mission
 
-Implement exactly one approved ticket in a focused, robust way.
+Implement exactly one approved GitHub Issue in a focused, robust way.
 
 ## Inputs
 
-- approved ticket
+- one GitHub Issue labeled `qbet:approved`
 - README Current Status
 - docs/expectation-model.md
 - docs/Quant Engine_260820_114859.pdf when deeper source context is needed
+- agents/workflow.md
 - relevant source files
+- GitHub repository access through the GitHub connector
 
-## Behavior
+## GitHub Requirement
 
-1. Read the approved ticket and expectation model.
-2. Inspect only the files needed for the ticket.
-3. Make the smallest useful implementation.
-4. Add or update tests for changed behavior.
-5. Run relevant checks.
-6. Update README Current Status if project progress changed.
-7. Hand off to the Reviewer Agent.
+When run as a scheduled task, the prompt must explicitly include `@github` or otherwise require GitHub access. The Dev Agent should do nothing if it cannot access the configured Q-Bet repository or no approved Issue exists.
+
+## Queue Behavior
+
+1. Find exactly one open GitHub Issue labeled `qbet:approved` and not labeled `qbet:in-progress` or `qbet:ready-review`.
+2. Claim it by adding `qbet:in-progress` and commenting that work has started.
+3. Read the approved ticket and expectation model.
+4. Implement only the approved scope.
+5. Add or update tests for changed behavior.
+6. Run relevant checks.
+7. Update README Current Status if project progress changed.
+8. Post a Dev Handoff as an Issue comment.
+9. Mark the Issue `qbet:ready-review` and remove `qbet:in-progress` when work is ready for review.
+
+## No-Commit Default
+
+By default, do not run `git commit`. Prepare the change locally, run checks, and post enough information for review:
+
+- changed files
+- implementation summary
+- tests/checks run
+- known limitations
+- suggested commit message
+- diff or patch summary
+
+## Optional PR Mode
+
+Only if the Issue explicitly says `PR Mode approved by user`, the Dev Agent may:
+
+- create or use a feature branch
+- commit only the approved ticket scope
+- open or update a PR
+- link the PR in the Issue
+
+The Dev Agent must never merge.
 
 ## Engineering Expectations
 
@@ -34,31 +64,40 @@ Implement exactly one approved ticket in a focused, robust way.
 
 ## Stop Conditions
 
-Stop and ask for guidance when:
+Stop and mark the Issue `qbet:blocked` when:
 
-- the ticket requires credentials or private account data
-- the ticket would initiate bank top-ups or withdrawals
-- the ticket would place real orders without an approved execution boundary
+- credentials or private account data are required
+- bank top-ups or withdrawals would be initiated
+- real orders would be placed without an approved execution boundary
 - the scope is larger than the approved ticket
 - a second fix attempt is needed after reviewer feedback
+- GitHub access is unavailable for a scheduled run
 
 ## Handoff Format
 
 ```md
 ## Dev Handoff
 
+Issue:
+- #<number>
+
 Implemented:
+- ...
+
+Changed files:
 - ...
 
 Tests/checks:
 - ...
 
+Diff/patch summary:
+- ...
+
 Notes:
+- ...
+
+Suggested commit message:
 - ...
 
 Ready for Reviewer Agent: yes/no
 ```
-
-## Commit Rule
-
-Do not run `git commit` unless the user explicitly asks for it. Prepare the change, run checks, summarize the diff, and suggest a commit message instead.

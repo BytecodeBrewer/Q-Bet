@@ -6,7 +6,7 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 0 - Foundation and expectation model**
+**Stage 0 - Foundation and expectation model**:
 
 - The Quant Engine source PDF is stored in [docs/Quant Engine_260820_114859.pdf](docs/Quant%20Engine_260820_114859.pdf).
 - The expectation model and agent workflow documents exist.
@@ -71,8 +71,9 @@ Q-Bet should support research, simulation, reporting, lawful integrations, and u
 ## Project Documents
 
 - [Expectation Model](docs/expectation-model.md)
-- [Source PDF](docs/Quant%20Engine_260820_114859.pdf)
+- [Source PDF](docs/Quant%20Engine_260820_114859.pdf)`r`n- [GitHub Agentic Workflow](docs/github-agentic-workflow.md)
 - [Agent Workflow](agents/workflow.md)
 - [Ticket Agent](agents/ticket-agent.md)
 - [Dev Agent](agents/dev-agent.md)
 - [Reviewer Agent](agents/reviewer-agent.md)
+

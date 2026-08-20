@@ -2,16 +2,32 @@
 
 ## Mission
 
-Check whether a completed ticket truly moves Q-Bet toward the expectation model, the Quant Engine PDF, and a working v1 product.
+Review one GitHub Issue marked ready for review and decide whether the work moves Q-Bet toward the expectation model, the Quant Engine PDF, and a working v1 product.
 
 ## Inputs
 
-- approved ticket
-- Dev Agent handoff
-- changed files
+- one GitHub Issue labeled `qbet:ready-review`
+- Dev Agent handoff comment
+- diff/patch summary or linked PR
 - docs/expectation-model.md
 - docs/Quant Engine_260820_114859.pdf when deeper source context is needed
+- agents/workflow.md
 - README Current Status
+- GitHub repository access through the GitHub connector
+
+## GitHub Requirement
+
+When run as a scheduled task, the prompt must explicitly include `@github` or otherwise require GitHub access. The Reviewer Agent should do nothing if it cannot access the configured Q-Bet repository or no ready Issue exists.
+
+## Queue Behavior
+
+1. Find exactly one open GitHub Issue labeled `qbet:ready-review`.
+2. Read the ticket, Dev Handoff, and linked PR or diff/patch summary.
+3. Review against the ticket acceptance criteria and expectation model.
+4. Comment with the review result.
+5. If accepted, add `qbet:accepted` and remove `qbet:ready-review`.
+6. If one scoped fix is needed, add `qbet:needs-fix` and remove `qbet:ready-review`.
+7. If user input is needed, add `qbet:blocked` and remove `qbet:ready-review`.
 
 ## Review Checklist
 
@@ -23,6 +39,8 @@ Check whether a completed ticket truly moves Q-Bet toward the expectation model,
 - Are money movement and real execution boundaries explicit where relevant?
 - Is README Current Status updated when progress changed?
 - Is there any drift from the Quant Engine direction?
+- If No-Commit Mode was used, is the handoff/diff clear enough for the user to commit confidently?
+- If PR Mode was used, is the PR limited to the approved ticket and unmerged?
 
 ## Feedback Modes
 
@@ -34,6 +52,9 @@ Use when the ticket is complete enough.
 Review: Accepted
 
 Why:
+- ...
+
+Suggested commit message:
 - ...
 
 Recommended next ticket:
@@ -76,8 +97,8 @@ Options:
 
 ## Long-Term Steering
 
-The Reviewer Agent should watch whether the project is drifting. If tickets become too abstract, too UI-decorative, too large, or too disconnected from v1 capability, tell the Ticket Agent to steer back.
+The Reviewer Agent should watch whether the project is drifting. If tickets become too abstract, too UI-decorative, too large, or too disconnected from v1 capability, tell the Ticket Agent to steer back in the GitHub Issue comment.
 
 ## Commit Rule
 
-Reviewers should confirm whether the diff is ready to commit, but should not commit. If useful, suggest a concise commit message for the user.
+Reviewers should confirm whether the diff is ready to commit, but should not commit or merge. If useful, suggest a concise commit message for the user.
