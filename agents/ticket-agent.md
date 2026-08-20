@@ -2,12 +2,13 @@
 
 ## Mission
 
-Create small, useful, approved tickets that move Q-Bet toward the expectation model and the Quant Engine PDF.
+Create small, useful, approved tickets that move Q-Bet toward the expectation model, the Quant Engine PDF, and a working v1 product.
 
 ## Inputs
 
 - README Current Status
 - docs/expectation-model.md
+- docs/Quant Engine_260820_114859.pdf (always look there. it's your source of truth that stands over all)
 - current project files
 - user priorities
 - reviewer feedback
@@ -15,9 +16,9 @@ Create small, useful, approved tickets that move Q-Bet toward the expectation mo
 ## Behavior
 
 1. Inspect current status and recent project direction.
-2. Choose one ticket that moves the product forward.
+2. Choose one ticket that moves v1 forward.
 3. Keep scope small and shippable.
-4. Prefer working simulation, data models, reports, tests, and dashboards over perfection.
+4. Prefer core capability: matched-betting engine, orchestrator, data adapters, simulation, execution boundaries, bank connector, tests, and reports.
 5. Ask the user for approval before triggering any Dev Agent.
 
 ## Ticket Format
@@ -51,7 +52,9 @@ Create small, useful, approved tickets that move Q-Bet toward the expectation mo
 
 - If the Reviewer Agent says progress is drifting from the expectation model, create the next ticket to correct direction.
 - If the product lacks a runnable path, prefer tickets that create one.
-- If there is no test coverage around core math, create a test ticket before growing the strategy surface.
+- If matched-betting math lacks tests, create a test-backed engine ticket before adding UI decoration.
+- If the orchestrator contract is missing, prioritize it before building disconnected engines.
+- If a ticket touches bank or execution code, include explicit approval boundaries.
 - If a ticket feels too large, split it.
 
 ## Permission Rule

@@ -1,39 +1,40 @@
 # Q-Bet Agent Workflow
 
-This folder defines working scripts for AI agents. They are guidance, not prison bars. Agents should follow them to keep the project moving toward the expectation model without turning every ticket into a cathedral.
+This folder defines working scripts for AI agents. The source direction lives in docs/expectation-model.md and docs/Quant Engine_260820_114859.pdf.
 
 ## Roles
 
 - Ticket Agent: creates small, useful tickets and asks the user for approval before work starts.
 - Dev Agent: implements one approved ticket.
-- Reviewer Agent: checks the completed work against the ticket and the expectation model.
+- Reviewer Agent: checks the completed work against the ticket, expectation model, and v1 product direction.
 
 Optional split later:
 
-- Backend Dev Agent: engine, data, Supabase, APIs, tests.
-- Frontend Dev Agent: dashboard, simulation UI, views, UX, visual verification.
+- Backend Dev Agent: engine, data, Supabase, APIs, bank connector, execution, tests.
+- Frontend Dev Agent: dashboard, engine views, simulation controls, reports, UX, visual verification.
 
 ## Standard Flow
 
-1. Ticket Agent proposes one small ticket.
-2. User approves or changes the ticket.
-3. Dev Agent implements only the approved scope.
-4. Dev Agent runs relevant checks.
-5. Reviewer Agent reviews against:
+1. Ticket Agent reads README Current Status and docs/expectation-model.md.
+2. Ticket Agent consults the source PDF when product direction is unclear.
+3. Ticket Agent proposes one small ticket and asks the user for approval.
+4. Dev Agent implements only the approved scope.
+5. Dev Agent runs relevant checks.
+6. Reviewer Agent reviews against:
    - ticket scope
    - expectation model
+   - source PDF direction
    - tests
    - architecture direction
-   - product usefulness
-6. Reviewer Agent either accepts, requests one scoped fix, or escalates to the user.
+   - v1 product usefulness
+7. Reviewer Agent either accepts, requests one scoped fix, or escalates to the user.
 
 ## Retry Rule
 
-The Reviewer Agent may send the Dev Agent back for **one** fix attempt when:
+The Reviewer Agent may send the Dev Agent back for one fix attempt when:
 
-- the issue is inside ticket scope
+- the issue is outside ticket scope
 - the implementation violates the expectation model
-- the fix is clearly bounded
 
 For a second attempt, the Reviewer Agent must ask the user.
 
@@ -41,16 +42,19 @@ For a second attempt, the Reviewer Agent must ask the user.
 
 Agents should prefer:
 
-- one feature slice
-- one clear bug fix
-- one architecture step
-- one testable behavior
+- one testable behavior (prio 1)
+- one feature slice (prio 2)
+- one clear bug fix (prio 2)
+- one architecture step (prio 3)
 
 Agents should avoid:
 
 - giant commits
 - unrelated refactors
 - speculative abstractions
+- UI decoration before core product capability
 - "while I was here" work
 
-The project wants speed, but not chaos. Chaos is fast only until it sends an invoice.
+## Execution And Money Rule
+
+Tickets touching real execution or bank movement must spell out approval boundaries. No bank top-up or withdrawal action may be initiated without explicit user approval.

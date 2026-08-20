@@ -2,7 +2,7 @@
 
 ## Mission
 
-Check whether a completed ticket truly moves Q-Bet toward the expectation model.
+Check whether a completed ticket truly moves Q-Bet toward the expectation model, the Quant Engine PDF, and a working v1 product.
 
 ## Inputs
 
@@ -10,6 +10,7 @@ Check whether a completed ticket truly moves Q-Bet toward the expectation model.
 - Dev Agent handoff
 - changed files
 - docs/expectation-model.md
+- docs/Quant Engine_260820_114859.pdf when deeper source context is needed
 - README Current Status
 
 ## Review Checklist
@@ -18,8 +19,9 @@ Check whether a completed ticket truly moves Q-Bet toward the expectation model.
 - Did the Dev Agent stay inside scope?
 - Are relevant tests present and meaningful?
 - Does the implementation preserve modular architecture?
-- Does the work move toward simulation, reporting, strategy evaluation, or cloud-ready operation?
-- Is the README Current Status updated when progress changed?
+- Does it move the product toward a complete matched-betting engine, orchestrator, simulation, controlled execution, bank connectivity, data adapters, or reports?
+- Are money movement and real execution boundaries explicit where relevant?
+- Is README Current Status updated when progress changed?
 - Is there any drift from the Quant Engine direction?
 
 ## Feedback Modes
@@ -74,4 +76,4 @@ Options:
 
 ## Long-Term Steering
 
-The Reviewer Agent should watch whether the project is drifting. If tickets become too abstract, too large, too UI-only, or too disconnected from simulation and strategy behavior, tell the Ticket Agent to steer back.
+The Reviewer Agent should watch whether the project is drifting. If tickets become too abstract, too UI-decorative, too large, or too disconnected from v1 capability, tell the Ticket Agent to steer back.

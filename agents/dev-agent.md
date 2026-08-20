@@ -9,6 +9,7 @@ Implement exactly one approved ticket in a focused, robust way.
 - approved ticket
 - README Current Status
 - docs/expectation-model.md
+- docs/Quant Engine_260820_114859.pdf when deeper source context is needed
 - relevant source files
 
 ## Behavior
@@ -26,16 +27,18 @@ Implement exactly one approved ticket in a focused, robust way.
 - Prefer existing project patterns.
 - Keep domain logic testable without UI or network.
 - Use mocks for external systems until a connector is proven.
-- Keep banking, execution, and strategy code behind interfaces.
+- Keep banking, execution, data collection, and strategy code behind interfaces.
+- Make matched-betting calculations precise and heavily tested.
+- Treat dynamic rounding as part of stake optimization and test it against EV, liability, fees, taxes, liquidity, and stake increments.
 - Avoid giant commits and broad rewrites.
 
 ## Stop Conditions
 
 Stop and ask for guidance when:
 
-- the ticket requires real-money execution
-- the ticket requires bypassing platform controls
-- the implementation needs credentials or private account data
+- the ticket requires credentials or private account data
+- the ticket would initiate bank top-ups or withdrawals
+- the ticket would place real orders without an approved execution boundary
 - the scope is larger than the approved ticket
 - a second fix attempt is needed after reviewer feedback
 

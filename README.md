@@ -1,46 +1,48 @@
 # Q-Bet
 
-> A modular Python quant engine for matched betting, sports arbitrage, strategy simulation, and automated opportunity detection.
+> A modular Python quant engine for matched betting, sports arbitrage, strategy simulation, controlled execution, and automated opportunity detection.
 
-Q-Bet is intended to become a web-based quant platform for testing betting-related strategies with clean data, clear risk controls, and useful reporting. The first serious goal is not "one magic bot", but a system that can collect data, normalize it, evaluate opportunities, simulate strategy behavior, and show what happened afterward without needing a forensic accountant and three coffees.
+Q-Bet is a cloud-ready web application for a multi-engine quant betting portfolio. The first useful version should already have a complete matched-betting engine, a capital orchestrator prepared for more engines, data collection through Playwright/API adapters, bank connectivity, simulation mode, and controlled real execution.
 
 ## Current Status
 
 **Stage 0 - Foundation and expectation model**
 
-- Project identity is defined: **Q-Bet**.
-- The Quant Engine PDF has been translated into a code-safe expectation model.
-- Agent workflow documents exist for ticket creation, implementation, and review.
-- Core engine code, Supabase schema, CI/CD, simulation UI, and bank integration are still to be built.
+- The Quant Engine source PDF is stored in [docs/Quant Engine_260820_114859.pdf](docs/Quant%20Engine_260820_114859.pdf).
+- The expectation model and agent workflow documents exist.
+- The first implementation ticket is still open: domain models, matched-betting calculations, orchestrator contracts, and tests.
+- Supabase, CI/CD, UI, Playwright collectors, bank connector, and execution adapters are not implemented yet.
 
-Update this section after every accepted ticket. If the README cannot tell us where we are, it is decorative wallpaper.
+Update this section after every accepted ticket. It should always say where the project really is.
 
-## Product Shape
+## Version 1 Target
 
-Q-Bet should grow into a cloud-hosted web application with:
+Version 1 should include:
 
-- a main dashboard showing all engines in compact status widgets
-- separate views for each engine
-- a bank/account view for cash movement and balances
-- a performance dashboard for realized and simulated outcomes
-- a simulation mode with configurable capital, strategies, deposits, stop controls, and reports
-- general settings for capital splitting, enabled engines, app design, and risk preferences
-- Supabase as the preferred data platform
+- a complete matched-betting engine from data intake to strategy result, execution plan, and report
+- a capital orchestrator that can route capital and is ready for Yield and Alpha engines
+- simulation mode for every engine, including placeholder/sandbox engines where not fully implemented
+- controlled real execution for supported matched-betting workflows
+- Playwright-based web collectors where APIs are unavailable or insufficient
+- API adapter structure for crypto delta-neutral and prediction-market engines
+- bank connectivity for balances and approved funding flows
+- tests for calculations, strategy logic, mock integrations, and safety-critical workflows
+- a compact web UI with main dashboard, engine views, simulation controls, and performance reports
+
+The first UI does not need theme switching, drag-and-drop, or a polished bank cockpit. Useful beats decorative.
 
 ## Engine Portfolio
 
 The Quant Engine PDF describes Q-Bet as a multi-engine system:
 
-- **Base Engine:** matched betting, sports arbitrage, free bets, dutching
-- **Yield Engine:** crypto delta-neutral / funding-rate strategies
-- **Alpha Engine:** prediction-market making and arbitrage
-- **Capital Orchestrator:** allocates available capital by EV, ROI, risk, and capital lock-up
+- **Base Engine:** matched betting, bookmaker/exchange arbitrage, free bets, odds boosts, dutching
+- **Yield Engine:** crypto delta-neutral / funding-rate strategies through API adapters
+- **Alpha Engine:** prediction-market making and arbitrage through API adapters
+- **Capital Orchestrator:** allocates capital by EV, ROI, risk, liquidity, and capital lock-up
 
-The project should start with simulation and the Base Engine. The other engines are expansion modules, not reasons to make version 0.1 collapse under its own ambition. Ambition is welcome; furniture-sized commits are not.
+The Base Engine must be fully implemented first. Yield and Alpha should exist in sandbox/adapter form so the orchestrator can connect to them later without a rebuild.
 
 ## Core Architecture
-
-The intended architecture is deliberately modular:
 
 ```text
 Data Sources
@@ -48,41 +50,28 @@ Data Sources
     -> Opportunity Engine
     -> Strategy Engine
     -> Risk / Capital Allocation
-    -> Simulation or Execution Adapter
+    -> Simulation and Execution Adapters
     -> Accounting and Reports
     -> Dashboard
 ```
 
-Initial strategy focus:
+Initial matched-betting strategy focus:
 
 - qualifying bets
 - free bet strategies
 - arbitrage detection
 - dutching
-
-Later expansion candidates:
-
-- prediction markets
-- delta-neutral / yield strategies
-- broader capital orchestration
-- regulated bank/account connectors
-
-## Working Principles
-
-- Build small, useful tickets.
-- Prefer a robust working product over perfect architecture sketches.
-- Keep commits focused.
-- Add tests where behavior matters.
-- Use CI/CD early enough that broken builds become boring instead of dramatic.
-- Let the Quant Engine PDF guide direction, but translate it into code-safe, testable scope.
+- stake optimization and dynamic rounding
+- account-operation risk warnings
 
 ## Guardrails
 
-Q-Bet should support research, simulation, reporting, and lawful integrations. It should not implement evasion of platform controls, identity rotation, payment-account rotation, or stealth mechanisms. Risk warnings are useful; anti-detection machinery is not part of the product.
+Q-Bet should support research, simulation, reporting, lawful integrations, and user-approved execution. It should not move money from a bank account without explicit approval. It should not run as unmanaged full autonomy; unattended runs are capped at 48 hours.
 
 ## Project Documents
 
 - [Expectation Model](docs/expectation-model.md)
+- [Source PDF](docs/Quant%20Engine_260820_114859.pdf)
 - [Agent Workflow](agents/workflow.md)
 - [Ticket Agent](agents/ticket-agent.md)
 - [Dev Agent](agents/dev-agent.md)
