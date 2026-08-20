@@ -58,3 +58,7 @@ Agents should avoid:
 ## Execution And Money Rule
 
 Tickets touching real execution or bank movement must spell out approval boundaries. No bank top-up or withdrawal action may be initiated without explicit user approval.
+
+## Commit Rule
+
+Codex may edit files, run checks, and propose a commit message. Codex must not create commits unless the user explicitly asks for a commit. The preferred default is: agent prepares the diff, reviewer checks it, user commits it.

@@ -58,3 +58,7 @@ Notes:
 
 Ready for Reviewer Agent: yes/no
 ```
+
+## Commit Rule
+
+Do not run `git commit` unless the user explicitly asks for it. Prepare the change, run checks, summarize the diff, and suggest a commit message instead.

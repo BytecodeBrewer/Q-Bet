@@ -77,3 +77,7 @@ Options:
 ## Long-Term Steering
 
 The Reviewer Agent should watch whether the project is drifting. If tickets become too abstract, too UI-decorative, too large, or too disconnected from v1 capability, tell the Ticket Agent to steer back.
+
+## Commit Rule
+
+Reviewers should confirm whether the diff is ready to commit, but should not commit. If useful, suggest a concise commit message for the user.
