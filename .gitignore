@@ -220,4 +220,3 @@ __marimo__/
 # Temp change
 requirements.txt
 requirements-dev.txt
-test_models.py
