@@ -71,9 +71,4 @@ Q-Bet should support research, simulation, reporting, lawful integrations, and u
 ## Project Documents
 
 - [Expectation Model](docs/expectation-model.md)
-- [Source PDF](docs/Quant%20Engine_260820_114859.pdf)`r`n- [GitHub Agentic Workflow](docs/github-agentic-workflow.md)
-- [Agent Workflow](agents/workflow.md)
-- [Ticket Agent](agents/ticket-agent.md)
-- [Dev Agent](agents/dev-agent.md)
-- [Reviewer Agent](agents/reviewer-agent.md)
-
+- [Source PDF](docs/Quant%20Engine_260820_114859.pdf)
