@@ -216,7 +216,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-
-# Temp change
-requirements.txt
-requirements-dev.txt
