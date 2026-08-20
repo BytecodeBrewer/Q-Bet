@@ -6,11 +6,12 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 0 - Foundation and expectation model**:
+**Stage 1 - Core domain layer ready for review**:
 
 - The Quant Engine source PDF is stored in [docs/Quant Engine_260820_114859.pdf](docs/Quant%20Engine_260820_114859.pdf).
 - The expectation model and agent workflow documents exist.
-- The first implementation ticket is still open: domain models, matched-betting calculations, orchestrator contracts, and tests.
+- Typed, validated core models for events, markets, offers, opportunities, strategy results, and execution plans are implemented with focused unit tests.
+- Matched-betting calculations and orchestrator contracts are the next implementation steps.
 - Supabase, CI/CD, UI, Playwright collectors, bank connector, and execution adapters are not implemented yet.
 
 Update this section after every accepted ticket. It should always say where the project really is.

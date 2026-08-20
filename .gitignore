@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Temp change
+\src
+requirements.txt
+requirements-dev.txt
+test_models.py
