@@ -82,6 +82,13 @@ class Opportunity(DomainModel):
     currency: Currency
     expected_profit: Decimal
 
+    @field_validator("offer_ids")
+    @classmethod
+    def offer_ids_are_distinct(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(value)) != len(value):
+            raise ValueError("offer_ids must contain distinct identifiers")
+        return value
+
     @field_validator("detected_at")
     @classmethod
     def detected_at_is_timezone_aware(cls, value: datetime) -> datetime:

@@ -81,6 +81,13 @@ def test_opportunity_requires_two_offer_identifiers() -> None:
         )
 
 
+def test_opportunity_rejects_duplicate_normalized_offer_identifiers() -> None:
+    with pytest.raises(ValidationError, match="distinct identifiers"):
+        Opportunity(
+            id="opportunity-1", market_id="market-1", offer_ids=("offer-1", " offer-1 "), detected_at=TIMESTAMP,
+            currency="EUR", expected_profit=Decimal("1.20"),
+        )
+
 def test_execution_plan_requires_at_least_one_step() -> None:
     result = StrategyResult(
         strategy="arbitrage", opportunity_id="opportunity-1", stake=Decimal("10"), expected_profit=Decimal("1"),
