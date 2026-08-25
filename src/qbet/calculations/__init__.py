@@ -13,6 +13,10 @@ from .qualifying_bet import (
 )
 
 __all__ = [
+    "FreeBetInput",
+    "FreeBetResult",
+    "FreeBetStakeReturn",
+    "calculate_free_bet",
     "QualifyingBetInput",
     "QualifyingBetResult",
     "calculate_qualifying_bet",
