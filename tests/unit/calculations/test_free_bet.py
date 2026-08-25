@@ -24,12 +24,12 @@ def test_calculates_stake_not_returned_free_bet_conversion() -> None:
 
     assert result.back_stake == Decimal("10")
     assert result.unrounded_lay_stake == Decimal("6.289308176100628930817610063")
-    assert result.lay_stake == Decimal("6.28")
-    assert result.rounding_impact == Decimal("0.009308176100628930817610063")
-    assert result.lay_liability == Decimal("13.816")
-    assert result.back_win_profit_loss == Decimal("6.184")
-    assert result.lay_win_profit_loss == Decimal("6.1544")
-    assert result.expected_conversion_value == Decimal("6.1544")
+    assert result.lay_stake == Decimal("6.29")
+    assert result.rounding_impact == Decimal("-0.000691823899371069182389937")
+    assert result.lay_liability == Decimal("13.838")
+    assert result.back_win_profit_loss == Decimal("6.162")
+    assert result.lay_win_profit_loss == Decimal("6.1642")
+    assert result.expected_conversion_value == Decimal("6.162")
 
 
 def test_calculates_stake_returned_free_bet_conversion() -> None:

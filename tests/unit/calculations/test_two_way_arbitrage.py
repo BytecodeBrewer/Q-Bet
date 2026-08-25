@@ -77,9 +77,9 @@ def test_applies_fees_and_reports_rounding_impact() -> None:
     )
 
     assert result.first_stake == Decimal("4.55")
-    assert result.second_stake == Decimal("5.4")
-    assert result.rounding_impact == Decimal("0.05")
-    assert result.second_outcome_return == Decimal("11.2860")
+    assert result.second_stake == Decimal("5.45")
+    assert result.rounding_impact == Decimal("0")
+    assert result.second_outcome_return == Decimal("11.39050")
     assert result.is_profitable is True
 
 
@@ -90,7 +90,7 @@ def test_rejects_a_plan_that_exceeds_available_liquidity() -> None:
         requested_total_stake=Decimal("100"),
     )
 
-    with pytest.raises(ValueError, match="first offer lacks available liquidity"):
+    with pytest.raises(ValueError, match="fits total stake and liquidity limits"):
         calculate_two_way_arbitrage(inputs)
 
 

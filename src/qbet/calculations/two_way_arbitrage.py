@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from decimal import ROUND_DOWN, Decimal
+from decimal import Decimal
 
 from pydantic import Field, model_validator
 
+from qbet.calculations._rounding import RoundingPlan, choose_best_plan, stake_combinations
 from qbet.domain.models import Currency, DomainModel, Identifier, NonNegativeDecimal, PositiveDecimal
 
 
@@ -41,7 +42,7 @@ class TwoWayArbitrageInput(DomainModel):
 
 
 class TwoWayArbitrageResult(DomainModel):
-    """The rounded allocation and guaranteed result for a two-way market."""
+    """The risk-aware rounded allocation and guaranteed result for a market."""
 
     currency: Currency
     implied_probability: Decimal
@@ -59,41 +60,48 @@ class TwoWayArbitrageResult(DomainModel):
 
 
 def calculate_two_way_arbitrage(inputs: TwoWayArbitrageInput) -> TwoWayArbitrageResult:
-    """Allocate stakes and evaluate the actual precision-rounded market result."""
+    """Allocate stakes and choose the best legal precision-rounded plan."""
 
     first_effective_odds = inputs.first_offer.effective_odds
     second_effective_odds = inputs.second_offer.effective_odds
     effective_odds_sum = first_effective_odds + second_effective_odds
+    first_unrounded_stake = inputs.requested_total_stake * second_effective_odds / effective_odds_sum
+    second_unrounded_stake = inputs.requested_total_stake * first_effective_odds / effective_odds_sum
+    unrounded_stakes = (first_unrounded_stake, second_unrounded_stake)
 
-    first_unrounded_stake = (
-        inputs.requested_total_stake * second_effective_odds / effective_odds_sum
-    )
-    second_unrounded_stake = (
-        inputs.requested_total_stake * first_effective_odds / effective_odds_sum
-    )
-    first_stake = _round_down_to_increment(
-        first_unrounded_stake,
-        inputs.first_offer.stake_precision,
-    )
-    second_stake = _round_down_to_increment(
-        second_unrounded_stake,
-        inputs.second_offer.stake_precision,
-    )
-    if first_stake <= Decimal("0") or second_stake <= Decimal("0"):
-        raise ValueError("stake precision rounds an arbitrage stake to zero")
-    if first_stake > inputs.first_offer.available_liquidity:
-        raise ValueError("first offer lacks available liquidity")
-    if second_stake > inputs.second_offer.available_liquidity:
-        raise ValueError("second offer lacks available liquidity")
+    plans: list[RoundingPlan] = []
+    for first_stake, second_stake in stake_combinations(
+        unrounded_stakes,
+        (inputs.first_offer.stake_precision, inputs.second_offer.stake_precision),
+    ):
+        total_stake = first_stake + second_stake
+        if first_stake <= Decimal("0") or second_stake <= Decimal("0"):
+            continue
+        if total_stake > inputs.requested_total_stake:
+            continue
+        if first_stake > inputs.first_offer.available_liquidity:
+            continue
+        if second_stake > inputs.second_offer.available_liquidity:
+            continue
+        plans.append(
+            RoundingPlan(
+                (first_stake, second_stake),
+                (
+                    first_stake * first_effective_odds - total_stake,
+                    second_stake * second_effective_odds - total_stake,
+                ),
+            )
+        )
 
+    if not plans:
+        raise ValueError("no rounded arbitrage plan fits total stake and liquidity limits")
+    best_plan = choose_best_plan(plans, unrounded_stakes)
+    first_stake, second_stake = best_plan.stakes
     total_stake = first_stake + second_stake
-    first_outcome_return = first_stake * first_effective_odds
-    second_outcome_return = second_stake * second_effective_odds
-    guaranteed_profit_loss = min(first_outcome_return, second_outcome_return) - total_stake
-    implied_probability = (
-        Decimal("1") / first_effective_odds
-        + Decimal("1") / second_effective_odds
-    )
+    first_outcome_profit_loss, second_outcome_profit_loss = best_plan.outcome_values
+    first_outcome_return = first_outcome_profit_loss + total_stake
+    second_outcome_return = second_outcome_profit_loss + total_stake
+    implied_probability = Decimal("1") / first_effective_odds + Decimal("1") / second_effective_odds
 
     return TwoWayArbitrageResult(
         currency=inputs.first_offer.currency,
@@ -107,12 +115,6 @@ def calculate_two_way_arbitrage(inputs: TwoWayArbitrageInput) -> TwoWayArbitrage
         rounding_impact=inputs.requested_total_stake - total_stake,
         first_outcome_return=first_outcome_return,
         second_outcome_return=second_outcome_return,
-        guaranteed_profit_loss=guaranteed_profit_loss,
-        is_profitable=guaranteed_profit_loss >= Decimal("0"),
+        guaranteed_profit_loss=best_plan.worst_case_value,
+        is_profitable=best_plan.worst_case_value >= Decimal("0"),
     )
-
-
-def _round_down_to_increment(value: Decimal, increment: Decimal) -> Decimal:
-    """Return the largest supported stake increment not greater than value."""
-
-    return (value / increment).to_integral_value(rounding=ROUND_DOWN) * increment

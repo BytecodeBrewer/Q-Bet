@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from decimal import ROUND_DOWN, Decimal
+from decimal import Decimal
 
 from pydantic import Field
 
+from qbet.calculations._rounding import RoundingPlan, choose_best_plan, surrounding_stake_candidates
 from qbet.domain.models import DomainModel, NonNegativeDecimal, PositiveDecimal
 
 
@@ -21,7 +22,7 @@ class QualifyingBetInput(DomainModel):
 
 
 class QualifyingBetResult(DomainModel):
-    """A rounded hedge plan and the resulting profit or loss for either outcome."""
+    """A risk-aware precision-rounded hedge plan and its outcome values."""
 
     back_stake: Decimal
     lay_stake: Decimal
@@ -34,49 +35,36 @@ class QualifyingBetResult(DomainModel):
 
 
 def calculate_qualifying_bet(inputs: QualifyingBetInput) -> QualifyingBetResult:
-    """Calculate a conservative, precision-rounded qualifying-bet hedge.
-
-    The expected qualifying cost is the loss of the less favourable outcome. It
-    remains negative when both outcomes are profitable.
-    """
+    """Calculate a qualifying bet using the strongest permitted rounded hedge."""
 
     unrounded_lay_stake = (
         inputs.back_stake * inputs.back_odds
         / (inputs.lay_odds - inputs.exchange_commission)
     )
-    lay_stake = _round_down_to_increment(
-        unrounded_lay_stake,
-        inputs.stake_precision,
-    )
-    if lay_stake <= Decimal("0"):
-        raise ValueError("stake_precision rounds the lay stake to zero")
+    plans: list[tuple[RoundingPlan, Decimal]] = []
+    for lay_stake in surrounding_stake_candidates(unrounded_lay_stake, inputs.stake_precision):
+        if lay_stake <= Decimal("0"):
+            continue
+        lay_liability = lay_stake * (inputs.lay_odds - Decimal("1"))
+        if lay_liability > inputs.max_lay_liability:
+            continue
+        back_win_profit_loss = inputs.back_stake * (inputs.back_odds - Decimal("1")) - lay_liability
+        lay_win_profit_loss = lay_stake * (Decimal("1") - inputs.exchange_commission) - inputs.back_stake
+        plans.append((RoundingPlan((lay_stake,), (back_win_profit_loss, lay_win_profit_loss)), lay_liability))
 
-    lay_liability = lay_stake * (inputs.lay_odds - Decimal("1"))
-    if lay_liability > inputs.max_lay_liability:
-        raise ValueError("lay liability exceeds max_lay_liability")
-
-    back_win_profit_loss = (
-        inputs.back_stake * (inputs.back_odds - Decimal("1"))
-        - lay_liability
-    )
-    lay_win_profit_loss = (
-        lay_stake * (Decimal("1") - inputs.exchange_commission)
-        - inputs.back_stake
-    )
+    if not plans:
+        raise ValueError("no rounded lay stake fits max_lay_liability")
+    best_plan = choose_best_plan((plan for plan, _ in plans), (unrounded_lay_stake,))
+    lay_liability = next(liability for plan, liability in plans if plan == best_plan)
+    back_win_profit_loss, lay_win_profit_loss = best_plan.outcome_values
 
     return QualifyingBetResult(
         back_stake=inputs.back_stake,
-        lay_stake=lay_stake,
+        lay_stake=best_plan.stakes[0],
         unrounded_lay_stake=unrounded_lay_stake,
-        rounding_impact=unrounded_lay_stake - lay_stake,
+        rounding_impact=unrounded_lay_stake - best_plan.stakes[0],
         lay_liability=lay_liability,
         back_win_profit_loss=back_win_profit_loss,
         lay_win_profit_loss=lay_win_profit_loss,
-        expected_qualifying_cost=-min(back_win_profit_loss, lay_win_profit_loss),
+        expected_qualifying_cost=-best_plan.worst_case_value,
     )
-
-
-def _round_down_to_increment(value: Decimal, increment: Decimal) -> Decimal:
-    """Return the largest supported stake increment not greater than value."""
-
-    return (value / increment).to_integral_value(rounding=ROUND_DOWN) * increment
