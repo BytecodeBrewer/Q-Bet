@@ -23,12 +23,12 @@ class RoundingPlan:
 def surrounding_stake_candidates(value: Decimal, increment: Decimal) -> tuple[Decimal, ...]:
     """Return the permitted stake increments immediately below and above value.
 
-    If the increment itself exceeds the ideal stake, no positive candidate is
-    returned. This avoids turning a small intended stake into a much larger one.
+    A zero floor is preserved so callers can reject it while still considering
+    the smallest positive permitted stake above the ideal value.
     """
 
     lower = (value / increment).to_integral_value(rounding=ROUND_DOWN) * increment
-    if lower <= Decimal("0") or lower == value:
+    if lower == value:
         return (lower,)
     return (lower, lower + increment)
 

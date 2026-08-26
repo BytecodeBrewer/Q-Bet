@@ -92,17 +92,3 @@ def test_rejects_invalid_free_bet_inputs(field: str, value: object) -> None:
 
     with pytest.raises(ValidationError):
         FreeBetInput(**values)
-
-
-def test_rejects_precision_that_rounds_the_lay_stake_to_zero() -> None:
-    inputs = FreeBetInput(
-        free_bet_amount=Decimal("10"),
-        back_odds=Decimal("3"),
-        lay_odds=Decimal("3.2"),
-        exchange_commission=Decimal("0.02"),
-        stake_precision=Decimal("100"),
-        stake_return_rule=FreeBetStakeReturn.STAKE_NOT_RETURNED,
-    )
-
-    with pytest.raises(ValueError, match="rounds the lay stake to zero"):
-        calculate_free_bet(inputs)

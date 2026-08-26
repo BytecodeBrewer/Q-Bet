@@ -83,6 +83,23 @@ def test_applies_fees_and_reports_rounding_impact() -> None:
     assert result.is_profitable is True
 
 
+def test_considers_the_ceilings_when_ideal_stake_is_below_one_increment() -> None:
+    result = calculate_two_way_arbitrage(
+        TwoWayArbitrageInput(
+            first_offer=make_offer(outcome="home", odds=Decimal("100"), stake_precision=Decimal("1")),
+            second_offer=make_offer(outcome="away", odds=Decimal("2"), stake_precision=Decimal("1")),
+            requested_total_stake=Decimal("10"),
+        )
+    )
+
+    assert result.first_stake == Decimal("1")
+    assert result.second_stake == Decimal("9")
+    assert result.total_stake == Decimal("10")
+    assert result.first_outcome_return - result.total_stake == Decimal("90")
+    assert result.second_outcome_return - result.total_stake == Decimal("8")
+    assert result.is_profitable is True
+
+
 def test_rejects_a_plan_that_exceeds_available_liquidity() -> None:
     inputs = TwoWayArbitrageInput(
         first_offer=make_offer(outcome="home", available_liquidity=Decimal("40")),
