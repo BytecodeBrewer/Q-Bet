@@ -89,18 +89,19 @@ def dutching_inputs() -> DutchingInput:
 
 
 @pytest.mark.parametrize(
-    ("strategy", "inputs", "offer_ids"),
+    ("strategy", "inputs", "offer_ids", "expected_strategy_stake"),
     [
-        (BaseStrategy.QUALIFYING_BET, qualifying_inputs(), ("bookmaker", "exchange")),
-        (BaseStrategy.FREE_BET, free_bet_inputs(), ("bookmaker", "exchange")),
-        (BaseStrategy.TWO_WAY_ARBITRAGE, arbitrage_inputs(), ("home-book", "away-book")),
-        (BaseStrategy.DUTCHING, dutching_inputs(), ("home-book", "away-book")),
+        (BaseStrategy.QUALIFYING_BET, qualifying_inputs(), ("bookmaker", "exchange"), Decimal("10")),
+        (BaseStrategy.FREE_BET, free_bet_inputs(), ("bookmaker", "exchange"), Decimal("10")),
+        (BaseStrategy.TWO_WAY_ARBITRAGE, arbitrage_inputs(), ("home-book", "away-book"), Decimal("100")),
+        (BaseStrategy.DUTCHING, dutching_inputs(), ("home-book", "away-book"), Decimal("20")),
     ],
 )
 def test_evaluates_every_supported_strategy_through_one_entry_point(
     strategy: BaseStrategy,
     inputs: object,
     offer_ids: tuple[str, ...],
+    expected_strategy_stake: Decimal,
 ) -> None:
     request = BaseEngineRequest(
         opportunity_id="opportunity-1",
@@ -117,6 +118,7 @@ def test_evaluates_every_supported_strategy_through_one_entry_point(
     assert evaluation.strategy is strategy
     assert evaluation.strategy_result.strategy == strategy
     assert evaluation.strategy_result.expected_profit == evaluation.worst_case_profit_loss
+    assert evaluation.strategy_result.stake == expected_strategy_stake
     assert evaluation.execution_plan.requires_approval is True
     assert tuple(step.status.value for step in evaluation.execution_plan.steps) == (
         "requires_approval",

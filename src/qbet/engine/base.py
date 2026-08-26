@@ -117,11 +117,11 @@ class BaseEngine:
         """Evaluate one supported strategy and return an approval-only plan."""
 
         calculation_result = self._calculate(request)
-        worst_case_profit_loss, is_profitable, stake_values = _result_summary(calculation_result)
+        strategy_stake, worst_case_profit_loss, is_profitable, stake_values = _result_summary(calculation_result)
         strategy_result = StrategyResult(
             strategy=request.strategy,
             opportunity_id=request.opportunity_id,
-            stake=sum(stake_values, Decimal("0")),
+            stake=strategy_stake,
             expected_profit=worst_case_profit_loss,
             currency=request.currency,
             generated_at=request.generated_at,
@@ -179,17 +179,23 @@ def _input_currency(inputs: CalculationInput) -> Currency | None:
     return None
 
 
-def _result_summary(result: CalculationResult) -> tuple[Decimal, bool, tuple[Decimal, ...]]:
+def _result_summary(
+    result: CalculationResult,
+) -> tuple[Decimal, Decimal, bool, tuple[Decimal, ...]]:
     if isinstance(result, QualifyingBetResult):
         worst_case = min(result.back_win_profit_loss, result.lay_win_profit_loss)
-        return worst_case, worst_case >= Decimal("0"), (result.back_stake, result.lay_stake)
+        return result.back_stake, worst_case, worst_case >= Decimal("0"), (
+            result.back_stake,
+            result.lay_stake,
+        )
     if isinstance(result, FreeBetResult):
         worst_case = min(result.back_win_profit_loss, result.lay_win_profit_loss)
-        return worst_case, worst_case >= Decimal("0"), (result.back_stake, result.lay_stake)
+        return result.back_stake, worst_case, worst_case >= Decimal("0"), (
+            result.back_stake,
+            result.lay_stake,
+        )
     if isinstance(result, TwoWayArbitrageResult):
-        return result.guaranteed_profit_loss, result.is_profitable, (result.first_stake, result.second_stake)
-    return (
-        result.worst_case_profit_loss,
-        result.is_profitable,
-        tuple(allocation.stake for allocation in result.allocations),
-    )
+        stakes = (result.first_stake, result.second_stake)
+        return sum(stakes, Decimal("0")), result.guaranteed_profit_loss, result.is_profitable, stakes
+    stakes = tuple(allocation.stake for allocation in result.allocations)
+    return sum(stakes, Decimal("0")), result.worst_case_profit_loss, result.is_profitable, stakes
