@@ -66,4 +66,11 @@ def test_base_engine_adapter_preserves_a_real_base_evaluation() -> None:
 
     assert result.allocations[0].candidate.engine is EngineId.BASE
     assert result.allocations[0].candidate.source_evaluation == evaluation
-    assert result.allocations[0].allocated_capital == Decimal("10")
+    assert result.allocations[0].allocated_capital == Decimal("25.504")
+
+def test_base_candidate_is_rejected_when_hedge_cash_exceeds_snapshot() -> None:
+    evaluation = BaseEngine().evaluate(
+        BaseEngineRequest(opportunity_id="opportunity-2", strategy=BaseStrategy.QUALIFYING_BET, inputs=QualifyingBetInput(back_odds=Decimal("2.5"), lay_odds=Decimal("2.6"), back_stake=Decimal("10"), exchange_commission=Decimal("0.02"), stake_precision=Decimal("0.01"), max_lay_liability=Decimal("100")), currency="EUR", execution_offer_ids=("bookmaker", "exchange"))
+    )
+    result = CapitalOrchestrator().allocate(CapitalSnapshot(available_capital=Decimal("20"), currency="EUR"), OrchestratorConfig(max_risk_score=Decimal("0.5"), min_liquidity_score=Decimal("0.5")), (BaseEngineAdapter(evaluation, risk_score=Decimal("0.2"), liquidity_score=Decimal("0.8"), capital_lock_up=timedelta(hours=1)),))
+    assert result.rejections[0].reason is RejectionReason.CAPITAL_LIMIT

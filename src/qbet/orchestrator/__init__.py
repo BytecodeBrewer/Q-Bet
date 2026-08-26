@@ -9,6 +9,7 @@ from typing import Protocol
 
 from pydantic import Field, model_validator
 
+from qbet.calculations import FreeBetResult, QualifyingBetResult
 from qbet.domain.models import Currency, DomainModel, Identifier, PositiveDecimal
 from qbet.engine import BaseEngineEvaluation
 
@@ -96,7 +97,7 @@ class BaseEngineAdapter:
             EngineCandidate(
                 id=f"base:{self._evaluation.strategy_result.opportunity_id}",
                 engine=EngineId.BASE,
-                required_capital=self._evaluation.strategy_result.stake,
+                required_capital=_base_required_capital(self._evaluation),
                 expected_value=self._evaluation.worst_case_profit_loss,
                 roi=self._evaluation.worst_case_profit_loss / self._evaluation.strategy_result.stake,
                 risk_score=self._risk_score,
@@ -168,3 +169,11 @@ def _rejection_reason(candidate: EngineCandidate, snapshot: CapitalSnapshot, con
     if candidate.required_capital > remaining:
         return RejectionReason.CAPITAL_LIMIT
     return None
+
+def _base_required_capital(evaluation: BaseEngineEvaluation) -> Decimal:
+    result = evaluation.calculation_result
+    if isinstance(result, QualifyingBetResult):
+        return result.back_stake + result.lay_liability
+    if isinstance(result, FreeBetResult):
+        return result.lay_liability
+    return evaluation.strategy_result.stake
