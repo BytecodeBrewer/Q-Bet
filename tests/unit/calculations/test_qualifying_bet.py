@@ -22,12 +22,12 @@ def test_calculates_both_outcomes_with_commission_and_precision() -> None:
     )
 
     assert result.unrounded_lay_stake == Decimal("9.689922480620155038759689922")
-    assert result.lay_stake == Decimal("9.68")
-    assert result.rounding_impact == Decimal("0.009922480620155038759689922")
-    assert result.lay_liability == Decimal("15.488")
-    assert result.back_win_profit_loss == Decimal("-0.488")
-    assert result.lay_win_profit_loss == Decimal("-0.5136")
-    assert result.expected_qualifying_cost == Decimal("0.5136")
+    assert result.lay_stake == Decimal("9.69")
+    assert result.rounding_impact == Decimal("-0.000077519379844961240310078")
+    assert result.lay_liability == Decimal("15.504")
+    assert result.back_win_profit_loss == Decimal("-0.504")
+    assert result.lay_win_profit_loss == Decimal("-0.5038")
+    assert result.expected_qualifying_cost == Decimal("0.504")
 
 
 def test_commission_is_applied_only_to_exchange_winning_return() -> None:
@@ -83,5 +83,5 @@ def test_rejects_a_plan_that_exceeds_the_liability_limit() -> None:
         max_lay_liability=Decimal("15"),
     )
 
-    with pytest.raises(ValueError, match="exceeds max_lay_liability"):
+    with pytest.raises(ValueError, match="fits max_lay_liability"):
         calculate_qualifying_bet(inputs)

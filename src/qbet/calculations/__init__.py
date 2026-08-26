@@ -11,13 +11,23 @@ from .qualifying_bet import (
     QualifyingBetResult,
     calculate_qualifying_bet,
 )
+from .two_way_arbitrage import (
+    ArbitrageOffer,
+    TwoWayArbitrageInput,
+    TwoWayArbitrageResult,
+    calculate_two_way_arbitrage,
+)
 
 __all__ = [
+    "ArbitrageOffer",
     "FreeBetInput",
     "FreeBetResult",
     "FreeBetStakeReturn",
-    "calculate_free_bet",
     "QualifyingBetInput",
     "QualifyingBetResult",
+    "TwoWayArbitrageInput",
+    "TwoWayArbitrageResult",
+    "calculate_free_bet",
     "calculate_qualifying_bet",
+    "calculate_two_way_arbitrage",
 ]

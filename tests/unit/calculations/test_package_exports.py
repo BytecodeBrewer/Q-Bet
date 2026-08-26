@@ -1,12 +1,16 @@
 import qbet.calculations as calculations
 
 
-def test_calculation_package_exports_free_bet_api() -> None:
+def test_calculation_package_exports_public_api() -> None:
     namespace: dict[str, object] = {}
 
     exec("from qbet.calculations import *", namespace)
 
     for name in (
+        "ArbitrageOffer",
+        "TwoWayArbitrageInput",
+        "TwoWayArbitrageResult",
+        "calculate_two_way_arbitrage",
         "FreeBetInput",
         "FreeBetResult",
         "FreeBetStakeReturn",
