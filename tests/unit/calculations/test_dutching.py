@@ -26,7 +26,7 @@ def make_offer(**overrides: object) -> DutchingOffer:
 
 def test_balances_three_outcomes_for_a_total_stake() -> None:
     result = calculate_dutching(
-        DutchingInput(
+        DutchingInput(outcomes_are_exhaustive=True,
             offers=(
                 make_offer(outcome="home", odds=Decimal("2")),
                 make_offer(outcome="draw", odds=Decimal("3")),
@@ -54,7 +54,7 @@ def test_balances_three_outcomes_for_a_total_stake() -> None:
 
 def test_builds_a_target_return_plan_with_explicit_fees() -> None:
     result = calculate_dutching(
-        DutchingInput(
+        DutchingInput(outcomes_are_exhaustive=True,
             offers=(
                 make_offer(outcome="home", odds=Decimal("2.2"), fee_rate=Decimal("0.09090909090909090909090909091")),
                 make_offer(outcome="away", odds=Decimal("4"), fee_rate=Decimal("0.1")),
@@ -72,7 +72,7 @@ def test_builds_a_target_return_plan_with_explicit_fees() -> None:
 
 def test_selects_risk_aware_whole_euro_rounding_under_total_stake_cap() -> None:
     result = calculate_dutching(
-        DutchingInput(
+        DutchingInput(outcomes_are_exhaustive=True,
             offers=(
                 make_offer(outcome="one", odds=Decimal("2.5"), stake_precision=Decimal("1")),
                 make_offer(outcome="two", odds=Decimal("3"), stake_precision=Decimal("1")),
@@ -97,7 +97,7 @@ def test_selects_risk_aware_whole_euro_rounding_under_total_stake_cap() -> None:
 
 def test_reports_actual_rounded_loss_as_not_profitable() -> None:
     result = calculate_dutching(
-        DutchingInput(
+        DutchingInput(outcomes_are_exhaustive=True,
             offers=(
                 make_offer(outcome="home", odds=Decimal("1.5")),
                 make_offer(outcome="away", odds=Decimal("1.5")),
@@ -113,7 +113,7 @@ def test_reports_actual_rounded_loss_as_not_profitable() -> None:
 
 def test_supports_four_mutually_exclusive_outcomes() -> None:
     result = calculate_dutching(
-        DutchingInput(
+        DutchingInput(outcomes_are_exhaustive=True,
             offers=(
                 make_offer(outcome="one", odds=Decimal("2")),
                 make_offer(outcome="two", odds=Decimal("4")),
@@ -134,7 +134,7 @@ def test_supports_four_mutually_exclusive_outcomes() -> None:
     assert result.total_stake == Decimal("100")
 
 def test_rejects_plan_that_exceeds_available_liquidity() -> None:
-    inputs = DutchingInput(
+    inputs = DutchingInput(outcomes_are_exhaustive=True,
         offers=(
             make_offer(outcome="home", available_liquidity=Decimal("20")),
             make_offer(outcome="away", odds=Decimal("3")),
@@ -166,7 +166,7 @@ def test_rejects_invalid_dutching_inputs(
     exclusive: bool,
 ) -> None:
     with pytest.raises(ValidationError):
-        DutchingInput(
+        DutchingInput(outcomes_are_exhaustive=True,
             offers=offers,
             target_mode=target_mode,
             total_stake=total_stake,
@@ -187,3 +187,15 @@ def test_rejects_invalid_dutching_inputs(
 def test_rejects_invalid_offer_inputs(field: str, value: Decimal) -> None:
     with pytest.raises(ValidationError):
         make_offer(**{field: value})
+
+
+def test_requires_an_explicit_exhaustive_outcome_guarantee() -> None:
+    with pytest.raises(ValidationError, match="outcomes_are_exhaustive"):
+        DutchingInput(
+            offers=(
+                make_offer(outcome="home", odds=Decimal("3")),
+                make_offer(outcome="away", odds=Decimal("3")),
+            ),
+            target_mode=DutchingTargetMode.TOTAL_STAKE,
+            total_stake=Decimal("10"),
+        )

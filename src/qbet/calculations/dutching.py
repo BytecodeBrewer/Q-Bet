@@ -35,13 +35,14 @@ class DutchingOffer(DomainModel):
 
 
 class DutchingInput(DomainModel):
-    """Inputs for a two-to-four outcome precision-rounded dutching plan."""
+    """Inputs for an exhaustive two-to-four outcome dutching plan."""
 
     offers: tuple[DutchingOffer, ...] = Field(min_length=2, max_length=4)
     target_mode: DutchingTargetMode
     total_stake: PositiveDecimal | None = None
     target_return: PositiveDecimal | None = None
     outcomes_are_mutually_exclusive: Literal[True] = True
+    outcomes_are_exhaustive: Literal[True]
 
     @model_validator(mode="after")
     def validates_target_and_offers(self) -> "DutchingInput":
