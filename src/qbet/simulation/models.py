@@ -42,14 +42,14 @@ class SimulationTopUpEvent(DomainModel):
     """A simulated capital addition applied after a completed step count."""
 
     after_completed_steps: int = Field(ge=0)
-    amount: PositiveDecimal
+    amount: PositiveDecimal = Field(allow_inf_nan=False)
 
 
 class SimulationRunConfig(DomainModel):
     """Validated inputs for a reproducible, bounded simulation run."""
 
     engine: SimulationEngine
-    starting_capital: PositiveDecimal
+    starting_capital: PositiveDecimal = Field(allow_inf_nan=False)
     top_up_events: tuple[SimulationTopUpEvent, ...] = ()
     strategy_id: Identifier | None = None
     max_duration: timedelta = Field(default=timedelta(hours=24))

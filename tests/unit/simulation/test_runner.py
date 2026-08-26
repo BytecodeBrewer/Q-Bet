@@ -198,3 +198,11 @@ def test_stops_cleanly_when_a_large_duration_would_overflow_comparison() -> None
 def test_rejects_non_finite_capital_changes(capital_change: Decimal) -> None:
     with pytest.raises(ValidationError):
         SimulationStep(id="invalid-change", capital_change=capital_change)
+
+@pytest.mark.parametrize("amount", [Decimal("Infinity"), Decimal("NaN")])
+def test_rejects_non_finite_initial_and_top_up_capital(amount: Decimal) -> None:
+    with pytest.raises(ValidationError):
+        config(starting_capital=amount)
+
+    with pytest.raises(ValidationError):
+        SimulationTopUpEvent(after_completed_steps=0, amount=amount)
