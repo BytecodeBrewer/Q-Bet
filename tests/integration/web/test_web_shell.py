@@ -15,6 +15,7 @@ from django.conf import settings
 from django.test import Client, SimpleTestCase
 
 from qbet.web.logging import SafeRequestJSONFormatter
+from qbet.web.settings import parse_allowed_hosts
 
 
 class WebShellSmokeTests(SimpleTestCase):
@@ -77,3 +78,10 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertNotIn("cookie", stream.getvalue().lower())
         self.assertNotIn("bank", stream.getvalue().lower())
         self.assertNotIn("bookmaker", stream.getvalue().lower())
+
+def test_parses_comma_separated_allowed_hosts_without_whitespace() -> None:
+    assert parse_allowed_hosts("example.com, www.example.com, , api.example.com ") == [
+        "example.com",
+        "www.example.com",
+        "api.example.com",
+    ]

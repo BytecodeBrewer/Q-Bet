@@ -7,9 +7,18 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 
+
+def parse_allowed_hosts(value: str) -> list[str]:
+    """Normalize the documented comma-separated Django host allowlist."""
+
+    return [host.strip() for host in value.split(",") if host.strip()]
+
+
 SECRET_KEY = os.environ.get("QBET_DJANGO_SECRET_KEY", "qbet-local-development-only-secret")
 DEBUG = os.environ.get("QBET_DJANGO_DEBUG", "true").lower() == "true"
-ALLOWED_HOSTS = os.environ.get("QBET_DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver").split(",")
+ALLOWED_HOSTS = parse_allowed_hosts(
+    os.environ.get("QBET_DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")
+)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
