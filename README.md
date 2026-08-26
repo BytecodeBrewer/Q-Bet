@@ -6,7 +6,7 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 5 - Risk-aware stake rounding ready for review**:
+**Stage 6 - Django web shell ready for review**:
 
 - The Quant Engine source PDF is stored in [docs/Quant Engine_260820_114859.pdf](docs/Quant%20Engine_260820_114859.pdf).
 - The expectation model and agent workflow documents exist.
@@ -15,6 +15,7 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 - A deterministic free-bet conversion now supports stake-returned and stake-not-returned rules, exchange commission, stake precision, and both outcome P/L values.
 - Stake rounding now evaluates permitted nearby increments and selects the legal plan with the strongest worst-case outcome, respecting liability, liquidity, and total-stake limits.
 - A deterministic two-way arbitrage calculation now evaluates fee-adjusted odds, available liquidity, stake precision, allocation, and guaranteed P/L.
+- A minimal Django web shell now serves a static engine-status page, health endpoint, local Django auth boundary, and privacy-preserving request correlation logs.
 - Additional matched-betting strategies and orchestrator contracts are the next implementation steps.
 - Supabase, CI/CD, UI, Playwright collectors, bank connector, and execution adapters are not implemented yet.
 
@@ -77,3 +78,4 @@ Q-Bet should support research, simulation, reporting, lawful integrations, and u
 
 - [Expectation Model](docs/expectation-model.md)
 - [Source PDF](docs/Quant%20Engine_260820_114859.pdf)
+- [Django Web Shell](docs/django-web-shell.md)

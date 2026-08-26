@@ -59,6 +59,8 @@ class WebShellSmokeTests(SimpleTestCase):
                 "/health/?password=not-for-logs",
                 HTTP_X_CORRELATION_ID=correlation_id,
                 HTTP_AUTHORIZATION="Bearer not-for-logs",
+                HTTP_X_BANK_DETAILS="not-for-logs",
+                HTTP_X_BOOKMAKER_CREDENTIAL="not-for-logs",
             )
         finally:
             request_logger.removeHandler(handler)
@@ -73,3 +75,5 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertNotIn("password", stream.getvalue())
         self.assertNotIn("authorization", stream.getvalue().lower())
         self.assertNotIn("cookie", stream.getvalue().lower())
+        self.assertNotIn("bank", stream.getvalue().lower())
+        self.assertNotIn("bookmaker", stream.getvalue().lower())
