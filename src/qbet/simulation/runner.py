@@ -121,7 +121,8 @@ class DeterministicSimulationRunner:
         apply_top_ups()
 
         for step in ordered_steps:
-            if self._elapsed_duration + step.simulated_duration > config.max_duration:
+            remaining_duration = config.max_duration - self._elapsed_duration
+            if step.simulated_duration > remaining_duration:
                 record(SimulationEventType.DURATION_LIMIT_REACHED)
                 self._status = SimulationStatus.STOPPED
                 record(SimulationEventType.RUN_STOPPED)

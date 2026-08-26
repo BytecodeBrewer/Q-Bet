@@ -166,3 +166,29 @@ def test_stops_before_a_step_would_exceed_max_duration() -> None:
         SimulationEventType.DURATION_LIMIT_REACHED,
         SimulationEventType.RUN_STOPPED,
     ]
+
+
+def test_stops_cleanly_when_a_large_duration_would_overflow_comparison() -> None:
+    result = DeterministicSimulationRunner().run(
+        config(max_duration=timedelta(hours=1)),
+        (
+            SimulationStep(
+                id="elapsed",
+                capital_change=Decimal("1"),
+                simulated_duration=timedelta(minutes=1),
+            ),
+            SimulationStep(
+                id="too-large",
+                capital_change=Decimal("1"),
+                simulated_duration=timedelta.max,
+            ),
+        ),
+    )
+
+    assert result.status == SimulationStatus.STOPPED
+    assert tuple(step.id for step in result.completed_steps) == ("elapsed",)
+    assert result.elapsed_duration == timedelta(minutes=1)
+    assert [event.event_type for event in result.events][-2:] == [
+        SimulationEventType.DURATION_LIMIT_REACHED,
+        SimulationEventType.RUN_STOPPED,
+    ]
