@@ -1,0 +1,35 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Q-Bet</title>
+  <link rel="stylesheet" href="{% static 'qbet_web/app.css' %}">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Q-Bet</h1>
+      <p>Engine status</p>
+    </header>
+    <table>
+      <thead><tr><th>Engine</th><th>Status</th><th>Current scope</th></tr></thead>
+      <tbody>
+        {% for engine in engine_statuses %}
+          <tr>
+            <td>{{ engine.name }}</td>
+            <td><span class="status status-{{ engine.status }}" aria-label="{{ engine.status }}"></span>{{ engine.status }}</td>
+            <td>{{ engine.detail }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if user.is_authenticated %}
+      <p>Signed in as {{ user.get_username }}.</p>
+    {% else %}
+      <p><a href="{% url 'login' %}">Local sign-in</a></p>
+    {% endif %}
+  </main>
+</body>
+</html>
