@@ -1,5 +1,13 @@
 """Pure matched-betting calculations."""
 
+from .dutching import (
+    DutchingAllocation,
+    DutchingInput,
+    DutchingOffer,
+    DutchingResult,
+    DutchingTargetMode,
+    calculate_dutching,
+)
 from .free_bet import (
     FreeBetInput,
     FreeBetResult,
@@ -20,6 +28,11 @@ from .two_way_arbitrage import (
 
 __all__ = [
     "ArbitrageOffer",
+    "DutchingAllocation",
+    "DutchingInput",
+    "DutchingOffer",
+    "DutchingResult",
+    "DutchingTargetMode",
     "FreeBetInput",
     "FreeBetResult",
     "FreeBetStakeReturn",
@@ -27,6 +40,7 @@ __all__ = [
     "QualifyingBetResult",
     "TwoWayArbitrageInput",
     "TwoWayArbitrageResult",
+    "calculate_dutching",
     "calculate_free_bet",
     "calculate_qualifying_bet",
     "calculate_two_way_arbitrage",

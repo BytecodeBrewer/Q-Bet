@@ -8,8 +8,14 @@ def test_calculation_package_exports_public_api() -> None:
 
     for name in (
         "ArbitrageOffer",
+        "DutchingAllocation",
+        "DutchingInput",
+        "DutchingOffer",
+        "DutchingResult",
+        "DutchingTargetMode",
         "TwoWayArbitrageInput",
         "TwoWayArbitrageResult",
+        "calculate_dutching",
         "calculate_two_way_arbitrage",
         "FreeBetInput",
         "FreeBetResult",
