@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "A modular Python quant engine for matched betting and strategy simulation."
 requires-python = ">=3.12"
 dependencies = [
-    "Django>=5.2,<6",`n    "pydantic>=2.11,<3",
+    "Django>=5.2,<6",
+    "pydantic>=2.11,<3",
 ]
 
 [tool.pytest.ini_options]
