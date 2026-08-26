@@ -79,9 +79,23 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertNotIn("bank", stream.getvalue().lower())
         self.assertNotIn("bookmaker", stream.getvalue().lower())
 
+
 def test_parses_comma_separated_allowed_hosts_without_whitespace() -> None:
     assert parse_allowed_hosts("example.com, www.example.com, , api.example.com ") == [
         "example.com",
         "www.example.com",
         "api.example.com",
     ]
+
+
+def test_invalid_host_returns_400_with_correlation_id_before_authentication() -> None:
+    correlation_id = "123e4567-e89b-12d3-a456-426614174001"
+
+    response = Client().get(
+        "/health/",
+        HTTP_HOST="unapproved.example",
+        HTTP_X_CORRELATION_ID=correlation_id,
+    )
+
+    assert response.status_code == 400
+    assert response["X-Correlation-ID"] == correlation_id

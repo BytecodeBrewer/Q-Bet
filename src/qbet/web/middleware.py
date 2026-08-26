@@ -28,7 +28,8 @@ class RequestCorrelationMiddleware:
         started_at = perf_counter()
         response = self.get_response(request)
         response["X-Correlation-ID"] = correlation_id
-        user_id = str(request.user.pk) if request.user.is_authenticated else None
+        user = getattr(request, "user", None)
+        user_id = str(user.pk) if getattr(user, "is_authenticated", False) else None
         logger.info(
             "request.completed",
             extra={
