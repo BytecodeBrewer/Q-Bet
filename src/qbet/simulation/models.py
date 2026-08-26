@@ -68,7 +68,7 @@ class SimulationStep(DomainModel):
     """One mocked engine state transition in a simulation sequence."""
 
     id: Identifier
-    capital_change: Decimal
+    capital_change: Decimal = Field(allow_inf_nan=False)
     description: str = ""
     simulated_duration: timedelta = Field(default=timedelta(0))
 

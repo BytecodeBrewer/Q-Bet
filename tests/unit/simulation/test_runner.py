@@ -192,3 +192,9 @@ def test_stops_cleanly_when_a_large_duration_would_overflow_comparison() -> None
         SimulationEventType.DURATION_LIMIT_REACHED,
         SimulationEventType.RUN_STOPPED,
     ]
+
+
+@pytest.mark.parametrize("capital_change", [Decimal("Infinity"), Decimal("NaN")])
+def test_rejects_non_finite_capital_changes(capital_change: Decimal) -> None:
+    with pytest.raises(ValidationError):
+        SimulationStep(id="invalid-change", capital_change=capital_change)
