@@ -112,7 +112,7 @@ The Base Engine must include:
 - result/report generation
 - account-operation risk warnings
 
-Dynamic rounding must be evaluated together with EV, liability, expected profit/loss, fees, taxes, and allowed stake increments. Rounding is only acceptable when the resulting plan remains mathematically sound.
+Dynamic rounding must evaluate permitted floor/ceiling candidates at the configured stake increment against final outcome values. The selected plan must maximize the least favorable eligible outcome while respecting liability, liquidity, and total-stake limits. Rounding is only acceptable when the resulting plan remains mathematically sound.
 
 Account-hygiene and Mug Betting are must have and see for more details what is required in the source PDF!
 
