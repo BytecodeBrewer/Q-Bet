@@ -21,6 +21,16 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 Update this section after every accepted ticket. It should always say where the project really is.
 
+## Local Web Setup
+
+For the local Django shell, initialize Django's built-in authentication and session tables once before signing in:
+
+```powershell
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
+```
+
 ## Version 1 Target
 
 Version 1 should include:
