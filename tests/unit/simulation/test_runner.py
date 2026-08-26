@@ -137,3 +137,32 @@ def test_rejects_step_that_would_make_simulated_capital_negative() -> None:
             config(starting_capital=Decimal("10")),
             (SimulationStep(id="loss", capital_change=Decimal("-11")),),
         )
+
+def test_stops_before_a_step_would_exceed_max_duration() -> None:
+    result = DeterministicSimulationRunner().run(
+        config(max_duration=timedelta(hours=1)),
+        (
+            SimulationStep(
+                id="within-limit",
+                capital_change=Decimal("10"),
+                simulated_duration=timedelta(minutes=30),
+            ),
+            SimulationStep(
+                id="beyond-limit",
+                capital_change=Decimal("50"),
+                simulated_duration=timedelta(minutes=45),
+            ),
+        ),
+    )
+
+    assert result.status == SimulationStatus.STOPPED
+    assert tuple(step.id for step in result.completed_steps) == ("within-limit",)
+    assert result.current_capital == Decimal("110")
+    assert result.elapsed_duration == timedelta(minutes=30)
+    assert result.progress == Decimal("0.5")
+    assert [event.event_type for event in result.events] == [
+        SimulationEventType.RUN_STARTED,
+        SimulationEventType.STEP_COMPLETED,
+        SimulationEventType.DURATION_LIMIT_REACHED,
+        SimulationEventType.RUN_STOPPED,
+    ]

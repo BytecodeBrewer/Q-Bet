@@ -33,6 +33,7 @@ class SimulationEventType(StrEnum):
     STEP_COMPLETED = "step_completed"
     TOP_UP_APPLIED = "top_up_applied"
     STOP_REQUESTED = "stop_requested"
+    DURATION_LIMIT_REACHED = "duration_limit_reached"
     RUN_STOPPED = "run_stopped"
     RUN_COMPLETED = "run_completed"
 
@@ -86,6 +87,7 @@ class SimulationContext(DomainModel):
     status: SimulationStatus
     completed_step_count: int = Field(ge=0)
     current_capital: NonNegativeDecimal
+    elapsed_duration: timedelta
     progress: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
 
 
@@ -96,6 +98,7 @@ class SimulationEvent(DomainModel):
     event_type: SimulationEventType
     completed_step_count: int = Field(ge=0)
     current_capital: NonNegativeDecimal
+    elapsed_duration: timedelta
     step_id: Identifier | None = None
     top_up_amount: PositiveDecimal | None = None
 
@@ -107,5 +110,6 @@ class SimulationResult(DomainModel):
     status: SimulationStatus
     completed_steps: tuple[SimulationStep, ...]
     current_capital: NonNegativeDecimal
+    elapsed_duration: timedelta
     progress: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
     events: tuple[SimulationEvent, ...]

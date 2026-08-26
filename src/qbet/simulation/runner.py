@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from datetime import timedelta
 from decimal import Decimal
 from typing import Protocol
 
@@ -46,6 +47,7 @@ class DeterministicSimulationRunner:
         self._status = SimulationStatus.PENDING
         self._completed_steps: tuple[SimulationStep, ...] = ()
         self._current_capital = Decimal("0")
+        self._elapsed_duration = timedelta(0)
         self._progress = Decimal("0")
 
     @property
@@ -59,6 +61,10 @@ class DeterministicSimulationRunner:
     @property
     def current_capital(self) -> Decimal:
         return self._current_capital
+
+    @property
+    def elapsed_duration(self) -> timedelta:
+        return self._elapsed_duration
 
     @property
     def progress(self) -> Decimal:
@@ -83,6 +89,7 @@ class DeterministicSimulationRunner:
         self._status = SimulationStatus.RUNNING
         self._completed_steps = ()
         self._current_capital = Decimal(config.starting_capital)
+        self._elapsed_duration = timedelta(0)
         self._progress = Decimal("0")
         events: list[SimulationEvent] = []
 
@@ -98,6 +105,7 @@ class DeterministicSimulationRunner:
                     event_type=event_type,
                     completed_step_count=len(self._completed_steps),
                     current_capital=self._current_capital,
+                    elapsed_duration=self._elapsed_duration,
                     step_id=step_id,
                     top_up_amount=top_up_amount,
                 )
@@ -113,11 +121,18 @@ class DeterministicSimulationRunner:
         apply_top_ups()
 
         for step in ordered_steps:
+            if self._elapsed_duration + step.simulated_duration > config.max_duration:
+                record(SimulationEventType.DURATION_LIMIT_REACHED)
+                self._status = SimulationStatus.STOPPED
+                record(SimulationEventType.RUN_STOPPED)
+                break
+
             next_capital = self._current_capital + step.capital_change
             if next_capital < Decimal("0"):
                 raise ValueError("simulation step would make simulated capital negative")
 
             self._current_capital = next_capital
+            self._elapsed_duration += step.simulated_duration
             self._completed_steps = (*self._completed_steps, step)
             self._progress = Decimal(len(self._completed_steps)) / Decimal(len(ordered_steps))
             record(SimulationEventType.STEP_COMPLETED, step_id=step.id)
@@ -140,6 +155,7 @@ class DeterministicSimulationRunner:
             status=self._status,
             completed_steps=self._completed_steps,
             current_capital=self._current_capital,
+            elapsed_duration=self._elapsed_duration,
             progress=self._progress,
             events=tuple(events),
         )
@@ -150,5 +166,6 @@ class DeterministicSimulationRunner:
             status=self._status,
             completed_step_count=len(self._completed_steps),
             current_capital=self._current_capital,
+            elapsed_duration=self._elapsed_duration,
             progress=self._progress,
         )
