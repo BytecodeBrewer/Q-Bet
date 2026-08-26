@@ -6,7 +6,7 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 8 - Base Engine integration ready for review**:
+**Stage 9 - Capital orchestrator ready for review**:
 
 - The Quant Engine source PDF is stored in [docs/Quant Engine_260820_114859.pdf](docs/Quant%20Engine_260820_114859.pdf).
 - The expectation model and agent workflow documents exist.
@@ -18,7 +18,8 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 - A minimal Django web shell now serves a static engine-status page, health endpoint, local Django auth boundary, and privacy-preserving request correlation logs.
 - A deterministic two-to-four outcome dutching calculation now supports total-stake or target-return planning, fees, liquidity, stake precision, and actual rounded worst-case P/L.
 - A typed Base Engine now routes qualifying bets, free bets, two-way arbitrage, and dutching through one calculation-preserving API and produces approval-only execution plans.
-- The capital orchestrator contract is the next implementation step.
+- A deterministic capital orchestrator now ranks and filters Base, Yield, and Alpha candidates by expected value, ROI, risk, liquidity, capital lock-up, and available capital. It produces proposals only; Yield and Alpha remain sandbox adapters.
+- Provider integration and simulation persistence are the next implementation steps.
 - Supabase, CI/CD, UI, Playwright collectors, bank connector, and execution adapters are not implemented yet.
 
 Update this section after every accepted ticket. It should always say where the project really is.
