@@ -1,4 +1,4 @@
-# Q-Bet Expectation Model
+﻿# Q-Bet Expectation Model
 
 This document is the authoritative expectation model for Q-Bet code, tickets, agents, and review. It is the single working source for product direction, architecture, roadmap, and agent decisions.
 
@@ -47,13 +47,11 @@ Important separation rule: Layer 1 produces mathematically valid strategy output
 
 | Tier / Category | Engine Name | Primary Mechanism | Roadmap Target |
 | --- | --- | --- | --- |
-| Base / Promo Engine | `BonusEngine` | Matched betting with qualifying bets and free bets | Version 1.0 |
-| Sports Capital Engine | `SportsCapitalEngine` | Sports arbitrage and multi-outcome dutching | Version 1.0 |
-| Crypto Yield Engine | `CryptoYieldEngine` | Delta-neutral funding-rate arbitrage | Version 2.0 |
-| Prediction Engine | `PredictionMarketEngine` | Polymarket/Kalshi market making and latency arbitrage | Version 3.0 |
-| Ticket Engine | `TicketEngine` | Event-driven secondary ticket arbitrage | Version 3.0 |
-| ML Edge Layer | `MLEdgeLayer` | Statistical value betting and drift detection | Version 3.0 |
-
+| Phase 1 / Base Promo Engine (EUR 100-500) | `BonusEngine` | Matched betting with qualifying bets, SNR/SR free bets, reloads, cashback, and promo conversion | Version 1.0 |
+| Phase 2 / Sports Capital Engine (EUR 500-2,000) | `SportsCapitalEngine` | Sports arbitrage, odds boosts, real-capital matched betting, and multi-outcome dutching | Version 1.0 |
+| Phase 3 / Ticket Engine (EUR 2,000-5,000) | `TicketEngine` | Event-driven secondary ticket arbitrage | Version 2.0 |
+| Phase 4 / Prediction Engine (EUR 5,000-10,000) | `PredictionMarketEngine` | Prediction-market making, order-book arbitrage, and latency analysis through supported APIs | Version 2.5 |
+| Phase 5 / Crypto Yield And ML Engine (EUR 10,000+) | `CryptoYieldEngine` + `MLEdgeLayer` | Delta-neutral funding-rate arbitrage, fair-odds modeling, value detection, and drift detection | Version 3.0 |
 ### Base Tier: Promotional And Low-Risk Cashflow
 
 - **Qualifying Bet Matched Betting:** Hedge qualifying bookmaker bets with minimal mathematical loss to unlock bonus value.
@@ -95,16 +93,16 @@ Must include:
 - `BonusEngine` for qualifying bets and SNR/SR free bets.
 - `SportsCapitalEngine` for two-way arbitrage and two-to-four-outcome dutching.
 
-### Version 2.0: Crypto Yield, Advanced Safety Orchestrator And Risk Profiles
+### Version 2.0: Ticket Engine And Advanced Safety Orchestrator
 
-Version 2.0 expands the portfolio with crypto delta-neutral yield and stronger safety controls.
+Version 2.0 expands the portfolio with event-driven ticket arbitrage and stronger safety controls.
 
 Should include:
 
-- `CryptoYieldEngine` for spot/perpetual funding-rate strategies.
+- `TicketEngine` for event-driven secondary ticket arbitrage.
 - GUI risk profiles such as Conservative, Balanced, and Aggressive.
 - Risk profiles controlling minimum margins, maximum stake per opportunity, and rounding aggressiveness.
-- Continuous account and liquidity monitoring across bookmakers, exchanges, banks, and wallets.
+- Continuous account and liquidity monitoring across bookmakers, exchanges, banks, and supported ticket venues.
 - Multi-tier threshold system:
   - Green: normal operation.
   - Yellow: warning, such as unusual withdrawal size or failed deposits.
@@ -115,27 +113,35 @@ Should include:
   - run rebalance and liquidity checks afterward
   - pause execution if capital remains below the red threshold
 
-### Version 3.0: Prediction Markets, Ticket Arbitrage, Multi-User And ML
+### Version 2.5: Prediction Markets And Order-Book Strategies
 
-Version 3.0 turns Q-Bet into a broader multi-user quant platform.
+Version 2.5 adds prediction-market making and order-book arbitrage through supported APIs.
 
 Could include:
 
 - `PredictionMarketEngine` for market making, arbitrage, and liquidity rewards.
-- `TicketEngine` for event-driven ticket arbitrage.
+- Cross-platform price comparison where official APIs or permitted data access allow it.
+- Prediction-market reporting, exposure controls, and sandbox/live separation.
+
+### Version 3.0: Crypto Yield, ML Edge, Multi-User And Cloud Scaling
+
+Version 3.0 turns Q-Bet into a broader multi-engine quant platform with crypto yield, ML support, and multi-user readiness.
+
+Could include:
+
+- `CryptoYieldEngine` for spot/perpetual funding-rate strategies.
+- `MLEdgeLayer` for fair-odds models, value betting, drift detection, and market-inefficiency detection.
 - Multi-tenant architecture with isolated bankrolls, API keys, roles, and permissions.
 - Cryptographic audit logging for system actions, security events, and financial evaluations.
-- ML edge layer for fair-odds models, value betting, drift detection, and market-inefficiency detection.
-
 ## Five-Phase Scaling Roadmap
 
 | Phase | Capital Level | Enabled Modules | Primary Mechanism | Target Cashflow |
 | --- | --- | --- | --- | --- |
-| Phase 1 | EUR 100-500 | `BonusEngine` + Fintech Harvesting | New-user bonuses, promo cashflow, depot promos | EUR 300-600 / month |
+| Phase 1 | EUR 100-500 | `BonusEngine` | New-user bonuses, promo cashflow, reloads, cashback, and later fintech/depot promos | EUR 300-600 / month |
 | Phase 2 | EUR 500-2,000 | `SportsCapitalEngine` | Arbitrage, reloads, odds boosts, real-capital matched betting | EUR 600-1,000 / month |
 | Phase 3 | EUR 2,000-5,000 | `TicketEngine` | Automated ticket sourcing and secondary-market margin | EUR 800-1,400 / month |
 | Phase 4 | EUR 5,000-10,000 | `PredictionMarketEngine` | Market making and order-book arbitrage | EUR 1,200-2,000 / month |
-| Phase 5 | EUR 10,000+ | `CryptoYieldEngine` | Delta-neutral funding-rate arbitrage | EUR 1,800-3,500+ / month |
+| Phase 5 | EUR 10,000+ | `CryptoYieldEngine` + `MLEdgeLayer` | Delta-neutral funding-rate arbitrage, statistical value detection, and drift analysis | EUR 1,800-3,500+ / month |
 
 These numbers are planning hypotheses for simulation, not guaranteed returns.
 
@@ -143,10 +149,10 @@ These numbers are planning hypotheses for simulation, not guaranteed returns.
 
 | Layer | Storage Type | Necessity | Reason |
 | --- | --- | --- | --- |
-| Layer 1: Math | Stateless / in-memory | No DB storage | Pure calculations must remain isolated and deterministic. |
-| Layer 2: Verification | In-memory cache backed by SQLite or later Supabase/Postgres | Required | Stores provider/account state, cooldowns, active bet counts, last action timestamps, market filters, and warning state. |
-| Layer 3: Capital | ACID ledger in SQLite first, Supabase/Postgres later | Critical | Central authority for bankroll, balances, reserved funds, thresholds, and race-condition protection. |
-| Layer 4: Execution/GUI | SQLite/Supabase plus filesystem or object storage for exports | Required | Stores execution history, GUI session state, simulation results, reports, and CSV/JSON exports. |
+| Layer 1: Math | Pure stateless in-memory | No DB storage | Pure calculations must remain isolated and deterministic. |
+| Layer 2: Verification | In-memory cache synchronized with SQLite locally, then Supabase/PostgreSQL as cloud target | Required | Stores provider/account state, cooldowns, active bet counts, last action timestamps, market filters, and warning state. |
+| Layer 3: Capital | ACID-compliant ledger in SQLite locally, then Supabase/PostgreSQL as cloud target | Critical | Central authority for bankroll, balances, reserved funds, thresholds, and race-condition protection. |
+| Layer 4: Execution/GUI | SQLite/Supabase plus filesystem export for CSV/JSON; cloud deployments may mirror export artifacts to object storage | Required | Stores execution history, GUI session state, simulation results, reports, and CSV/JSON exports. |
 
 The local implementation may start with SQLite. The cloud target should use Supabase/Postgres unless a later technical decision proves a better fit.
 
@@ -169,6 +175,19 @@ Where:
 - `p_sharp` = implied fair probability from a sharp or exchange benchmark after margin removal
 
 Calculations must model stake precision, rounding, fees, taxes, exchange commission, liquidity, stake limits, total-stake limits, liability, and capital lock-up explicitly.
+
+Engine implementation standards:
+
+- Do not introduce monolithic request or input unions for v1 sports betting, including catch-all request models in files such as `base.py` that own strategy-specific inputs.
+- `BonusEngine` and `SportsCapitalEngine` must be autonomous classes implementing `StrategyEngine[RequestT, EvaluationT]`.
+- Shared formulas, value objects, and calculation primitives may live in domain/calculation modules, but engine-specific requests, evaluations, reports, and risk categories must remain separate.
+
+German market tax modes:
+
+- `STAKE`: apply a 5.3 percent tax deduction to stake-based taxable turnover.
+- `PROFIT`: apply a 5.3 percent tax deduction to taxable winnings/profit.
+- `NONE`: no betting-tax deduction.
+- Tax mode must be explicit in calculation inputs, reports, and tests wherever it can affect final P/L.
 
 ## MoSCoW
 
@@ -295,41 +314,6 @@ The `OperationalRiskLayer` processes domain-specific execution policies in Pytho
 
 - **Staggered Order Routing (`qbet.layers.verification.pacing`):** Injects non-deterministic execution delays using `asyncio.sleep(random.uniform(4, 18))` prior to order submission.
 
----
-
-## 3. Technology Stack & Persistence Architecture
-
-- **Runtime & Domain:** Python 3.12+ with Pydantic v2 models for strict type enforcement and request validation.
-- **Layer 1 (Math Layer):** Pure, stateless in-memory calculation modules using NumPy and Python `Decimal` (zero database dependencies).
-- **Layer 2 (Verification Layer):** In-Memory Cache synchronized with SQLite (local development) and Supabase / PostgreSQL (production target).
-- **Layer 3 (Capital Ledger Layer):** ACID-compliant ledger tracking wallet balances, exposure, and reserved liability.
-- **Layer 4 (Execution & GUI Layer):** SQLite/Supabase persistent store with filesystem output for structured CSV/JSON audit reports.
-
----
-
-## 4. Code Isolation & Tax Modeling Standards
-
-### A. Protocol-Based Strategy Decoupling
-
-Monolithic input unions (such as a unified `CalculationInput` in `base.py`) are strictly prohibited. Engines must inherit from the generic strategy protocol:
-
-```python
-from typing import Protocol, TypeVar
-
-RequestT = TypeVar("RequestT", contravariant=True)
-EvaluationT = TypeVar("EvaluationT", covariant=True)
-
-class StrategyEngine(Protocol[RequestT, EvaluationT]):
-    def evaluate(self, request: RequestT) -> EvaluationT:
-```
-
-### B. German Betting Tax Modeling (`TaxMode`)
-
-All calculations must explicitly parameterize the applicable taxation rules:
-
-- `STAKE`: Tax (5.3%) deducted directly from the initial back stake ($B_{eff} = B \cdot (1 - 0.053)$).
-- `PROFIT`: Tax (5.3%) applied exclusively to net profit.
-- `NONE`: Tax-free execution.
 
 ## Bank API Feasibility
 
