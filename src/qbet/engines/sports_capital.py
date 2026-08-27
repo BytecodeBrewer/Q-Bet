@@ -16,6 +16,8 @@ class SportsCapitalEngineRequest(DomainModel):
     def valid_request(self):
         expected = len(self.inputs.offers) if isinstance(self.inputs, DutchingInput) else 2
         if len(self.execution_offer_ids) != expected or len(set(self.execution_offer_ids)) != expected: raise ValueError("execution_offer_ids must match strategy outcomes")
+        offer_currency = self.inputs.first_offer.currency if isinstance(self.inputs, TwoWayArbitrageInput) else self.inputs.offers[0].currency
+        if self.currency != offer_currency: raise ValueError("request currency must match calculation input currency")
         return self
 class SportsCapitalEngineEvaluation(DomainModel):
     calculation_result: TwoWayArbitrageResult | DutchingResult
@@ -23,6 +25,12 @@ class SportsCapitalEngineEvaluation(DomainModel):
     worst_case_profit_loss: Decimal
     is_profitable: bool
     execution_plan: ExecutionPlan
+    @model_validator(mode="after")
+    def approval_only_plan(self):
+        if not self.execution_plan.requires_approval: raise ValueError("execution plans must require approval")
+        if any(step.status is not ExecutionStatus.REQUIRES_APPROVAL for step in self.execution_plan.steps): raise ValueError("execution steps must require approval")
+        if self.execution_plan.strategy_result != self.strategy_result: raise ValueError("execution plan must use the evaluation strategy result")
+        return self
 class SportsCapitalEngine(StrategyEngine[SportsCapitalEngineRequest, SportsCapitalEngineEvaluation]):
     def evaluate(self, request):
         result = calculate_two_way_arbitrage(request.inputs) if isinstance(request.inputs, TwoWayArbitrageInput) else calculate_dutching(request.inputs)

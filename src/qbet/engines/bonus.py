@@ -25,6 +25,12 @@ class BonusEngineEvaluation(DomainModel):
     worst_case_profit_loss: Decimal
     is_profitable: bool
     execution_plan: ExecutionPlan
+    @model_validator(mode="after")
+    def approval_only_plan(self):
+        if not self.execution_plan.requires_approval: raise ValueError("execution plans must require approval")
+        if any(step.status is not ExecutionStatus.REQUIRES_APPROVAL for step in self.execution_plan.steps): raise ValueError("execution steps must require approval")
+        if self.execution_plan.strategy_result != self.strategy_result: raise ValueError("execution plan must use the evaluation strategy result")
+        return self
 class BonusEngine(StrategyEngine[BonusEngineRequest, BonusEngineEvaluation]):
     def evaluate(self, request):
         result = calculate_qualifying_bet(request.inputs) if isinstance(request.inputs, QualifyingBetInput) else calculate_free_bet(request.inputs)
