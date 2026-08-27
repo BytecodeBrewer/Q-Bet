@@ -1,6 +1,6 @@
 # Q-Bet Agent Workflow
 
-This folder defines working scripts for AI agents. The source direction lives in docs/expectation-model.md and docs/Quant Engine_260820_114859.pdf.
+This folder defines working scripts for AI agents. The source direction lives in docs/expectation-model.md.
 
 ## Orchestration Model
 
@@ -45,7 +45,7 @@ Rules:
 
 ## Standard Flow
 
-1. Ticket Agent reads README Current Status, docs/expectation-model.md, and the source PDF when needed.
+1. Ticket Agent reads README Current Status, docs/expectation-model.md,.
 2. Ticket Agent creates exactly one GitHub Issue with `qbet:ticket` and `qbet:proposed`.
 3. User approves by adding `qbet:approved`.
 4. Dev Agent polls GitHub, claims exactly one approved Issue, and implements only that scope.
@@ -55,7 +55,6 @@ Rules:
 8. Reviewer Agent reviews against:
    - ticket scope
    - expectation model
-   - source PDF direction
    - tests
    - architecture direction
    - v1 product usefulness
@@ -120,7 +119,7 @@ Codex may edit files, run checks, and propose a commit message. Codex must not c
 Ticket Agent scheduled prompt:
 
 ```text
-@github Use the Q-Bet repository. Read README.md, docs/expectation-model.md, agents/workflow.md, agents/ticket-agent.md, and use docs/Quant Engine_260820_114859.pdf when product direction is unclear. Create exactly one GitHub Issue with labels qbet:ticket and qbet:proposed. Do not implement anything. Wait for user approval through the qbet:approved label.
+@github Use the Q-Bet repository. Read README.md, docs/expectation-model.md, agents/workflow.md, agents/ticket-agent.md. Create exactly one GitHub Issue with labels qbet:ticket and qbet:proposed. Do not implement anything. Wait for user approval through the qbet:approved label.
 ```
 
 Dev Agent scheduled prompt:
@@ -134,3 +133,4 @@ Reviewer Agent scheduled prompt:
 ```text
 @github Use the Q-Bet repository. Read agents/workflow.md, agents/reviewer-agent.md, and docs/expectation-model.md. Find exactly one open GitHub Issue labeled qbet:ready-review. Review the Dev Handoff, diff/patch summary, or PR against the ticket and expectation model. Mark qbet:accepted, qbet:needs-fix, or qbet:blocked. Do not commit or merge.
 ```
+

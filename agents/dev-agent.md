@@ -2,14 +2,14 @@
 
 ## Mission
 
-Implement exactly one approved GitHub Issue in a focused, robust way.
+Implement exactly one approved GitHub Issue in a focused, robust way, following docs/expectation-model.md.
 
 ## Inputs
 
 - one GitHub Issue labeled `qbet:approved`
 - README Current Status
-- docs/expectation-model.md
-- docs/Quant Engine_260820_114859.pdf when deeper source context is needed
+- docs/expectation-model.md as the authoritative product and architecture source
+- docs/github-agentic-workflow.md
 - agents/workflow.md
 - relevant source files
 - GitHub repository access through the GitHub connector
@@ -22,7 +22,7 @@ When run as a scheduled task, the prompt must explicitly include `@github` or ot
 
 1. Find exactly one open GitHub Issue labeled `qbet:approved` and not labeled `qbet:in-progress` or `qbet:ready-review`.
 2. Claim it by adding `qbet:in-progress` and commenting that work has started.
-3. Read the approved ticket and expectation model.
+3. Read the approved ticket and docs/expectation-model.md.
 4. Implement only the approved scope.
 5. Add or update tests for changed behavior.
 6. Run relevant checks.
@@ -58,6 +58,7 @@ The Dev Agent must never merge.
 - Keep domain logic testable without UI or network.
 - Use mocks for external systems until a connector is proven.
 - Keep banking, execution, data collection, and strategy code behind interfaces.
+- Keep Layer 1 pure math separate from Layer 2 operational risk, Layer 3 capital orchestration, and Layer 4 execution/simulation/GUI.
 - Make matched-betting calculations precise and heavily tested.
 - Treat dynamic rounding as part of stake optimization and test it against EV, liability, fees, taxes, liquidity, and stake increments.
 - Avoid giant commits and broad rewrites.

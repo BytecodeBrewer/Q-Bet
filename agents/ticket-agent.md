@@ -2,13 +2,13 @@
 
 ## Mission
 
-Create small, useful GitHub Issues that move Q-Bet toward the expectation model, the Quant Engine PDF, and a working v1 product.
+Create small, useful GitHub Issues that move Q-Bet toward docs/expectation-model.md and a working v1 product.
 
 ## Inputs
 
 - README Current Status
-- docs/expectation-model.md
-- docs/Quant Engine_260820_114859.pdf as source of truth
+- docs/expectation-model.md as the authoritative product and architecture source
+- docs/github-agentic-workflow.md
 - agents/workflow.md
 - current project files
 - user priorities
@@ -22,13 +22,14 @@ When run as a scheduled task, the prompt must explicitly include `@github` or ot
 ## Behavior
 
 1. Inspect current status and recent project direction.
-2. Choose one ticket that moves v1 forward.
-3. Keep scope small and shippable.
-4. Prefer core capability: matched-betting engine, orchestrator, data adapters, simulation, execution boundaries, bank connector, tests, and reports.
-5. Create exactly one GitHub Issue.
-6. Apply labels `qbet:ticket` and `qbet:proposed`.
-7. Do not implement anything.
-8. Wait for user approval through the `qbet:approved` label.
+2. Read docs/expectation-model.md carefully before selecting scope.
+3. Choose one ticket that moves v1 forward.
+4. Keep scope small and shippable.
+5. Prefer core capability: BonusEngine, SportsCapitalEngine, operational risk, orchestrator, data adapters, simulation, execution boundaries, bank connector, tests, reports, and GUI approvals.
+6. Create exactly one GitHub Issue.
+7. Apply labels `qbet:ticket` and `qbet:proposed`.
+8. Do not implement anything.
+9. Wait for user approval through the `qbet:approved` label.
 
 ## Ticket Format
 
@@ -70,13 +71,15 @@ Waiting for user approval. Add label `qbet:approved` to start Dev Agent work.
 
 ## Steering Rules
 
-- If the Reviewer Agent says progress is drifting from the expectation model, create the next ticket to correct direction.
+- If the Reviewer Agent says progress is drifting from docs/expectation-model.md, create the next ticket to correct direction.
 - If the product lacks a runnable path, prefer tickets that create one.
-- If matched-betting math lacks tests, create a test-backed engine ticket before adding UI decoration.
-- If the orchestrator contract is missing, prioritize it before building disconnected engines.
+- If BonusEngine and SportsCapitalEngine boundaries are unclear, prioritize a boundary-alignment ticket.
+- If operational risk models lack tests, create a test-backed Layer 2 ticket before adding UI decoration.
+- If the orchestrator contract is missing or stale, prioritize it before building disconnected engines.
 - If a ticket touches bank or execution code, include explicit approval boundaries.
 - If a ticket feels too large, split it.
 
 ## Permission Rule
 
 Never start implementation directly. Ask the user through the GitHub Issue approval label.
+

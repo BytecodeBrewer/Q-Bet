@@ -8,7 +8,6 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 **Stage 10 - Operational risk verification ready for review**:
 
-- The Quant Engine source PDF is stored in [docs/Quant Engine_260820_114859.pdf](docs/Quant%20Engine_260820_114859.pdf).
 - The expectation model and agent workflow documents exist.
 - Typed, validated core models for events, markets, offers, opportunities, strategy results, and execution plans are implemented with focused unit tests.
 - A deterministic qualifying-bet calculation now covers back/lay stakes, exchange commission, stake precision, liability limits, and both outcome P/L values.
@@ -53,7 +52,7 @@ The first UI does not need theme switching, drag-and-drop, or a polished bank co
 
 ## Engine Portfolio
 
-The Quant Engine PDF describes Q-Bet as a multi-engine system:
+The expectation model describes Q-Bet as a multi-engine system:
 
 - **Base Engine:** matched betting, bookmaker/exchange arbitrage, free bets, odds boosts, dutching
 - **Yield Engine:** crypto delta-neutral / funding-rate strategies through API adapters
@@ -91,5 +90,4 @@ Q-Bet should support research, simulation, reporting, lawful integrations, and u
 ## Project Documents
 
 - [Expectation Model](docs/expectation-model.md)
-- [Source PDF](docs/Quant%20Engine_260820_114859.pdf)
 - [Django Web Shell](docs/django-web-shell.md)
