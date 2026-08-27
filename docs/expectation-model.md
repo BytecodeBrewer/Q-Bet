@@ -261,6 +261,77 @@ Blueprint operational-risk categories to represent safely in code:
 - withdrawal cadence warnings and capital-cycle management
 - browser/session separation as credential/session-safety metadata, not evasion tooling
 
+The `OperationalRiskLayer` processes domain-specific execution policies in Python 3.12+ prior to capital allocation:
+
+### A. Pre-Match Liquidity & Kickoff Proximity Scheduling
+
+- **Event Timing Window:** Orders must be evaluated and scheduled close to event kickoff (typically $T-15$ to $T-5$ minutes). This maximizes market volume, minimizes odds drift, and aligns execution with organic market participation.
+- **Asynchronous Scheduler:** Implemented via `asyncio` queues that dynamically calculate execution timestamps based on event metadata.
+
+### B. Client Environment & Session Isolation
+
+- **Browser Automation Adapter (`qbet.adapters.browser`):** Uses Playwright Stealth to emulate standard browser runtime signatures.
+- **Proxy & IP Isolation:** Each provider account is mapped to a dedicated residential proxy endpoint to maintain strict network profile isolation.
+- **Session Persistence:** Persistent storage of cookies, local storage, and context metadata per provider account to eliminate redundant authentication events.
+
+### C. Dynamic Stake Rounding & Positive EV Constraints
+
+- **Stake Optimization (`qbet.calculations.rounding`):** Exact mathematical lay stakes (e.g., €14.63) are deterministically rounded to standard integer or 5-unit increments (e.g., €15.00).
+
+- **Expected Value Gatekeeper:** Stake adjustments are accepted if and only if the post-rounding outcome maintains a positive expected value ($EV > 0$).
+
+### D. Baseline Activity Emulation (Traffic Diversification)
+
+- **Baseline Activity Model (`qbet.layers.verification.baseline`):** Emulates regular retail activity by placing controlled, non-promotional allocations on highly liquid mainstream events (e.g., UEFA Champions League, English Premier League).
+
+### E. Stake Exposure Capping & Limits
+
+- **Exposure Guardrail (`qbet.layers.verification.exposure`):** Automatically caps individual order amounts to a maximum of 60%–70% of the provider’s reported max-bet limit, preventing max-stake execution flags.
+
+### F. Low-Liquidity Market Exclusion
+
+- **Liquidity Filter (`qbet.layers.verification.filters`):** Blocks order generation on sub-tier, low-volume markets to avoid slippage and manual audit flags.
+
+### G. Temporal Execution Pacing
+
+- **Staggered Order Routing (`qbet.layers.verification.pacing`):** Injects non-deterministic execution delays using `asyncio.sleep(random.uniform(4, 18))` prior to order submission.
+
+---
+
+## 3. Technology Stack & Persistence Architecture
+
+- **Runtime & Domain:** Python 3.12+ with Pydantic v2 models for strict type enforcement and request validation.
+- **Layer 1 (Math Layer):** Pure, stateless in-memory calculation modules using NumPy and Python `Decimal` (zero database dependencies).
+- **Layer 2 (Verification Layer):** In-Memory Cache synchronized with SQLite (local development) and Supabase / PostgreSQL (production target).
+- **Layer 3 (Capital Ledger Layer):** ACID-compliant ledger tracking wallet balances, exposure, and reserved liability[cite: 6].
+- **Layer 4 (Execution & GUI Layer):** SQLite/Supabase persistent store with filesystem output for structured CSV/JSON audit reports[cite: 6].
+
+---
+
+## 4. Code Isolation & Tax Modeling Standards
+
+### A. Protocol-Based Strategy Decoupling
+
+Monolithic input unions (such as a unified `CalculationInput` in `base.py`) are strictly prohibited. Engines must inherit from the generic strategy protocol:
+
+```python
+from typing import Protocol, TypeVar
+
+RequestT = TypeVar("RequestT", contravariant=True)
+EvaluationT = TypeVar("EvaluationT", covariant=True)
+
+class StrategyEngine(Protocol[RequestT, EvaluationT]):
+    def evaluate(self, request: RequestT) -> EvaluationT:
+```
+
+### B. German Betting Tax Modeling (`TaxMode`)
+
+All calculations must explicitly parameterize the applicable taxation rules:
+
+- `STAKE`: Tax (5.3%) deducted directly from the initial back stake ($B_{eff} = B \cdot (1 - 0.053)$).
+- `PROFIT`: Tax (5.3%) applied exclusively to net profit.
+- `NONE`: Tax-free execution.
+
 ## Bank API Feasibility
 
 Desired first candidates are Revolut or ING. Commerzbank and other banks can be considered.
