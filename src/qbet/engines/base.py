@@ -111,7 +111,13 @@ class BaseEngineEvaluation(DomainModel):
 
 
 class BaseEngine:
-    """Thin dispatcher over the existing pure matched-betting calculators."""
+    """Compatibility facade that delegates to isolated strategy engines."""
+
+    def __init__(self, bonus_engine: StrategyEngine | None = None, capital_engine: StrategyEngine | None = None) -> None:
+        from qbet.engines.bonus import BonusEngine
+        from qbet.engines.sports_capital import SportsCapitalEngine
+        self.bonus_engine = bonus_engine or BonusEngine()
+        self.capital_engine = capital_engine or SportsCapitalEngine()
 
     def evaluate(self, request: BaseEngineRequest) -> BaseEngineEvaluation:
         """Evaluate one supported strategy and return an approval-only plan."""
