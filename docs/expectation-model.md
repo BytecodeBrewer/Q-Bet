@@ -269,7 +269,7 @@ The `OperationalRiskLayer` processes domain-specific execution policies in Pytho
 
 ### B. Client Environment & Session Management
 
-- **Automated Web Driver Adapter (`qbet.adapters.browser`):** Uses standard Playwright browser automation with consistent rendering configurations to maintain execution parity across web interfaces. (Playwright Stealth to emulate standard browser)
+- **Automated Web Driver Adapter (`qbet.adapters.browser`):** Uses standard Playwright browser automation with consistent rendering configurations to maintain execution parity across web interfaces.
 - **Network Interface & Gateway Isolation:** Maps each integration account to a dedicated static network gateway to ensure connection stability and consistent routing protocols.
 - **Stateful Session Management:** Persists local storage, cookies, and authentication context metadata per adapter instance to eliminate redundant login requests and minimize network overhead.
 
@@ -302,8 +302,8 @@ The `OperationalRiskLayer` processes domain-specific execution policies in Pytho
 - **Runtime & Domain:** Python 3.12+ with Pydantic v2 models for strict type enforcement and request validation.
 - **Layer 1 (Math Layer):** Pure, stateless in-memory calculation modules using NumPy and Python `Decimal` (zero database dependencies).
 - **Layer 2 (Verification Layer):** In-Memory Cache synchronized with SQLite (local development) and Supabase / PostgreSQL (production target).
-- **Layer 3 (Capital Ledger Layer):** ACID-compliant ledger tracking wallet balances, exposure, and reserved liability[cite: 6].
-- **Layer 4 (Execution & GUI Layer):** SQLite/Supabase persistent store with filesystem output for structured CSV/JSON audit reports[cite: 6].
+- **Layer 3 (Capital Ledger Layer):** ACID-compliant ledger tracking wallet balances, exposure, and reserved liability.
+- **Layer 4 (Execution & GUI Layer):** SQLite/Supabase persistent store with filesystem output for structured CSV/JSON audit reports.
 
 ---
 
