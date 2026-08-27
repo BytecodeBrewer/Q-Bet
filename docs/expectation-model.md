@@ -268,11 +268,11 @@ The `OperationalRiskLayer` processes domain-specific execution policies in Pytho
 - **Event Timing Window:** Orders must be evaluated and scheduled close to event kickoff (typically $T-15$ to $T-5$ minutes). This maximizes market volume, minimizes odds drift, and aligns execution with organic market participation.
 - **Asynchronous Scheduler:** Implemented via `asyncio` queues that dynamically calculate execution timestamps based on event metadata.
 
-### B. Client Environment & Session Isolation
+### B. Client Environment & Session Management
 
-- **Browser Automation Adapter (`qbet.adapters.browser`):** Uses Playwright Stealth to emulate standard browser runtime signatures.
-- **Proxy & IP Isolation:** Each provider account is mapped to a dedicated residential proxy endpoint to maintain strict network profile isolation.
-- **Session Persistence:** Persistent storage of cookies, local storage, and context metadata per provider account to eliminate redundant authentication events.
+- **Automated Web Driver Adapter (`qbet.adapters.browser`):** Uses standard Playwright browser automation with consistent rendering configurations to maintain execution parity across web interfaces. (Playwright Stealth to emulate standard browser)
+- **Network Interface & Gateway Isolation:** Maps each integration account to a dedicated static network gateway to ensure connection stability and consistent routing protocols.
+- **Stateful Session Management:** Persists local storage, cookies, and authentication context metadata per adapter instance to eliminate redundant login requests and minimize network overhead.
 
 ### C. Dynamic Stake Rounding & Positive EV Constraints
 
