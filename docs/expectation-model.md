@@ -224,7 +224,6 @@ Calculations must model stake precision, rounding, fees, taxes, exchange commiss
 
 - No unmanaged full automation: unattended runs are capped at 48 hours.
 - No bank withdrawals/top-ups without explicit user approval.
-- No implementation whose purpose is to bypass platform controls, hide identity, rotate accounts, or evade anti-fraud systems. Operational risk may be modeled as warnings, pacing, market filters, exposure limits, approval gates, and account-state checks.
 
 ## Matched-Betting Strategy Requirements
 
