@@ -11,7 +11,7 @@ from pydantic import Field, model_validator
 
 from qbet.calculations import FreeBetResult, QualifyingBetResult
 from qbet.domain.models import Currency, DomainModel, Identifier, PositiveDecimal
-from qbet.engine import BaseEngineEvaluation
+from typing import Any
 
 
 class EngineId(StrEnum):
@@ -48,7 +48,7 @@ class EngineCandidate(DomainModel):
     capital_lock_up: timedelta
     currency: Currency
     is_sandbox: bool = False
-    source_evaluation: BaseEngineEvaluation | None = None
+    source_evaluation: Any | None = None
 
     @model_validator(mode="after")
     def candidate_is_safe_and_bounded(self) -> "EngineCandidate":
@@ -83,10 +83,10 @@ class EngineAdapter(Protocol):
     def evaluate_candidates(self, snapshot: CapitalSnapshot) -> tuple[EngineCandidate, ...]: ...
 
 
-class BaseEngineAdapter:
+class StrategyCandidateAdapter:
     """Adapts one evaluated Base Engine strategy without recalculating it."""
 
-    def __init__(self, evaluation: BaseEngineEvaluation, *, risk_score: Decimal, liquidity_score: Decimal, capital_lock_up: timedelta) -> None:
+    def __init__(self, evaluation: Any, *, risk_score: Decimal, liquidity_score: Decimal, capital_lock_up: timedelta) -> None:
         self._evaluation = evaluation
         self._risk_score = risk_score
         self._liquidity_score = liquidity_score
@@ -97,7 +97,7 @@ class BaseEngineAdapter:
             EngineCandidate(
                 id=f"base:{self._evaluation.strategy_result.opportunity_id}",
                 engine=EngineId.BASE,
-                required_capital=_base_required_capital(self._evaluation),
+                required_capital=_strategy_required_capital(self._evaluation),
                 expected_value=self._evaluation.worst_case_profit_loss,
                 roi=self._evaluation.worst_case_profit_loss / self._evaluation.strategy_result.stake,
                 risk_score=self._risk_score,
@@ -170,7 +170,7 @@ def _rejection_reason(candidate: EngineCandidate, snapshot: CapitalSnapshot, con
         return RejectionReason.CAPITAL_LIMIT
     return None
 
-def _base_required_capital(evaluation: BaseEngineEvaluation) -> Decimal:
+def _strategy_required_capital(evaluation: Any) -> Decimal:
     result = evaluation.calculation_result
     if isinstance(result, QualifyingBetResult):
         return result.back_stake + result.lay_liability

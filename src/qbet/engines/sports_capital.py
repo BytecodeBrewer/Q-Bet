@@ -1,16 +1,33 @@
-"""Real-capital sports strategy evaluation."""
-from qbet.calculations import DutchingInput, TwoWayArbitrageInput, calculate_dutching, calculate_two_way_arbitrage
-from qbet.engines.base import BaseEngineRequest, BaseStrategy, CalculationResult
-
-class SportsCapitalEngine:
-    """Handles two-way arbitrage and dutching only."""
-    def calculate(self, request: BaseEngineRequest) -> CalculationResult:
-        if request.strategy is BaseStrategy.TWO_WAY_ARBITRAGE:
-            if not isinstance(request.inputs, TwoWayArbitrageInput):
-                raise ValueError("two_way_arbitrage requires TwoWayArbitrageInput")
-            return calculate_two_way_arbitrage(request.inputs)
-        if request.strategy is BaseStrategy.DUTCHING:
-            if not isinstance(request.inputs, DutchingInput):
-                raise ValueError("dutching requires DutchingInput")
-            return calculate_dutching(request.inputs)
-        raise ValueError("SportsCapitalEngine supports two_way_arbitrage and dutching only")
+from datetime import datetime, timezone
+from decimal import Decimal
+from uuid import UUID, uuid4
+from pydantic import Field, model_validator
+from qbet.calculations import DutchingInput, DutchingResult, TwoWayArbitrageInput, TwoWayArbitrageResult, calculate_dutching, calculate_two_way_arbitrage
+from qbet.domain.models import Currency, DomainModel, ExecutionPlan, ExecutionStatus, ExecutionStep, Identifier, StrategyResult
+from qbet.engines.protocol import StrategyEngine
+class SportsCapitalEngineRequest(DomainModel):
+    opportunity_id: Identifier
+    inputs: TwoWayArbitrageInput | DutchingInput
+    currency: Currency
+    execution_offer_ids: tuple[Identifier, ...] = Field(min_length=2)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    execution_plan_id: UUID = Field(default_factory=uuid4)
+    @model_validator(mode="after")
+    def valid_request(self):
+        expected = len(self.inputs.offers) if isinstance(self.inputs, DutchingInput) else 2
+        if len(self.execution_offer_ids) != expected or len(set(self.execution_offer_ids)) != expected: raise ValueError("execution_offer_ids must match strategy outcomes")
+        return self
+class SportsCapitalEngineEvaluation(DomainModel):
+    calculation_result: TwoWayArbitrageResult | DutchingResult
+    strategy_result: StrategyResult
+    worst_case_profit_loss: Decimal
+    is_profitable: bool
+    execution_plan: ExecutionPlan
+class SportsCapitalEngine(StrategyEngine[SportsCapitalEngineRequest, SportsCapitalEngineEvaluation]):
+    def evaluate(self, request):
+        result = calculate_two_way_arbitrage(request.inputs) if isinstance(request.inputs, TwoWayArbitrageInput) else calculate_dutching(request.inputs)
+        stakes = (result.first_stake, result.second_stake) if isinstance(result, TwoWayArbitrageResult) else tuple(a.stake for a in result.allocations)
+        worst = result.guaranteed_profit_loss if isinstance(result, TwoWayArbitrageResult) else result.worst_case_profit_loss
+        strategy_result = StrategyResult(strategy="two_way_arbitrage" if isinstance(result, TwoWayArbitrageResult) else "dutching", opportunity_id=request.opportunity_id, stake=sum(stakes, Decimal("0")), expected_profit=worst, currency=request.currency, generated_at=request.generated_at)
+        plan = ExecutionPlan(id=request.execution_plan_id, strategy_result=strategy_result, steps=tuple(ExecutionStep(offer_id=offer, stake=stake, status=ExecutionStatus.REQUIRES_APPROVAL) for offer, stake in zip(request.execution_offer_ids, stakes, strict=True)), created_at=request.generated_at, requires_approval=True)
+        return SportsCapitalEngineEvaluation(calculation_result=result, strategy_result=strategy_result, worst_case_profit_loss=worst, is_profitable=worst >= Decimal("0"), execution_plan=plan)
