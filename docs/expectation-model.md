@@ -310,5 +310,3 @@ A ticket is done when:
 ## Product Bias
 
 Build the working v1 sports-betting product first: `BonusEngine`, `SportsCapitalEngine`, operational risk checks, capital orchestration, simulation, controlled execution, reports, and GUI approvals. Keep later engines connected through contracts and sandbox adapters so the system can grow without being rebuilt from scratch.
-
-
