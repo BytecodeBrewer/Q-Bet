@@ -6,7 +6,7 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 10 - Operational risk verification ready for review**:
+**Stage 11 - Operational-risk-gated capital allocation ready for review**:
 
 - The expectation model and agent workflow documents exist.
 - Typed, validated core models for events, markets, offers, opportunities, strategy results, and execution plans are implemented with focused unit tests.
@@ -17,9 +17,9 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 - A minimal Django web shell now serves a static engine-status page, health endpoint, local Django auth boundary, and privacy-preserving request correlation logs.
 - A deterministic two-to-four outcome dutching calculation now supports total-stake or target-return planning, fees, liquidity, stake precision, and actual rounded worst-case P/L.
 - BonusEngine and SportsCapitalEngine independently evaluate their respective strategies and produce approval-only execution plans.
-- A deterministic capital orchestrator now ranks and filters Base, Yield, and Alpha candidates by expected value, ROI, risk, liquidity, capital lock-up, and available capital. It produces proposals only; Yield and Alpha remain sandbox adapters.
-- A deterministic Operational Risk Layer now validates both engine request types against provider frequency and cooldown state before downstream allocation.
-- Provider-state persistence and simulation history are the next implementation steps.
+- A deterministic capital orchestrator now verifies BonusEngine and SportsCapitalEngine opportunities against provider state before ranking and filtering them by expected value, ROI, risk, liquidity, capital lock-up, and available capital. It produces proposals only; Yield and Alpha remain sandbox adapters.
+- A deterministic Operational Risk Layer now validates both engine request types against provider frequency and cooldown state before downstream allocation, with stable rejection reasons recorded by the orchestrator.
+- Provider-state persistence and simulation history are the next implementation steps; provider state is currently supplied in memory at the allocation boundary.
 - Supabase, CI/CD, UI, Playwright collectors, bank connector, and execution adapters are not implemented yet.
 
 Update this section after every accepted ticket. It should always say where the project really is.
