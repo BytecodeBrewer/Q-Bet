@@ -1,6 +1,8 @@
 from datetime import timedelta
 from decimal import Decimal
 
+import pytest
+
 from qbet.calculations import ArbitrageOffer, QualifyingBetInput, TwoWayArbitrageInput
 from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngine, BonusEngineRequest, SportsCapitalEngine, SportsCapitalEngineRequest
@@ -54,7 +56,7 @@ def provider_state(**changes: object) -> ProviderState:
     return ProviderState(**values)
 
 
-def bonus_adapter(*, state: ProviderState | None = None, risk: str = "0.2") -> VerifiedStrategyCandidateAdapter:
+def bonus_adapter(*, state: ProviderState | None = None, risk: str = "0.2", evaluation_opportunity_id: str | None = None) -> VerifiedStrategyCandidateAdapter:
     request = BonusEngineRequest(
         opportunity_id="bonus-opportunity",
         inputs=QualifyingBetInput(
@@ -70,7 +72,7 @@ def bonus_adapter(*, state: ProviderState | None = None, risk: str = "0.2") -> V
     )
     return VerifiedStrategyCandidateAdapter(
         request,
-        BonusEngine().evaluate(request),
+        BonusEngine().evaluate(request.model_copy(update={"opportunity_id": evaluation_opportunity_id}) if evaluation_opportunity_id else request),
         state or provider_state(),
         risk_score=Decimal(risk),
         liquidity_score=Decimal("0.8"),
@@ -78,7 +80,7 @@ def bonus_adapter(*, state: ProviderState | None = None, risk: str = "0.2") -> V
     )
 
 
-def sports_adapter(*, state: ProviderState | None = None) -> VerifiedStrategyCandidateAdapter:
+def sports_adapter(*, state: ProviderState | None = None, evaluation_opportunity_id: str | None = None) -> VerifiedStrategyCandidateAdapter:
     def offer(outcome: str) -> ArbitrageOffer:
         return ArbitrageOffer(
             outcome=outcome,
@@ -100,7 +102,7 @@ def sports_adapter(*, state: ProviderState | None = None) -> VerifiedStrategyCan
     )
     return VerifiedStrategyCandidateAdapter(
         request,
-        SportsCapitalEngine().evaluate(request),
+        SportsCapitalEngine().evaluate(request.model_copy(update={"opportunity_id": evaluation_opportunity_id}) if evaluation_opportunity_id else request),
         state or provider_state(),
         risk_score=Decimal("0.2"),
         liquidity_score=Decimal("0.8"),
@@ -157,3 +159,13 @@ def test_existing_allocator_limits_still_apply_after_verification() -> None:
 
     assert result.allocations == ()
     assert result.rejections[0].reason is RejectionReason.RISK_LIMIT
+
+
+def test_verified_strategy_adapter_rejects_a_different_bonus_opportunity() -> None:
+    with pytest.raises(ValueError, match="same opportunity"):
+        bonus_adapter(evaluation_opportunity_id="different-bonus-opportunity")
+
+
+def test_verified_strategy_adapter_rejects_a_different_sports_opportunity() -> None:
+    with pytest.raises(ValueError, match="same opportunity"):
+        sports_adapter(evaluation_opportunity_id="different-sports-opportunity")

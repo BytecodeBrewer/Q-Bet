@@ -119,6 +119,10 @@ class VerifiedStrategyCandidateAdapter:
             raise ValueError("request and evaluation must belong to the same engine")
         if isinstance(request, SportsCapitalEngineRequest) != isinstance(evaluation, SportsCapitalEngineEvaluation):
             raise ValueError("request and evaluation must belong to the same engine")
+        if request.opportunity_id != evaluation.strategy_result.opportunity_id:
+            raise ValueError("request and evaluation must identify the same opportunity")
+        if request.currency != evaluation.strategy_result.currency:
+            raise ValueError("request and evaluation must use the same currency")
         self._request = request
         self._evaluation = evaluation
         self._provider_state = provider_state
