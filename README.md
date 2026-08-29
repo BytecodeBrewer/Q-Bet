@@ -2,7 +2,7 @@
 
 > A modular Python quant engine for matched betting, sports arbitrage, strategy simulation, controlled execution, and automated opportunity detection.
 
-Q-Bet is a cloud-ready web application for a multi-engine quant betting portfolio. The first useful version should already have a complete matched-betting engine, a capital orchestrator prepared for more engines, data collection through Playwright/API adapters, bank connectivity, simulation mode, and controlled real execution.
+Q-Bet is a cloud-ready web application for a multi-engine quant betting portfolio. The first useful version should already have a complete matched-betting engine, workflow orchestration, liquidity checking prepared for more engines, data collection through Playwright/API adapters, bank connectivity, simulation mode, and controlled real execution.
 
 ## Current Status
 
@@ -17,7 +17,7 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 - A minimal Django web shell now serves a static engine-status page, health endpoint, local Django auth boundary, and privacy-preserving request correlation logs.
 - A deterministic two-to-four outcome dutching calculation now supports total-stake or target-return planning, fees, liquidity, stake precision, and actual rounded worst-case P/L.
 - BonusEngine and SportsCapitalEngine independently evaluate their respective strategies and produce approval-only execution plans.
-- A deterministic capital orchestrator now verifies BonusEngine and SportsCapitalEngine opportunities against provider state before ranking and filtering them by expected value, ROI, risk, liquidity, capital lock-up, and available capital. It produces proposals only; Yield and Alpha remain sandbox adapters.
+- A deterministic `CapitalOrchestrator` now verifies BonusEngine and SportsCapitalEngine opportunities against provider state before ranking and filtering them by expected value, ROI, risk, liquidity, capital lock-up, and available capital. This is the current legacy name for the future `LiquidityChecker` role; it produces proposals only, while Yield and Alpha remain sandbox adapters.
 - A deterministic Operational Risk Layer now validates both engine request types against provider frequency and cooldown state before downstream allocation, with stable rejection reasons recorded by the orchestrator.
 - A deterministic Operational Risk Layer now validates both engine request types against provider frequency and cooldown state before downstream allocation.
 - The deterministic simulation flow now runs qualifying bets, free bets, two-way arbitrage, and dutching through the two concrete engines, records their calculation results, and preserves safe-boundary stop behavior.
@@ -41,7 +41,7 @@ python manage.py runserver
 Version 1 should include:
 
 - a complete matched-betting engine from data intake to strategy result, execution plan, and report
-- a capital orchestrator that can route capital and is ready for Yield and Alpha engines
+- workflow orchestration plus liquidity checking that can route capital and stay ready for Yield and Alpha engines
 - simulation mode for every engine, including placeholder/sandbox engines where not fully implemented
 - controlled real execution for supported matched-betting workflows
 - Playwright-based web collectors where APIs are unavailable or insufficient
@@ -59,7 +59,7 @@ The expectation model describes Q-Bet as a multi-engine system:
 - **Base Engine:** matched betting, bookmaker/exchange arbitrage, free bets, odds boosts, dutching
 - **Yield Engine:** crypto delta-neutral / funding-rate strategies through API adapters
 - **Alpha Engine:** prediction-market making and arbitrage through API adapters
-- **Capital Orchestrator:** allocates capital by EV, ROI, risk, liquidity, and capital lock-up
+- **Liquidity Checker:** allocates capital by EV, ROI, risk, liquidity, and capital lock-up; current code may still use `CapitalOrchestrator` as legacy naming
 
 The Base Engine must be fully implemented first. Yield and Alpha should exist in sandbox/adapter form so the orchestrator can connect to them later without a rebuild.
 
