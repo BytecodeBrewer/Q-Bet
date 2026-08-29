@@ -6,6 +6,7 @@ import pytest
 
 from qbet.calculations import QualifyingBetInput, calculate_qualifying_bet
 from qbet.domain.models import StrategyResult
+from qbet.layers import SimulationLogRecordType
 from qbet.reporting import ReportDetailSelection, SimulationReportBuilder
 from qbet.simulation import (
     ReportingSimulationRunner,
@@ -13,6 +14,7 @@ from qbet.simulation import (
     SimulationEvaluation,
     SimulationRunConfig,
     SimulationStep,
+    SimulationTopUpEvent,
 )
 from qbet.storage import SQLiteSimulationReportStore
 
@@ -100,3 +102,47 @@ def test_sqlite_store_raises_for_missing_run_id(tmp_path) -> None:
 
     with pytest.raises(KeyError):
         store.load_records(uuid4())
+
+
+def test_sqlite_round_trip_preserves_top_up_timeline_and_net_profit(tmp_path) -> None:
+    database_path = tmp_path / "top-ups.sqlite3"
+    store = SQLiteSimulationReportStore(database_path)
+    runner = ReportingSimulationRunner(store)
+
+    runner.run(
+        SimulationRunConfig(
+            engine=SimulationEngine.BONUS,
+            starting_capital=Decimal("100"),
+            top_up_events=(
+                SimulationTopUpEvent(after_completed_steps=1, amount=Decimal("10")),
+            ),
+        ),
+        (SimulationStep(id="flat", capital_change=Decimal("0")),),
+    )
+
+    assert runner.last_report is not None
+    reopened_store = SQLiteSimulationReportStore(database_path)
+    report = reopened_store.load_report(runner.last_report.run_id)
+    records = reopened_store.load_records(runner.last_report.run_id)
+    transition_payloads = [
+        record.payload
+        for record in records
+        if record.record_type is SimulationLogRecordType.CAPITAL_TRANSITION
+    ]
+
+    assert report.current_capital == Decimal("110")
+    assert report.top_up_total == Decimal("10")
+    assert report.profit_loss == Decimal("0")
+    assert transition_payloads == [
+        {
+            "movement_type": "step",
+            "step_id": "flat",
+            "capital_change": "0",
+            "current_capital": "100",
+        },
+        {
+            "movement_type": "top_up",
+            "capital_change": "10",
+            "current_capital": "110",
+        },
+    ]

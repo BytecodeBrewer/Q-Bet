@@ -13,14 +13,12 @@ from qbet.reporting import SimulationReport, SimulationReportBuilder
 from qbet.simulation.models import (
     SimulationContext,
     SimulationEvent,
+    SimulationEventType,
     SimulationResult,
     SimulationRunConfig,
     SimulationStep,
 )
-from qbet.simulation.runner import (
-    DeterministicSimulationRunner,
-    SimulationStepObserver,
-)
+from qbet.simulation.runner import DeterministicSimulationRunner, SimulationStepObserver
 from qbet.storage import SimulationReportStore
 
 
@@ -54,7 +52,7 @@ class ReportingSimulationRunner:
         def observe_event(event: SimulationEvent) -> None:
             record_type = (
                 SimulationLogRecordType.RUN_STARTED
-                if event.event_type.value == "run_started"
+                if event.event_type is SimulationEventType.RUN_STARTED
                 else SimulationLogRecordType.EVENT
             )
             context.record(
@@ -62,13 +60,24 @@ class ReportingSimulationRunner:
                 "simulation.runner",
                 event.model_dump(mode="json"),
             )
+            if event.event_type is SimulationEventType.TOP_UP_APPLIED:
+                context.record(
+                    SimulationLogRecordType.CAPITAL_TRANSITION,
+                    "simulation.runner",
+                    {
+                        "movement_type": "top_up",
+                        "capital_change": str(event.top_up_amount),
+                        "current_capital": str(event.current_capital),
+                    },
+                )
 
-        def observe_step(boundary: SimulationContext) -> None:
+        def observe_step_applied(boundary: SimulationContext) -> None:
             step = ordered_steps[boundary.completed_step_count - 1]
             context.record(
                 SimulationLogRecordType.CAPITAL_TRANSITION,
                 "simulation.runner",
                 {
+                    "movement_type": "step",
                     "step_id": step.id,
                     "capital_change": str(step.capital_change),
                     "current_capital": str(boundary.current_capital),
@@ -88,14 +97,13 @@ class ReportingSimulationRunner:
                     "simulation.engine",
                     step.evaluation.model_dump(mode="json"),
                 )
-            if on_step_completed is not None:
-                on_step_completed(boundary)
 
         try:
             result = self._runner.run(
                 config,
                 ordered_steps,
-                on_step_completed=observe_step,
+                on_step_completed=on_step_completed,
+                on_step_applied=observe_step_applied,
                 on_event=observe_event,
             )
         except Exception as error:

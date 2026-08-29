@@ -20,6 +20,7 @@ from qbet.simulation.models import (
 
 
 SimulationStepObserver = Callable[[SimulationContext], None]
+SimulationStepAppliedObserver = Callable[[SimulationContext], None]
 SimulationEventObserver = Callable[[SimulationEvent], None]
 
 
@@ -36,6 +37,7 @@ class SimulationRunner(Protocol):
         steps: Iterable[SimulationStep],
         *,
         on_step_completed: SimulationStepObserver | None = None,
+        on_step_applied: SimulationStepAppliedObserver | None = None,
         on_event: SimulationEventObserver | None = None,
     ) -> SimulationResult:
         """Run deterministic steps synchronously and return an immutable result."""
@@ -84,6 +86,7 @@ class DeterministicSimulationRunner:
         steps: Iterable[SimulationStep],
         *,
         on_step_completed: SimulationStepObserver | None = None,
+        on_step_applied: SimulationStepAppliedObserver | None = None,
         on_event: SimulationEventObserver | None = None,
     ) -> SimulationResult:
         """Apply simulation capital changes in order and stop only at safe boundaries."""
@@ -145,6 +148,8 @@ class DeterministicSimulationRunner:
                 evaluations.append(step.evaluation)
             self._progress = Decimal(len(self._completed_steps)) / Decimal(len(ordered_steps))
             record(SimulationEventType.STEP_COMPLETED, step_id=step.id)
+            if on_step_applied is not None:
+                on_step_applied(self._context(config))
             apply_top_ups()
 
             if on_step_completed is not None:

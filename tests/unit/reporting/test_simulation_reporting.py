@@ -12,6 +12,7 @@ from qbet.simulation import (
     SimulationRunConfig,
     SimulationStatus,
     SimulationStep,
+    SimulationTopUpEvent,
 )
 
 
@@ -129,5 +130,55 @@ def test_stopped_run_keeps_completed_steps_and_a_chronological_warning() -> None
         SimulationLogRecordType.EVENT,
         SimulationLogRecordType.EVENT,
         SimulationLogRecordType.WARNING,
+        SimulationLogRecordType.RUN_FINISHED,
+    ]
+
+
+def test_top_up_records_distinct_reconcilable_capital_movements() -> None:
+    runner = ReportingSimulationRunner()
+    simulation_config = SimulationRunConfig(
+        engine=SimulationEngine.BONUS,
+        starting_capital=Decimal("100"),
+        top_up_events=(
+            SimulationTopUpEvent(after_completed_steps=1, amount=Decimal("10")),
+        ),
+    )
+
+    result = runner.run(
+        simulation_config,
+        (SimulationStep(id="gain", capital_change=Decimal("5")),),
+    )
+
+    assert result.current_capital == Decimal("115")
+    assert runner.last_report is not None
+    assert runner.last_report.top_up_total == Decimal("10")
+    assert runner.last_report.profit_loss == Decimal("5")
+    transitions = [
+        record.payload
+        for record in runner.last_records
+        if record.record_type is SimulationLogRecordType.CAPITAL_TRANSITION
+    ]
+    assert transitions == [
+        {
+            "movement_type": "step",
+            "step_id": "gain",
+            "capital_change": "5",
+            "current_capital": "105",
+        },
+        {
+            "movement_type": "top_up",
+            "capital_change": "10",
+            "current_capital": "115",
+        },
+    ]
+    assert [record.record_type for record in runner.last_records] == [
+        SimulationLogRecordType.RAW_INPUT,
+        SimulationLogRecordType.RUN_STARTED,
+        SimulationLogRecordType.EVENT,
+        SimulationLogRecordType.CAPITAL_TRANSITION,
+        SimulationLogRecordType.INTERMEDIATE_RESULT,
+        SimulationLogRecordType.EVENT,
+        SimulationLogRecordType.CAPITAL_TRANSITION,
+        SimulationLogRecordType.EVENT,
         SimulationLogRecordType.RUN_FINISHED,
     ]

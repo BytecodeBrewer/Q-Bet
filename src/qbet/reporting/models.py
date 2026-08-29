@@ -52,6 +52,7 @@ class SimulationReport(DomainModel):
     status: SimulationStatus
     starting_capital: Decimal
     current_capital: Decimal
+    top_up_total: Decimal
     profit_loss: Decimal
     completed_steps: tuple[CompletedStepSummary, ...]
     elapsed_duration: timedelta
@@ -144,6 +145,14 @@ class SimulationReportBuilder:
             in (SimulationLogRecordType.RUN_STARTED, SimulationLogRecordType.EVENT)
             and "event_type" in record.payload
         )
+        top_up_total = sum(
+            (
+                event.top_up_amount or Decimal("0")
+                for event in events
+                if event.event_type.value == "top_up_applied"
+            ),
+            Decimal("0"),
+        )
         evaluations = tuple(
             SimulationEvaluation.model_validate(record.payload)
             for record in records
@@ -157,7 +166,8 @@ class SimulationReportBuilder:
             status=status,
             starting_capital=config.starting_capital,
             current_capital=current_capital,
-            profit_loss=current_capital - config.starting_capital,
+            top_up_total=top_up_total,
+            profit_loss=current_capital - config.starting_capital - top_up_total,
             completed_steps=completed_steps,
             elapsed_duration=elapsed_duration,
             progress=progress,
