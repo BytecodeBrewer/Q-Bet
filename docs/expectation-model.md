@@ -17,31 +17,38 @@ Core principles:
 - **Zero-CLI / Full GUI First:** End users should not need a console. Simulation, execution approval, settings, logs, exports, and analysis belong in the GUI.
 - **Decoupled engines via Protocol:** Engines are autonomous modules with typed request/result contracts.
 - **Domain and pipeline separation:** Pure formulas do not know live balances, execution adapters, providers, or GUI state.
-- **Capital safety:** The orchestrator protects against insolvency, over-allocation, liquidity gaps, and user-side capital changes.
+- **Capital safety:** The `WorkflowOrchestrator` and `LiquidityChecker` protect against insolvency, over-allocation, liquidity gaps, and user-side capital changes.
 - **Small implementation tickets:** Build quickly, but keep reviewable slices.
 
-## Four-Layer Pipeline
+## Workflow Pipeline Architecture
 
-Q-Bet follows a strict Clean Architecture style pipeline:
+Q-Bet follows a workflow-orchestrated pipeline rather than a rigid numbered layer stack. The detailed Mermaid model lives in [Pipeline Architecture](pipeline-architecture.md).
+
+Core target flow:
 
 ```text
-Layer 1: Strategy Engines (Pure Math)
-    Calculates EV, stakes, liability, P/L, returns, and raw plans.
-
-Layer 2: Verification & Operational Risk
-    Checks provider state, account state, cooldowns, rounding policy, market filters,
-    exposure thresholds, and operational warnings.
-
-Layer 3: Capital Orchestrator & Safety Sentinel
-    Allocates bankroll, reserves capital, checks thresholds, ranks candidates,
-    and stops new proposals when capital safety is violated.
-
-Layer 4: Execution & Simulation Layer (GUI-Bound)
-    Handles user approvals, sandbox simulation, execution adapters, logs,
-    reports, exports, and dashboard state.
+Data Aggregation -> Engine-specific Preparation -> Calculation -> Domain Risk -> Liquidity Check -> Simulation / Execution
 ```
 
-Important separation rule: Layer 1 produces mathematically valid strategy outputs. It must not read databases, accounts, sessions, live balances, browser profiles, GUI state, or execution state. Layers 2-4 decide whether, when, and how a valid plan may be simulated, presented, or executed.
+Numbered layers are avoided in the active architecture because not every engine uses every stage. Engines should take the shortest valid path from intake to calculation, risk checks where needed, liquidity checking, and simulation or execution.
+
+Engine-specific paths:
+
+- `BonusEngine` / `SportsCapitalEngine`: Data Aggregation -> Sports Match Builder -> Calculation -> Sports Domain Risk -> Liquidity Check.
+- `TicketEngine`: Data Aggregation -> TicketEngine -> Liquidity Check.
+- `PredictionMarketEngine`: Data Aggregation -> optional Feature/Signal Builder -> PredictionMarketEngine -> optional Domain Risk -> Liquidity Check.
+- `CryptoYieldEngine`: Streaming Data -> Market State Aggregator -> CryptoYieldEngine -> optional Crypto Risk -> Liquidity Check.
+
+Important separation rule: calculation engines produce deterministic strategy outputs. They must not read databases, accounts, sessions, live balances, browser profiles, GUI state, or execution state. Domain Risk, Liquidity Check, Dispatch, Simulation, and Execution decide whether, when, and how a valid plan may be simulated, presented, or executed.
+
+## Pipeline Component Naming
+
+- `WorkflowOrchestrator` owns pipeline movement, routing, correlation ids, stage transitions, and engine activation/throttling from GUI settings.
+- `RequestHandler` performs targeted Playwright/API refresh checks for Risk, Liquidity, and Execution without becoming the main data stream.
+- `LiquidityChecker` is the preferred future name for the current capital/capital-allocation role. It checks capital, reservations, priority, balances, provider/account availability, and pending/recheck decisions.
+- The current `CapitalOrchestrator` name should be treated as legacy naming for liquidity and capital allocation until the code is refactored.
+- Reporting, logging, and persistence are cross-cutting architecture concerns, not a final numbered layer.
+- The GUI is the Admin Control and Monitoring Plane. It observes pipeline state, data ingestion, simulation, execution, bank/funding state, queues, warnings, reports, exports, and approvals. It must not bypass `WorkflowOrchestrator` or directly mutate engine/calculation state.
 
 ## Engine And Strategy Matrix
 
@@ -149,12 +156,12 @@ These numbers are planning hypotheses for simulation, not guaranteed returns.
 
 ## Storage And Persistence Model
 
-| Layer | Storage Type | Necessity | Reason |
+| Pipeline Area | Storage Type | Necessity | Reason |
 | --- | --- | --- | --- |
-| Layer 1: Math | Pure stateless in-memory | No DB storage | Pure calculations must remain isolated and deterministic. |
-| Layer 2: Verification | In-memory cache synchronized with SQLite locally, then Supabase/PostgreSQL as cloud target | Required | Stores provider/account state, cooldowns, active bet counts, last action timestamps, market filters, and warning state. |
-| Layer 3: Capital | ACID-compliant ledger in SQLite locally, then Supabase/PostgreSQL as cloud target | Critical | Central authority for bankroll, balances, reserved funds, thresholds, and race-condition protection. |
-| Layer 4: Execution/GUI | SQLite/Supabase plus filesystem export for CSV/JSON; cloud deployments may mirror export artifacts to object storage | Required | Stores execution history, GUI session state, simulation results, reports, and CSV/JSON exports. |
+| Math / Calculation | Pure stateless in-memory | No DB storage | Pure calculations must remain isolated and deterministic. |
+| Domain Risk / Verification | In-memory cache synchronized with SQLite locally, then Supabase/PostgreSQL as cloud target | Required | Stores provider/account state, cooldowns, active bet counts, last action timestamps, market filters, and warning state. |
+| Liquidity Check / Capital | ACID-compliant ledger in SQLite locally, then Supabase/PostgreSQL as cloud target | Critical | Central authority for bankroll, balances, reserved funds, thresholds, and race-condition protection. |
+| Execution, Simulation, And GUI | SQLite/Supabase plus filesystem export for CSV/JSON; cloud deployments may mirror export artifacts to object storage | Required | Stores execution history, GUI session state, simulation results, reports, and CSV/JSON exports. |
 
 The local implementation may start with SQLite. The cloud target should use Supabase/Postgres unless a later technical decision proves a better fit.
 
@@ -196,10 +203,10 @@ German market tax modes:
 ### Must
 
 - Follow this expectation model as the primary source of truth.
-- Keep architecture modular across the four layers.
+- Keep architecture modular across the workflow pipeline stages.
 - Implement `BonusEngine` and `SportsCapitalEngine` as distinct v1 engines, even if they share calculators.
 - Keep Yield, Alpha, Ticket, and ML modules behind explicit contracts until their production logic is built.
-- Implement a capital orchestrator that can connect to multiple engines and route capital by EV, ROI, risk, liquidity, and capital lock-up.
+- Implement a `WorkflowOrchestrator` that coordinates pipeline movement and a `LiquidityChecker` that routes capital by EV, ROI, risk, liquidity, and capital lock-up.
 - Provide data collection contracts for all engine types:
   - Playwright collectors for permitted web data collection where API access is unavailable or insufficient
   - API adapter interfaces for crypto yield and prediction-market engines
@@ -209,7 +216,7 @@ German market tax modes:
 - Provide bank connectivity behind an interface for balances and approved funding flows.
 - Never pull money from a bank account without explicit user approval.
 - Implement matched-betting stake optimization, including dynamic rounding that preserves calculation quality while producing valid practical stake sizes.
-- Implement Layer 2 operational risk checks for provider limits, cooldowns, market/liquidity filters, exposure thresholds, timing/pacing rules, withdrawal warnings, and strategy intensity.
+- Implement Domain Risk checks for provider limits, cooldowns, market/liquidity filters, exposure thresholds, timing/pacing rules, withdrawal warnings, and strategy intensity where the engine path requires them.
 - Provide a main dashboard with compact engine widgets showing traffic-light status plus warning/error symbols.
 - Provide separate views for each engine; clicking a widget opens or expands the relevant engine view.
 - Provide visual order approval and rejection in the GUI.
@@ -335,20 +342,26 @@ Expected output: a short recommendation and connector decision. Until then, the 
 
 ## Current Implementation Alignment
 
-The code currently has significant v1 foundations: typed domain models, pure calculators, deterministic rounding, a Base Engine dispatcher, simulation contracts, a Django web shell, and a proposal-only capital orchestrator. The desired target is to evolve the current Base Engine split into explicit `BonusEngine` and `SportsCapitalEngine` boundaries while preserving shared calculation primitives.
+The code currently has significant v1 foundations: typed domain models, pure calculators, deterministic rounding, a Base Engine dispatcher, simulation contracts, a Django web shell, and a proposal-only `CapitalOrchestrator`. The desired target is to evolve that legacy capital-allocation role toward `LiquidityChecker` and introduce `WorkflowOrchestrator` plus `RequestHandler` boundaries while preserving shared calculation primitives and explicit `BonusEngine` / `SportsCapitalEngine` engine boundaries.
 
-Provider-state persistence, simulation history, data collectors, execution adapters, bank connector, Supabase integration, and richer GUI interaction remain future implementation work.
+Provider-state persistence, simulation history, data aggregation, match building, request refresh handling, execution adapters, bank connector, Supabase integration, and richer GUI monitoring remain future implementation work.
 
 ## Suggested Next Milestones
 
-1. Align code structure with `BonusEngine` and `SportsCapitalEngine` as separate v1 engines while keeping calculators shared.
-2. Strengthen Layer 2 operational risk models: `ProviderState`, `AccountState`, `VerificationResult`, cooldowns, exposure thresholds, market filters, and warning statuses.
-3. Connect simulation flows to the v1 engines and orchestrator, not only mocked generic steps.
-4. Add persistence for provider state, simulation runs, execution plans, account actions, and reports.
-5. Add GUI order approval/rejection, engine detail views, simulation controls, and report/export actions.
-6. Add data collection and adapter contracts for Playwright collectors and API-backed engines.
+1. Add workflow pipeline architecture in code: data aggregation, engine-specific preparation, `WorkflowOrchestrator`, `RequestHandler`, and `LiquidityChecker` boundaries.
+2. Strengthen sports Domain Risk models: `ProviderState`, `AccountState`, `VerificationResult`, cooldowns, exposure thresholds, market filters, and warning statuses.
+3. Connect simulation flows through the workflow pipeline, not only through prebuilt engine requests or mocked generic steps.
+4. Add persistence for provider state, simulation runs, execution plans, account actions, reports, and pipeline correlation ids.
+5. Add GUI order approval/rejection, engine detail views, simulation controls, pipeline monitoring, and report/export actions.
+6. Add data aggregation, match-builder, request-handler, and adapter contracts for Playwright collectors and API-backed engines.
 7. Research and implement the selected bank connector behind a strict approval interface.
 8. Add CI/CD and deployment readiness for a cloud-hosted web app.
+
+## Source-Of-Truth Revision Rule
+
+This expectation model supersedes earlier architecture wording. If current or future implementation violates this renewed workflow pipeline model, the Ticket Agent must prioritize a refactor ticket before adding unrelated feature work.
+
+New tickets must follow the newest `docs/expectation-model.md` first, even if older code, README wording, or prior issues used older names.
 
 ## Definition Of Done
 
@@ -360,8 +373,8 @@ A ticket is done when:
 - architecture docs are updated when contracts or direction changed
 - the change is small enough to review without archaeology
 - money movement and execution boundaries are explicit when bank or execution code is touched
-- new engine behavior remains assigned to the correct layer and engine boundary
+- new engine behavior remains assigned to the correct pipeline stage and engine boundary
 
 ## Product Bias
 
-Build the working v1 sports-betting product first: `BonusEngine`, `SportsCapitalEngine`, operational risk checks, capital orchestration, simulation, controlled execution, reports, and GUI approvals. Keep later engines connected through contracts and sandbox adapters so the system can grow without being rebuilt from scratch.
+Build the working v1 sports-betting product first: `BonusEngine`, `SportsCapitalEngine`, sports Domain Risk checks, workflow orchestration, liquidity checking, simulation, controlled execution, reports, and GUI approvals. Keep later engines connected through contracts and sandbox adapters so the system can grow without being rebuilt from scratch.
