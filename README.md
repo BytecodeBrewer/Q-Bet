@@ -6,9 +6,8 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 7 - Multi-outcome dutching ready for review**:
+**Stage 13 - Simulation reporting and SQLite history ready for review**:
 
-- The Quant Engine source PDF is stored in [docs/Quant Engine_260820_114859.pdf](docs/Quant%20Engine_260820_114859.pdf).
 - The expectation model and agent workflow documents exist.
 - Typed, validated core models for events, markets, offers, opportunities, strategy results, and execution plans are implemented with focused unit tests.
 - A deterministic qualifying-bet calculation now covers back/lay stakes, exchange commission, stake precision, liability limits, and both outcome P/L values.
@@ -17,8 +16,13 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 - A deterministic two-way arbitrage calculation now evaluates fee-adjusted odds, available liquidity, stake precision, allocation, and guaranteed P/L.
 - A minimal Django web shell now serves a static engine-status page, health endpoint, local Django auth boundary, and privacy-preserving request correlation logs.
 - A deterministic two-to-four outcome dutching calculation now supports total-stake or target-return planning, fees, liquidity, stake precision, and actual rounded worst-case P/L.
-- Additional matched-betting strategies and orchestrator contracts are the next implementation steps.
-- Supabase, CI/CD, UI, Playwright collectors, bank connector, and execution adapters are not implemented yet.
+- BonusEngine and SportsCapitalEngine independently evaluate their respective strategies and produce approval-only execution plans.
+- A deterministic capital orchestrator now verifies BonusEngine and SportsCapitalEngine opportunities against provider state before ranking and filtering them by expected value, ROI, risk, liquidity, capital lock-up, and available capital. It produces proposals only; Yield and Alpha remain sandbox adapters.
+- A deterministic Operational Risk Layer now validates both engine request types against provider frequency and cooldown state before downstream allocation, with stable rejection reasons recorded by the orchestrator.
+- A deterministic Operational Risk Layer now validates both engine request types against provider frequency and cooldown state before downstream allocation.
+- The deterministic simulation flow now runs qualifying bets, free bets, two-way arbitrage, and dutching through the two concrete engines, records their calculation results, and preserves safe-boundary stop behavior.
+- Structured simulation lifecycle records, compact reports, selected detail rebuilding, and local SQLite report history are now available.
+- Provider-state persistence remains the next data-history step; Supabase, CI/CD, UI, Playwright collectors, bank connector, and execution adapters are not implemented yet.
 
 Update this section after every accepted ticket. It should always say where the project really is.
 
@@ -50,7 +54,7 @@ The first UI does not need theme switching, drag-and-drop, or a polished bank co
 
 ## Engine Portfolio
 
-The Quant Engine PDF describes Q-Bet as a multi-engine system:
+The expectation model describes Q-Bet as a multi-engine system:
 
 - **Base Engine:** matched betting, bookmaker/exchange arbitrage, free bets, odds boosts, dutching
 - **Yield Engine:** crypto delta-neutral / funding-rate strategies through API adapters
@@ -88,5 +92,4 @@ Q-Bet should support research, simulation, reporting, lawful integrations, and u
 ## Project Documents
 
 - [Expectation Model](docs/expectation-model.md)
-- [Source PDF](docs/Quant%20Engine_260820_114859.pdf)
 - [Django Web Shell](docs/django-web-shell.md)

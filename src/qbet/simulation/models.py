@@ -5,16 +5,30 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
+from typing import TypeAlias
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
-from qbet.domain.models import DomainModel, Identifier, NonNegativeDecimal, PositiveDecimal
+from qbet.calculations import (
+    DutchingResult,
+    FreeBetResult,
+    QualifyingBetResult,
+    TwoWayArbitrageResult,
+)
+from qbet.domain.models import (
+    DomainModel,
+    Identifier,
+    NonNegativeDecimal,
+    PositiveDecimal,
+    StrategyResult,
+)
 
 
 class SimulationEngine(StrEnum):
     """Engines that can participate in the shared simulation contract."""
 
-    BASE = "base"
+    BONUS = "bonus"
+    SPORTS_CAPITAL = "sports_capital"
     YIELD = "yield"
     ALPHA = "alpha"
 
@@ -64,13 +78,28 @@ class SimulationRunConfig(DomainModel):
         return value
 
 
+SimulationCalculationResult: TypeAlias = (
+    QualifyingBetResult | FreeBetResult | TwoWayArbitrageResult | DutchingResult
+)
+
+
+class SimulationEvaluation(DomainModel):
+    """The simulation-safe result of one evaluated concrete strategy."""
+
+    strategy_result: StrategyResult
+    calculation_result: SimulationCalculationResult
+    worst_case_profit_loss: Decimal = Field(allow_inf_nan=False)
+    is_profitable: bool
+
+
 class SimulationStep(DomainModel):
-    """One mocked engine state transition in a simulation sequence."""
+    """One deterministic engine state transition in a simulation sequence."""
 
     id: Identifier
     capital_change: Decimal = Field(allow_inf_nan=False)
     description: str = ""
     simulated_duration: timedelta = Field(default=timedelta(0))
+    evaluation: SimulationEvaluation | None = None
 
     @field_validator("simulated_duration")
     @classmethod
@@ -78,6 +107,12 @@ class SimulationStep(DomainModel):
         if value < timedelta(0):
             raise ValueError("simulated_duration must not be negative")
         return value
+
+    @model_validator(mode="after")
+    def evaluated_steps_use_their_evaluated_capital_change(self) -> "SimulationStep":
+        if self.evaluation is not None and self.capital_change != self.evaluation.worst_case_profit_loss:
+            raise ValueError("evaluated simulation steps must use the evaluated capital change")
+        return self
 
 
 class SimulationContext(DomainModel):
@@ -109,6 +144,7 @@ class SimulationResult(DomainModel):
     config: SimulationRunConfig
     status: SimulationStatus
     completed_steps: tuple[SimulationStep, ...]
+    evaluations: tuple[SimulationEvaluation, ...] = ()
     current_capital: NonNegativeDecimal
     elapsed_duration: timedelta
     progress: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))

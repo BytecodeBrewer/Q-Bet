@@ -8,7 +8,7 @@ Before doing project work, read:
 2. docs/expectation-model.md
 3. docs/github-agentic-workflow.md
 
-Use docs/Quant Engine_260820_114859.pdf as source material when product direction, engine priorities, or strategy expectations are unclear.
+Use docs/expectation-model.md as the authoritative product and architecture source.
 
 ## Role Runbooks
 
@@ -41,7 +41,7 @@ Scheduled tasks must explicitly use GitHub access, preferably by including @gith
 
 - Keep changes small and ticket-scoped.
 - Prefer v1 product capability over decorative UI or speculative architecture.
-- Follow the expectation model and the Quant Engine PDF.
+- Follow docs/expectation-model.md.
 - Use tests for calculation logic, strategy behavior, simulation flow, dynamic rounding, mock integrations, and safety-critical execution boundaries.
 - Do not initiate bank movement, real execution, or credential-dependent work without explicit user approval.
 

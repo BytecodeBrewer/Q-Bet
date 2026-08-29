@@ -19,7 +19,7 @@ from qbet.simulation import (
 
 def config(**overrides: object) -> SimulationRunConfig:
     values: dict[str, object] = {
-        "engine": SimulationEngine.BASE,
+        "engine": SimulationEngine.BONUS,
         "starting_capital": Decimal("100"),
     }
     values.update(overrides)
