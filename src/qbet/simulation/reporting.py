@@ -12,11 +12,15 @@ from qbet.layers.logging import (
 from qbet.reporting import SimulationReport, SimulationReportBuilder
 from qbet.simulation.models import (
     SimulationContext,
+    SimulationEvent,
     SimulationResult,
     SimulationRunConfig,
     SimulationStep,
 )
-from qbet.simulation.runner import DeterministicSimulationRunner, SimulationStepObserver
+from qbet.simulation.runner import (
+    DeterministicSimulationRunner,
+    SimulationStepObserver,
+)
 from qbet.storage import SimulationReportStore
 
 
@@ -46,9 +50,20 @@ class ReportingSimulationRunner:
             "simulation.config",
             {"config": config.model_dump(mode="json")},
         )
-        context.record(SimulationLogRecordType.RUN_STARTED, "simulation.runner")
 
-        def observe(boundary: SimulationContext) -> None:
+        def observe_event(event: SimulationEvent) -> None:
+            record_type = (
+                SimulationLogRecordType.RUN_STARTED
+                if event.event_type.value == "run_started"
+                else SimulationLogRecordType.EVENT
+            )
+            context.record(
+                record_type,
+                "simulation.runner",
+                event.model_dump(mode="json"),
+            )
+
+        def observe_step(boundary: SimulationContext) -> None:
             step = ordered_steps[boundary.completed_step_count - 1]
             context.record(
                 SimulationLogRecordType.CAPITAL_TRANSITION,
@@ -80,7 +95,8 @@ class ReportingSimulationRunner:
             result = self._runner.run(
                 config,
                 ordered_steps,
-                on_step_completed=observe,
+                on_step_completed=observe_step,
+                on_event=observe_event,
             )
         except Exception as error:
             context.record(
@@ -91,12 +107,6 @@ class ReportingSimulationRunner:
             self.last_records = context.records
             raise
 
-        for event in result.events:
-            context.record(
-                SimulationLogRecordType.EVENT,
-                "simulation.runner",
-                event.model_dump(mode="json"),
-            )
         if result.status.value == "stopped":
             context.record(
                 SimulationLogRecordType.WARNING,

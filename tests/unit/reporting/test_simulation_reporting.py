@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from qbet.calculations import QualifyingBetInput, calculate_qualifying_bet
 from qbet.domain.models import StrategyResult
-from qbet.layers import SimulationLogContext, SimulationLogRecordType
+from qbet.layers import SimulationLogRecordType
 from qbet.reporting import ReportDetailSelection, SimulationReportBuilder
 from qbet.simulation import (
     ReportingSimulationRunner,
@@ -68,6 +68,12 @@ def test_default_report_is_compact_but_selected_detail_is_available() -> None:
     assert runner.last_report.raw_input_snapshots == ()
     assert runner.last_report.events == ()
     assert runner.last_report.intermediate_results == ()
+    assert runner.last_report.completed_steps[0].id == "evaluated-step"
+    compact_json = runner.last_report.model_dump_json()
+    assert "calculation_result" not in compact_json
+    assert "strategy_result" not in compact_json
+    assert "back_odds" not in compact_json
+
     detailed = SimulationReportBuilder().build(
         runner.last_report.run_id,
         result,
@@ -85,9 +91,19 @@ def test_default_report_is_compact_but_selected_detail_is_available() -> None:
     assert [record.sequence for record in runner.last_records] == list(
         range(1, len(runner.last_records) + 1)
     )
+    assert [record.record_type for record in runner.last_records] == [
+        SimulationLogRecordType.RAW_INPUT,
+        SimulationLogRecordType.RUN_STARTED,
+        SimulationLogRecordType.EVENT,
+        SimulationLogRecordType.CAPITAL_TRANSITION,
+        SimulationLogRecordType.INTERMEDIATE_RESULT,
+        SimulationLogRecordType.EVALUATION,
+        SimulationLogRecordType.EVENT,
+        SimulationLogRecordType.RUN_FINISHED,
+    ]
 
 
-def test_stopped_run_keeps_completed_steps_and_a_warning_record() -> None:
+def test_stopped_run_keeps_completed_steps_and_a_chronological_warning() -> None:
     runner = ReportingSimulationRunner()
     steps = (
         SimulationStep(id="first", capital_change=Decimal("5")),
@@ -104,7 +120,14 @@ def test_stopped_run_keeps_completed_steps_and_a_warning_record() -> None:
     assert tuple(step.id for step in result.completed_steps) == ("first",)
     assert runner.last_report is not None
     assert runner.last_report.status is SimulationStatus.STOPPED
-    assert any(
-        record.record_type is SimulationLogRecordType.WARNING
-        for record in runner.last_records
-    )
+    assert [record.record_type for record in runner.last_records] == [
+        SimulationLogRecordType.RAW_INPUT,
+        SimulationLogRecordType.RUN_STARTED,
+        SimulationLogRecordType.EVENT,
+        SimulationLogRecordType.CAPITAL_TRANSITION,
+        SimulationLogRecordType.INTERMEDIATE_RESULT,
+        SimulationLogRecordType.EVENT,
+        SimulationLogRecordType.EVENT,
+        SimulationLogRecordType.WARNING,
+        SimulationLogRecordType.RUN_FINISHED,
+    ]

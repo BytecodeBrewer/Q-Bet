@@ -1,2 +1,13 @@
-from .models import ReportDetailSelection, SimulationReport, SimulationReportBuilder
-__all__ = ["ReportDetailSelection", "SimulationReport", "SimulationReportBuilder"]
+from .models import (
+    CompletedStepSummary,
+    ReportDetailSelection,
+    SimulationReport,
+    SimulationReportBuilder,
+)
+
+__all__ = [
+    "CompletedStepSummary",
+    "ReportDetailSelection",
+    "SimulationReport",
+    "SimulationReportBuilder",
+]

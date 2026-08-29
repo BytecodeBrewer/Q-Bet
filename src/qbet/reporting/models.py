@@ -28,6 +28,22 @@ class ReportDetailSelection(DomainModel):
     include_errors: bool = False
 
 
+class CompletedStepSummary(DomainModel):
+    """Compact, evaluation-free description of one completed simulation step."""
+
+    id: Identifier
+    capital_change: Decimal
+    simulated_duration: timedelta
+
+    @classmethod
+    def from_step(cls, step: SimulationStep) -> "CompletedStepSummary":
+        return cls(
+            id=step.id,
+            capital_change=step.capital_change,
+            simulated_duration=step.simulated_duration,
+        )
+
+
 class SimulationReport(DomainModel):
     run_id: UUID
     config: SimulationRunConfig
@@ -37,7 +53,7 @@ class SimulationReport(DomainModel):
     starting_capital: Decimal
     current_capital: Decimal
     profit_loss: Decimal
-    completed_steps: tuple[SimulationStep, ...]
+    completed_steps: tuple[CompletedStepSummary, ...]
     elapsed_duration: timedelta
     progress: Decimal
     generated_at: datetime
@@ -59,7 +75,53 @@ class SimulationReportBuilder:
         records: tuple[SimulationLogRecord, ...],
         selection: ReportDetailSelection | None = None,
     ) -> SimulationReport:
-        selection = selection or ReportDetailSelection()
+        return self._build(
+            run_id=run_id,
+            config=result.config,
+            status=result.status,
+            current_capital=result.current_capital,
+            completed_steps=tuple(
+                CompletedStepSummary.from_step(step) for step in result.completed_steps
+            ),
+            elapsed_duration=result.elapsed_duration,
+            progress=result.progress,
+            records=records,
+            selection=selection or ReportDetailSelection(),
+        )
+
+    def rebuild(
+        self,
+        compact_report: SimulationReport,
+        records: tuple[SimulationLogRecord, ...],
+        selection: ReportDetailSelection,
+    ) -> SimulationReport:
+        """Regenerate selected detail from persisted records without rerunning a simulation."""
+
+        return self._build(
+            run_id=compact_report.run_id,
+            config=compact_report.config,
+            status=compact_report.status,
+            current_capital=compact_report.current_capital,
+            completed_steps=compact_report.completed_steps,
+            elapsed_duration=compact_report.elapsed_duration,
+            progress=compact_report.progress,
+            records=records,
+            selection=selection,
+        )
+
+    def _build(
+        self,
+        *,
+        run_id: UUID,
+        config: SimulationRunConfig,
+        status: SimulationStatus,
+        current_capital: Decimal,
+        completed_steps: tuple[CompletedStepSummary, ...],
+        elapsed_duration: timedelta,
+        progress: Decimal,
+        records: tuple[SimulationLogRecord, ...],
+        selection: ReportDetailSelection,
+    ) -> SimulationReport:
         warnings = tuple(
             record
             for record in records
@@ -78,50 +140,33 @@ class SimulationReportBuilder:
         events = tuple(
             SimulationEvent.model_validate(record.payload)
             for record in records
-            if record.record_type is SimulationLogRecordType.EVENT
+            if record.record_type
+            in (SimulationLogRecordType.RUN_STARTED, SimulationLogRecordType.EVENT)
+            and "event_type" in record.payload
+        )
+        evaluations = tuple(
+            SimulationEvaluation.model_validate(record.payload)
+            for record in records
+            if record.record_type is SimulationLogRecordType.EVALUATION
         )
         return SimulationReport(
             run_id=run_id,
-            config=result.config,
-            engine=result.config.engine,
-            strategy_id=result.config.strategy_id,
-            status=result.status,
-            starting_capital=result.config.starting_capital,
-            current_capital=result.current_capital,
-            profit_loss=result.current_capital - result.config.starting_capital,
-            completed_steps=result.completed_steps,
-            elapsed_duration=result.elapsed_duration,
-            progress=result.progress,
+            config=config,
+            engine=config.engine,
+            strategy_id=config.strategy_id,
+            status=status,
+            starting_capital=config.starting_capital,
+            current_capital=current_capital,
+            profit_loss=current_capital - config.starting_capital,
+            completed_steps=completed_steps,
+            elapsed_duration=elapsed_duration,
+            progress=progress,
             generated_at=datetime.now(timezone.utc),
             events=events if selection.include_events else (),
             intermediate_results=(
-                result.evaluations if selection.include_intermediate_results else ()
+                evaluations if selection.include_intermediate_results else ()
             ),
             raw_input_snapshots=raw_inputs if selection.include_raw_inputs else (),
             warnings=warnings if selection.include_warnings else (),
             errors=errors if selection.include_errors else (),
         )
-
-    def rebuild(
-        self,
-        compact_report: SimulationReport,
-        records: tuple[SimulationLogRecord, ...],
-        selection: ReportDetailSelection,
-    ) -> SimulationReport:
-        """Regenerate selected detail from persisted records without rerunning a simulation."""
-
-        result = SimulationResult(
-            config=compact_report.config,
-            status=compact_report.status,
-            completed_steps=compact_report.completed_steps,
-            evaluations=tuple(
-                step.evaluation
-                for step in compact_report.completed_steps
-                if step.evaluation is not None
-            ),
-            current_capital=compact_report.current_capital,
-            elapsed_duration=compact_report.elapsed_duration,
-            progress=compact_report.progress,
-            events=(),
-        )
-        return self.build(compact_report.run_id, result, records, selection)
