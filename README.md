@@ -1,4 +1,4 @@
-# Q-Bet
+﻿# Q-Bet
 
 > A modular Python quant engine for matched betting, sports arbitrage, strategy simulation, controlled execution, and automated opportunity detection.
 
@@ -92,4 +92,5 @@ Q-Bet should support research, simulation, reporting, lawful integrations, and u
 ## Project Documents
 
 - [Expectation Model](docs/expectation-model.md)
+- [Pipeline Architecture](docs/pipeline-architecture.md)
 - [Django Web Shell](docs/django-web-shell.md)
