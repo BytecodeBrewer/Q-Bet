@@ -6,7 +6,7 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 12 - Engine-backed simulation ready for review**:
+**Stage 13 - Simulation reporting and SQLite history ready for review**:
 
 - The expectation model and agent workflow documents exist.
 - Typed, validated core models for events, markets, offers, opportunities, strategy results, and execution plans are implemented with focused unit tests.
@@ -21,8 +21,8 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 - A deterministic Operational Risk Layer now validates both engine request types against provider frequency and cooldown state before downstream allocation, with stable rejection reasons recorded by the orchestrator.
 - A deterministic Operational Risk Layer now validates both engine request types against provider frequency and cooldown state before downstream allocation.
 - The deterministic simulation flow now runs qualifying bets, free bets, two-way arbitrage, and dutching through the two concrete engines, records their calculation results, and preserves safe-boundary stop behavior.
-- Provider-state persistence and simulation history are the next implementation steps.
-- Supabase, CI/CD, UI, Playwright collectors, bank connector, and execution adapters are not implemented yet.
+- Structured simulation lifecycle records, compact reports, selected detail rebuilding, and local SQLite report history are now available.
+- Provider-state persistence remains the next data-history step; Supabase, CI/CD, UI, Playwright collectors, bank connector, and execution adapters are not implemented yet.
 
 Update this section after every accepted ticket. It should always say where the project really is.
 
