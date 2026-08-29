@@ -7,22 +7,7 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 ## Current Status
 
 **Stage 13 - Simulation reporting and SQLite history ready for review**:
-
-- The expectation model and agent workflow documents exist.
-- Typed, validated core models for events, markets, offers, opportunities, strategy results, and execution plans are implemented with focused unit tests.
-- A deterministic qualifying-bet calculation now covers back/lay stakes, exchange commission, stake precision, liability limits, and both outcome P/L values.
-- A deterministic free-bet conversion now supports stake-returned and stake-not-returned rules, exchange commission, stake precision, and both outcome P/L values.
-- Stake rounding now evaluates permitted nearby increments and selects the legal plan with the strongest worst-case outcome, respecting liability, liquidity, and total-stake limits.
-- A deterministic two-way arbitrage calculation now evaluates fee-adjusted odds, available liquidity, stake precision, allocation, and guaranteed P/L.
-- A minimal Django web shell now serves a static engine-status page, health endpoint, local Django auth boundary, and privacy-preserving request correlation logs.
-- A deterministic two-to-four outcome dutching calculation now supports total-stake or target-return planning, fees, liquidity, stake precision, and actual rounded worst-case P/L.
-- BonusEngine and SportsCapitalEngine independently evaluate their respective strategies and produce approval-only execution plans.
-- A deterministic `CapitalOrchestrator` now verifies BonusEngine and SportsCapitalEngine opportunities against provider state before ranking and filtering them by expected value, ROI, risk, liquidity, capital lock-up, and available capital. This is the current legacy name for the future `LiquidityChecker` role; it produces proposals only, while Yield and Alpha remain sandbox adapters.
-- A deterministic Operational Risk Layer now validates both engine request types against provider frequency and cooldown state before downstream allocation, with stable rejection reasons recorded by the orchestrator.
-- A deterministic Operational Risk Layer now validates both engine request types against provider frequency and cooldown state before downstream allocation.
-- The deterministic simulation flow now runs qualifying bets, free bets, two-way arbitrage, and dutching through the two concrete engines, records their calculation results, and preserves safe-boundary stop behavior.
-- Structured simulation lifecycle records, compact reports, selected detail rebuilding, and local SQLite report history are now available.
-- Provider-state persistence remains the next data-history step; Supabase, CI/CD, UI, Playwright collectors, bank connector, and execution adapters are not implemented yet.
+Q-Bet has the expectation model, agent workflow docs, typed domain models, and tested deterministic calculators for qualifying bets, free bets, two-way arbitrage, dutching, and stake rounding. `BonusEngine` and `SportsCapitalEngine` already produce approval-only execution plans. The current legacy `CapitalOrchestrator` checks provider state and ranks proposals by EV, ROI, risk, liquidity, capital lock-up, and available capital; this should evolve toward the `LiquidityChecker` role from the pipeline architecture. Operational risk checks, the deterministic simulation flow, compact reports, selected detail rebuilding, and local SQLite report history are in place. Next up: provider-state persistence, workflow pipeline refactors, data aggregation, Playwright/API adapters, bank connector, Supabase/CI/CD, richer GUI, and real execution adapters. Progress is real; finished product is still loading, please do not shake the machine.
 
 Update this section after every accepted ticket. It should always say where the project really is.
 
@@ -41,7 +26,7 @@ python manage.py runserver
 Version 1 should include:
 
 - a complete matched-betting engine from data intake to strategy result, execution plan, and report
-- workflow orchestration plus liquidity checking that can route capital and stay ready for Yield and Alpha engines
+- workflow orchestration plus liquidity checking that can route capital and stay ready for `TicketEngine`, `PredictionMarketEngine`, and `CryptoYieldEngine`
 - simulation mode for every engine, including placeholder/sandbox engines where not fully implemented
 - controlled real execution for supported matched-betting workflows
 - Playwright-based web collectors where APIs are unavailable or insufficient
@@ -54,27 +39,27 @@ The first UI does not need theme switching, drag-and-drop, or a polished bank co
 
 ## Engine Portfolio
 
-The expectation model describes Q-Bet as a multi-engine system:
+Q-Bet is organized around real engine names instead of broad tier nicknames:
 
-- **Base Engine:** matched betting, bookmaker/exchange arbitrage, free bets, odds boosts, dutching
-- **Yield Engine:** crypto delta-neutral / funding-rate strategies through API adapters
-- **Alpha Engine:** prediction-market making and arbitrage through API adapters
-- **Liquidity Checker:** allocates capital by EV, ROI, risk, liquidity, and capital lock-up; current code may still use `CapitalOrchestrator` as legacy naming
-
-The Base Engine must be fully implemented first. Yield and Alpha should exist in sandbox/adapter form so the orchestrator can connect to them later without a rebuild.
+- `BonusEngine`: promotional matched betting, qualifying bets, free bets, reloads, cashback, and promo conversion.
+- `SportsCapitalEngine`: sports arbitrage, odds boosts, real-capital matched betting, and dutching.
+- `TicketEngine`: event-driven secondary ticket arbitrage.
+- `PredictionMarketEngine`: prediction-market making, order-book arbitrage, and supported API strategies.
+- `CryptoYieldEngine`: crypto delta-neutral and funding-rate strategies through API adapters.
+- `MLEdgeLayer`: later statistical support for value detection, fair-odds modeling, and drift checks.
 
 ## Core Architecture
 
 ```text
-Data Sources
-    -> Normalization
-    -> Opportunity Engine
-    -> Strategy Engine
-    -> Risk / Capital Allocation
-    -> Simulation and Execution Adapters
-    -> Accounting and Reports
-    -> Dashboard
+Data Aggregation
+    -> Engine-specific Preparation
+    -> Calculation
+    -> Domain Risk where needed
+    -> Liquidity Check
+    -> Simulation / Execution
 ```
+
+See [Pipeline Architecture](docs/pipeline-architecture.md) for the Mermaid model and component naming.
 
 Initial matched-betting strategy focus:
 
