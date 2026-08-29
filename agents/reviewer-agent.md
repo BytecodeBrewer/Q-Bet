@@ -1,4 +1,4 @@
-# Reviewer Agent Script
+﻿# Reviewer Agent Script
 
 ## Mission
 
@@ -11,6 +11,7 @@ Review one GitHub Issue marked ready for review and decide whether the work move
 - diff/patch summary or linked PR
 - docs/expectation-model.md as the authoritative product and architecture source
 - docs/github-agentic-workflow.md
+- docs/pipeline-architecture.md when reviewing pipeline/orchestrator changes
 - agents/workflow.md
 - README Current Status
 - GitHub repository access through the GitHub connector
@@ -34,7 +35,7 @@ When run as a scheduled task, the prompt must explicitly include `@github` or ot
 - Does the work satisfy the ticket acceptance criteria?
 - Did the Dev Agent stay inside scope?
 - Are relevant tests present and meaningful?
-- Does the implementation preserve the four-layer architecture from docs/expectation-model.md?
+- Does the implementation preserve the workflow pipeline architecture from docs/expectation-model.md and docs/pipeline-architecture.md?
 - Does new behavior belong to the correct engine boundary: BonusEngine, SportsCapitalEngine, Yield, Alpha, Ticket, or ML?
 - Does it move the product toward a complete v1: BonusEngine, SportsCapitalEngine, operational risk, orchestrator, simulation, controlled execution, bank connectivity, data adapters, reports, or GUI approvals?
 - Are money movement and real execution boundaries explicit where relevant?
@@ -98,7 +99,7 @@ Options:
 
 ## Long-Term Steering
 
-The Reviewer Agent should watch whether the project is drifting. If tickets become too abstract, too UI-decorative, too large, or too disconnected from v1 capability, tell the Ticket Agent to steer back in the GitHub Issue comment.
+The Reviewer Agent should watch whether the project is drifting. If tickets become too abstract, too UI-decorative, too large, too disconnected from v1 capability, or inconsistent with the renewed workflow pipeline model, tell the Ticket Agent to prioritize a refactor ticket in the GitHub Issue comment.
 
 ## Commit Rule
 

@@ -1,4 +1,4 @@
-# Ticket Agent Script
+﻿# Ticket Agent Script
 
 ## Mission
 
@@ -9,6 +9,7 @@ Create small, useful GitHub Issues that move Q-Bet toward docs/expectation-model
 - README Current Status
 - docs/expectation-model.md as the authoritative product and architecture source
 - docs/github-agentic-workflow.md
+- docs/pipeline-architecture.md for the Mermaid model when pipeline responsibilities are unclear
 - agents/workflow.md
 - current project files
 - user priorities
@@ -71,11 +72,11 @@ Waiting for user approval. Add label `qbet:approved` to start Dev Agent work.
 
 ## Steering Rules
 
-- If the Reviewer Agent says progress is drifting from docs/expectation-model.md, create the next ticket to correct direction.
+- If implementation, docs, or prior tickets drift from the newest docs/expectation-model.md workflow pipeline model, prioritize a refactor ticket before unrelated feature work.
 - If the product lacks a runnable path, prefer tickets that create one.
 - If BonusEngine and SportsCapitalEngine boundaries are unclear, prioritize a boundary-alignment ticket.
 - If operational risk models lack tests, create a test-backed Layer 2 ticket before adding UI decoration.
-- If the orchestrator contract is missing or stale, prioritize it before building disconnected engines.
+- If `WorkflowOrchestrator`, `RequestHandler`, `LiquidityChecker`, or the pipeline contract is missing or stale, prioritize it before building disconnected engines.
 - If a ticket touches bank or execution code, include explicit approval boundaries.
 - If a ticket feels too large, split it.
 

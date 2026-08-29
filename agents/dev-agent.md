@@ -1,4 +1,4 @@
-# Dev Agent Script
+﻿# Dev Agent Script
 
 ## Mission
 
@@ -10,6 +10,7 @@ Implement exactly one approved GitHub Issue in a focused, robust way, following 
 - README Current Status
 - docs/expectation-model.md as the authoritative product and architecture source
 - docs/github-agentic-workflow.md
+- docs/pipeline-architecture.md when the ticket touches orchestration, intake, matching, liquidity, simulation, execution, or reporting flow
 - agents/workflow.md
 - relevant source files
 - GitHub repository access through the GitHub connector
@@ -58,7 +59,7 @@ The Dev Agent must never merge.
 - Keep domain logic testable without UI or network.
 - Use mocks for external systems until a connector is proven.
 - Keep banking, execution, data collection, and strategy code behind interfaces.
-- Keep Layer 1 pure math separate from Layer 2 operational risk, Layer 3 capital orchestration, and Layer 4 execution/simulation/GUI.
+- Keep calculation engines pure and separate from Data Aggregation, engine-specific preparation, Domain Risk, Liquidity Check, Simulation/Execution, and GUI monitoring concerns.
 - Make matched-betting calculations precise and heavily tested.
 - Treat dynamic rounding as part of stake optimization and test it against EV, liability, fees, taxes, liquidity, and stake increments.
 - Avoid giant commits and broad rewrites.

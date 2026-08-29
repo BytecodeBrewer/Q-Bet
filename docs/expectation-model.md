@@ -52,6 +52,7 @@ Important separation rule: Layer 1 produces mathematically valid strategy output
 | Phase 3 / Ticket Engine (EUR 2,000-5,000) | `TicketEngine` | Event-driven secondary ticket arbitrage | Version 2.0 |
 | Phase 4 / Prediction Engine (EUR 5,000-10,000) | `PredictionMarketEngine` | Prediction-market making, order-book arbitrage, and latency analysis through supported APIs | Version 2.5 |
 | Phase 5 / Crypto Yield And ML Engine (EUR 10,000+) | `CryptoYieldEngine` + `MLEdgeLayer` | Delta-neutral funding-rate arbitrage, fair-odds modeling, value detection, and drift detection | Version 3.0 |
+
 ### Base Tier: Promotional And Low-Risk Cashflow
 
 - **Qualifying Bet Matched Betting:** Hedge qualifying bookmaker bets with minimal mathematical loss to unlock bonus value.
@@ -133,6 +134,7 @@ Could include:
 - `MLEdgeLayer` for fair-odds models, value betting, drift detection, and market-inefficiency detection.
 - Multi-tenant architecture with isolated bankrolls, API keys, roles, and permissions.
 - Cryptographic audit logging for system actions, security events, and financial evaluations.
+
 ## Five-Phase Scaling Roadmap
 
 | Phase | Capital Level | Enabled Modules | Primary Mechanism | Target Cashflow |
@@ -313,7 +315,6 @@ The `OperationalRiskLayer` processes domain-specific execution policies in Pytho
 ### G. Temporal Execution Pacing
 
 - **Staggered Order Routing (`qbet.layers.verification.pacing`):** Injects non-deterministic execution delays using `asyncio.sleep(random.uniform(4, 18))` prior to order submission.
-
 
 ## Bank API Feasibility
 
