@@ -1,0 +1,9 @@
+from __future__ import annotations
+from typing import Protocol
+from qbet.workflow.models import WorkflowContext, WorkflowStageDecision
+class WorkflowStageHandler(Protocol):
+    def decide(self, context: WorkflowContext) -> WorkflowStageDecision: ...
+class RequestHandler(Protocol):
+    def refresh(self, context: WorkflowContext) -> WorkflowStageDecision: ...
+class LiquidityChecker(Protocol):
+    def check(self, context: WorkflowContext) -> WorkflowStageDecision: ...
