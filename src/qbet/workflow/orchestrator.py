@@ -18,9 +18,11 @@ class WorkflowOrchestrator:
         self._liquidity_checker = liquidity_checker
         # This ticket defines the refresh seam; later workflow stages invoke it explicitly.
         self._request_handler = request_handler
-    def process(self, request: WorkflowRequest) -> WorkflowResult:
+    def process(self, request: WorkflowRequest, *, log_context: SimulationLogContext | None = None) -> WorkflowResult:
         correlation_id = request.correlation_id or new_correlation_id()
-        log = SimulationLogContext(run_id=correlation_id)
+        if log_context is not None and log_context.run_id != correlation_id:
+            raise ValueError("log context and workflow correlation_id must match")
+        log = log_context or SimulationLogContext(run_id=correlation_id)
         transitions: list[WorkflowTransition] = []
         final_decision = WorkflowDecision.ALLOW
         for stage in request.stages:
