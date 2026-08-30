@@ -6,7 +6,7 @@ import pytest
 
 from qbet.calculations import QualifyingBetInput, calculate_qualifying_bet
 from qbet.domain.models import StrategyResult
-from qbet.layers import SimulationLogRecordType
+from qbet.layers import SimulationLogRecord, SimulationLogRecordType
 from qbet.reporting import ReportDetailSelection, SimulationReportBuilder
 from qbet.simulation import (
     ReportingSimulationRunner,
@@ -146,3 +146,48 @@ def test_sqlite_round_trip_preserves_top_up_timeline_and_net_profit(tmp_path) ->
             "current_capital": "110",
         },
     ]
+
+
+def test_sqlite_rebuild_restores_selected_risk_decisions(tmp_path) -> None:
+    database_path = tmp_path / "risk-decisions.sqlite3"
+    store = SQLiteSimulationReportStore(database_path)
+    runner = ReportingSimulationRunner(store)
+    runner.run(
+        SimulationRunConfig(engine=SimulationEngine.BONUS, starting_capital=Decimal("100")),
+        (SimulationStep(id="flat", capital_change=Decimal("0")),),
+    )
+
+    assert runner.last_report is not None
+    run_id = runner.last_report.run_id
+    persisted_records = store.load_records(run_id)
+    store.append_records((
+        SimulationLogRecord(
+            run_id=run_id,
+            sequence=len(persisted_records) + 1,
+            timestamp=datetime.now(timezone.utc),
+            record_type=SimulationLogRecordType.RISK_DECISION,
+            source="layers.operational_risk",
+            payload={
+                "status": "warn",
+                "decision_code": "provider_active_bet_limit_approaching",
+                "warning_codes": ["provider_active_bet_limit_approaching"],
+            },
+        ),
+    ))
+
+    reopened_store = SQLiteSimulationReportStore(database_path)
+    compact_report = reopened_store.load_report(run_id)
+    detailed_report = SimulationReportBuilder().rebuild(
+        compact_report,
+        reopened_store.load_records(run_id),
+        ReportDetailSelection(include_risk_decisions=True),
+    )
+
+    assert compact_report.risk_decisions == ()
+    decision = detailed_report.risk_decisions[0]
+    assert decision.run_id == run_id
+    assert decision.payload == {
+        "status": "warn",
+        "decision_code": "provider_active_bet_limit_approaching",
+        "warning_codes": ["provider_active_bet_limit_approaching"],
+    }

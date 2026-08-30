@@ -1,6 +1,6 @@
-# Q-Bet Agent Workflow
+﻿# Q-Bet Agent Workflow
 
-This folder defines working scripts for AI agents. The source direction lives in docs/expectation-model.md.
+This folder defines working scripts for AI agents. The source direction lives in docs/expectation-model.md, with the Mermaid architecture model in docs/pipeline-architecture.md.
 
 ## Orchestration Model
 
