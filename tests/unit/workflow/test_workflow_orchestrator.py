@@ -1,4 +1,6 @@
 from uuid import UUID
+import pytest
+from pydantic import ValidationError
 from qbet.layers import SimulationLogRecordType
 from qbet.workflow import StaticLiquidityChecker, StaticStageHandler, WorkflowDecision, WorkflowMode, WorkflowOrchestrator, WorkflowRequest, WorkflowStage, WorkflowStageDecision
 
@@ -17,7 +19,7 @@ def test_normal_workflow_records_ordered_correlated_transitions() -> None:
     assert {record.payload["correlation_id"] for record in result.log_records} == {str(result.correlation_id)}
 
 def test_rejection_prevents_later_stages() -> None:
-    result = WorkflowOrchestrator({WorkflowStage.ENGINE_PREPARATION: StaticStageHandler(WorkflowStageDecision(decision=WorkflowDecision.REJECT, reason="invalid input"))}).process(request(stages=(WorkflowStage.DATA_AGGREGATION, WorkflowStage.ENGINE_PREPARATION, WorkflowStage.DISPATCH)))
+    result = WorkflowOrchestrator({WorkflowStage.ENGINE_PREPARATION: StaticStageHandler(WorkflowStageDecision(decision=WorkflowDecision.REJECT, reason="invalid input"))}).process(request(stages=(WorkflowStage.DATA_AGGREGATION, WorkflowStage.ENGINE_PREPARATION, WorkflowStage.LIQUIDITY_CHECK, WorkflowStage.DISPATCH)))
     assert result.final_decision is WorkflowDecision.REJECT
     assert [transition.stage for transition in result.transitions] == [WorkflowStage.DATA_AGGREGATION, WorkflowStage.ENGINE_PREPARATION]
 
@@ -25,3 +27,12 @@ def test_liquidity_recheck_prevents_dispatch() -> None:
     result = WorkflowOrchestrator(liquidity_checker=StaticLiquidityChecker(WorkflowStageDecision(decision=WorkflowDecision.RECHECK, reason="refresh balance"))).process(request())
     assert result.final_decision is WorkflowDecision.RECHECK
     assert [transition.stage for transition in result.transitions] == [WorkflowStage.DATA_AGGREGATION, WorkflowStage.LIQUIDITY_CHECK]
+
+@pytest.mark.parametrize("stages", [
+    (WorkflowStage.DISPATCH,),
+    (WorkflowStage.DISPATCH, WorkflowStage.LIQUIDITY_CHECK),
+    (WorkflowStage.DATA_AGGREGATION, WorkflowStage.LIQUIDITY_CHECK, WorkflowStage.LIQUIDITY_CHECK),
+])
+def test_invalid_routes_cannot_bypass_liquidity_or_pipeline_order(stages: tuple[WorkflowStage, ...]) -> None:
+    with pytest.raises(ValidationError):
+        request(stages=stages)

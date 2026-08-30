@@ -33,6 +33,18 @@ class WorkflowRequest(DomainModel):
     stages: tuple[WorkflowStage, ...] = Field(min_length=1)
     correlation_id: UUID | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+    @model_validator(mode="after")
+    def validates_route(self) -> "WorkflowRequest":
+        if len(set(self.stages)) != len(self.stages):
+            raise ValueError("workflow stages must not contain duplicates")
+        stage_positions = [list(WorkflowStage).index(stage) for stage in self.stages]
+        if stage_positions != sorted(stage_positions):
+            raise ValueError("workflow stages must follow pipeline order")
+        if WorkflowStage.DISPATCH in self.stages:
+            liquidity_position = self.stages.index(WorkflowStage.LIQUIDITY_CHECK) if WorkflowStage.LIQUIDITY_CHECK in self.stages else -1
+            if liquidity_position < 0 or liquidity_position > self.stages.index(WorkflowStage.DISPATCH):
+                raise ValueError("dispatch requires a prior liquidity check")
+        return self
 class WorkflowContext(DomainModel):
     request: WorkflowRequest
     correlation_id: UUID
