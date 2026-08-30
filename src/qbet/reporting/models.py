@@ -26,6 +26,7 @@ class ReportDetailSelection(DomainModel):
     include_raw_inputs: bool = False
     include_warnings: bool = False
     include_errors: bool = False
+    include_risk_decisions: bool = False
 
 
 class CompletedStepSummary(DomainModel):
@@ -64,6 +65,7 @@ class SimulationReport(DomainModel):
     raw_input_snapshots: tuple[dict[str, object], ...] = ()
     warnings: tuple[SimulationLogRecord, ...] = ()
     errors: tuple[SimulationLogRecord, ...] = ()
+    risk_decisions: tuple[SimulationLogRecord, ...] = ()
 
 
 class SimulationReportBuilder:
@@ -133,6 +135,11 @@ class SimulationReportBuilder:
             for record in records
             if record.record_type is SimulationLogRecordType.ERROR
         )
+        risk_decisions = tuple(
+            record
+            for record in records
+            if record.record_type is SimulationLogRecordType.RISK_DECISION
+        )
         raw_inputs = tuple(
             record.payload
             for record in records
@@ -179,4 +186,5 @@ class SimulationReportBuilder:
             raw_input_snapshots=raw_inputs if selection.include_raw_inputs else (),
             warnings=warnings if selection.include_warnings else (),
             errors=errors if selection.include_errors else (),
+            risk_decisions=risk_decisions if selection.include_risk_decisions else (),
         )
