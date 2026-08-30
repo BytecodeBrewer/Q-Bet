@@ -19,6 +19,7 @@ class DomainRiskStatus(StrEnum):
 class DomainRiskDecisionCode(StrEnum):
     ALLOWED = "allowed"
     ACTIVE_BET_LIMIT_APPROACHING = "provider_active_bet_limit_approaching"
+    RECHECK_REQUIRED = "provider_state_recheck_required"
     FREQUENCY_LIMIT = "provider_frequency_limit"
     COOLDOWN_ACTIVE = "provider_cooldown_active"
 
@@ -61,13 +62,15 @@ class VerificationResult(DomainModel):
 
     @model_validator(mode="after")
     def decision_matches_status(self) -> "VerificationResult":
-        if self.status is DomainRiskStatus.REJECT:
-            if self.is_allowed or self.rejection_reason is None or self.decision_code not in {DomainRiskDecisionCode.FREQUENCY_LIMIT, DomainRiskDecisionCode.COOLDOWN_ACTIVE}:
-                raise ValueError("rejected results require a stable rejection decision")
-        elif not self.is_allowed or self.rejection_reason is not None:
-            raise ValueError("non-rejected results must be allowed without a rejection reason")
-        if self.status is DomainRiskStatus.WARN and not self.warning_codes:
-            raise ValueError("warning results require warning codes")
-        if self.status is not DomainRiskStatus.WARN and self.warning_codes:
-            raise ValueError("only warning results may include warning codes")
+        if self.status is DomainRiskStatus.ALLOW:
+            if not self.is_allowed or self.decision_code is not DomainRiskDecisionCode.ALLOWED or self.rejection_reason is not None or self.warning_codes:
+                raise ValueError("allowed results require the allowed decision without detail codes")
+        elif self.status is DomainRiskStatus.WARN:
+            if not self.is_allowed or self.decision_code not in self.warning_codes or self.rejection_reason is not None:
+                raise ValueError("warning results require an allowed stable warning decision")
+        elif self.status is DomainRiskStatus.RECHECK:
+            if self.is_allowed or self.decision_code is not DomainRiskDecisionCode.RECHECK_REQUIRED or self.rejection_reason is not None or self.warning_codes:
+                raise ValueError("recheck results must block allocation with the stable recheck decision")
+        elif self.is_allowed or self.rejection_reason != self.decision_code.value or self.decision_code not in {DomainRiskDecisionCode.FREQUENCY_LIMIT, DomainRiskDecisionCode.COOLDOWN_ACTIVE} or self.warning_codes:
+            raise ValueError("rejected results require a stable rejection decision")
         return self

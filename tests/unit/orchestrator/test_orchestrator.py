@@ -169,3 +169,25 @@ def test_verified_strategy_adapter_rejects_a_different_bonus_opportunity() -> No
 def test_verified_strategy_adapter_rejects_a_different_sports_opportunity() -> None:
     with pytest.raises(ValueError, match="same opportunity"):
         sports_adapter(evaluation_opportunity_id="different-sports-opportunity")
+
+
+def test_recheck_result_prevents_capital_allocation() -> None:
+    from qbet.domain.verification import DomainRiskDecisionCode, DomainRiskStatus, VerificationResult
+
+    candidate = bonus_adapter().evaluate_candidates(snapshot())[0].model_copy(
+        update={
+            "verification_result": VerificationResult(
+                is_allowed=False,
+                status=DomainRiskStatus.RECHECK,
+                decision_code=DomainRiskDecisionCode.RECHECK_REQUIRED,
+            )
+        }
+    )
+
+    class RecheckAdapter:
+        def evaluate_candidates(self, _: CapitalSnapshot) -> tuple[EngineCandidate, ...]:
+            return (candidate,)
+
+    result = CapitalOrchestrator().allocate(snapshot(), config(), (RecheckAdapter(),))
+    assert result.allocations == ()
+    assert result.rejections[0].reason is RejectionReason.PROVIDER_RECHECK_REQUIRED
