@@ -25,6 +25,7 @@ class SimulationLogRecordType(StrEnum):
     INTERMEDIATE_RESULT = "intermediate_result"
     RAW_INPUT = "raw_input"
     WARNING = "warning"
+    RISK_DECISION = "risk_decision"
     ERROR = "error"
     RUN_FINISHED = "run_finished"
 
