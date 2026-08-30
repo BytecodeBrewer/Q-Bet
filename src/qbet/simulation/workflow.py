@@ -12,7 +12,7 @@ from qbet.simulation.adapters import BonusSimulationAdapter, SimulationEngineAda
 from qbet.simulation.models import SimulationResult, SimulationRunConfig, SimulationStep
 from qbet.simulation.reporting import ReportingSimulationRunner
 from qbet.simulation.runner import SimulationStepObserver
-from qbet.workflow import LiquidityChecker, WorkflowContext, WorkflowDecision, WorkflowMode, WorkflowOrchestrator, WorkflowRequest, WorkflowResult, WorkflowStage, WorkflowStageDecision, WorkflowStageHandler
+from qbet.workflow import LiquidityChecker, StaticLiquidityChecker, WorkflowContext, WorkflowDecision, WorkflowMode, WorkflowOrchestrator, WorkflowRequest, WorkflowResult, WorkflowStage, WorkflowStageDecision, WorkflowStageHandler
 
 WorkflowSimulationOpportunity = BonusEngineRequest | SportsCapitalEngineRequest
 
@@ -55,7 +55,7 @@ class WorkflowSimulationRunner:
     """Routes virtual engine steps through the workflow without execution adapters."""
 
     def __init__(self, *, liquidity_checker: LiquidityChecker | None = None, risk_layer: OperationalRiskLayer | None = None) -> None:
-        self._liquidity_checker = liquidity_checker
+        self._liquidity_checker = liquidity_checker or StaticLiquidityChecker(WorkflowStageDecision(decision=WorkflowDecision.ALLOW))
         self._risk_layer = risk_layer or OperationalRiskLayer()
         self._runner = ReportingSimulationRunner()
         self.last_report: SimulationReport | None = None
