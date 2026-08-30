@@ -1,10 +1,12 @@
-"""Replaceable persistence contracts for simulation reports."""
+"""Replaceable persistence contracts for reports and provider state."""
 
 from __future__ import annotations
 
 from typing import Protocol
 from uuid import UUID
 
+from qbet.domain.models import Identifier
+from qbet.domain.verification import ProviderState
 from qbet.layers.logging import SimulationLogRecord
 from qbet.reporting import SimulationReport
 
@@ -19,3 +21,11 @@ class SimulationReportStore(Protocol):
     def load_records(self, run_id: UUID) -> tuple[SimulationLogRecord, ...]: ...
 
     def list_recent_reports(self, limit: int = 20) -> tuple[SimulationReport, ...]: ...
+
+
+class ProviderStateRepository(Protocol):
+    """Replaceable local state seam for a future Supabase/PostgreSQL adapter."""
+
+    def get(self, provider_id: Identifier) -> ProviderState | None: ...
+
+    def upsert(self, state: ProviderState) -> None: ...
