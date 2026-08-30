@@ -11,7 +11,7 @@ from pydantic import Field, model_validator
 
 from qbet.calculations import FreeBetResult, QualifyingBetResult
 from qbet.domain.models import Currency, DomainModel, Identifier, PositiveDecimal
-from qbet.domain.verification import ProviderState, SportsOpportunityRequest, VerificationResult
+from qbet.domain.verification import DomainRiskStatus, ProviderState, SportsOpportunityRequest, VerificationResult
 from qbet.engines import (
     BonusEngineEvaluation,
     BonusEngineRequest,
@@ -31,6 +31,7 @@ class EngineId(StrEnum):
 class RejectionReason(StrEnum):
     PROVIDER_FREQUENCY_LIMIT = "provider_frequency_limit"
     PROVIDER_COOLDOWN_ACTIVE = "provider_cooldown_active"
+    PROVIDER_RECHECK_REQUIRED = "provider_state_recheck_required"
     CURRENCY_MISMATCH = "currency_mismatch"
     RISK_LIMIT = "risk_limit"
     LIQUIDITY_LIMIT = "liquidity_limit"
@@ -206,9 +207,12 @@ def _rejection_reason(
     config: OrchestratorConfig,
     remaining: Decimal,
 ) -> RejectionReason | None:
-    if candidate.verification_result is not None and not candidate.verification_result.is_allowed:
-        assert candidate.verification_result.rejection_reason is not None
-        return RejectionReason(candidate.verification_result.rejection_reason)
+    if candidate.verification_result is not None:
+        if candidate.verification_result.status is DomainRiskStatus.RECHECK:
+            return RejectionReason.PROVIDER_RECHECK_REQUIRED
+        if not candidate.verification_result.is_allowed:
+            assert candidate.verification_result.rejection_reason is not None
+            return RejectionReason(candidate.verification_result.rejection_reason)
     if candidate.currency != snapshot.currency:
         return RejectionReason.CURRENCY_MISMATCH
     if candidate.risk_score > config.max_risk_score:
@@ -218,8 +222,6 @@ def _rejection_reason(
     if candidate.required_capital > remaining:
         return RejectionReason.CAPITAL_LIMIT
     return None
-
-
 def _engine_id_for(evaluation: StrategyEvaluation) -> EngineId:
     if isinstance(evaluation, BonusEngineEvaluation):
         return EngineId.BONUS
