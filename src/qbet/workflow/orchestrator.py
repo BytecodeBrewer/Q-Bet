@@ -16,6 +16,7 @@ class WorkflowOrchestrator:
     def __init__(self, stage_handlers: Mapping[WorkflowStage, WorkflowStageHandler] | None = None, *, liquidity_checker: LiquidityChecker | None = None, request_handler: RequestHandler | None = None) -> None:
         self._stage_handlers = dict(stage_handlers or {})
         self._liquidity_checker = liquidity_checker
+        # This ticket defines the refresh seam; later workflow stages invoke it explicitly.
         self._request_handler = request_handler
     def process(self, request: WorkflowRequest) -> WorkflowResult:
         correlation_id = request.correlation_id or new_correlation_id()
