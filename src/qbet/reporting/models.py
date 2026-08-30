@@ -27,6 +27,7 @@ class ReportDetailSelection(DomainModel):
     include_warnings: bool = False
     include_errors: bool = False
     include_risk_decisions: bool = False
+    include_workflow_transitions: bool = False
 
 
 class CompletedStepSummary(DomainModel):
@@ -66,6 +67,7 @@ class SimulationReport(DomainModel):
     warnings: tuple[SimulationLogRecord, ...] = ()
     errors: tuple[SimulationLogRecord, ...] = ()
     risk_decisions: tuple[SimulationLogRecord, ...] = ()
+    workflow_transitions: tuple[SimulationLogRecord, ...] = ()
 
 
 class SimulationReportBuilder:
@@ -140,6 +142,11 @@ class SimulationReportBuilder:
             for record in records
             if record.record_type is SimulationLogRecordType.RISK_DECISION
         )
+        workflow_transitions = tuple(
+            record
+            for record in records
+            if record.record_type is SimulationLogRecordType.WORKFLOW_TRANSITION
+        )
         raw_inputs = tuple(
             record.payload
             for record in records
@@ -187,4 +194,7 @@ class SimulationReportBuilder:
             warnings=warnings if selection.include_warnings else (),
             errors=errors if selection.include_errors else (),
             risk_decisions=risk_decisions if selection.include_risk_decisions else (),
+            workflow_transitions=(
+                workflow_transitions if selection.include_workflow_transitions else ()
+            ),
         )

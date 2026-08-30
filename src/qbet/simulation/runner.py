@@ -22,6 +22,7 @@ from qbet.simulation.models import (
 SimulationStepObserver = Callable[[SimulationContext], None]
 SimulationStepAppliedObserver = Callable[[SimulationContext], None]
 SimulationEventObserver = Callable[[SimulationEvent], None]
+SimulationStepGate = Callable[[SimulationStep], bool]
 
 
 class SimulationRunner(Protocol):
@@ -38,6 +39,7 @@ class SimulationRunner(Protocol):
         *,
         on_step_completed: SimulationStepObserver | None = None,
         on_step_applied: SimulationStepAppliedObserver | None = None,
+        on_step_ready: SimulationStepGate | None = None,
         on_event: SimulationEventObserver | None = None,
     ) -> SimulationResult:
         """Run deterministic steps synchronously and return an immutable result."""
@@ -87,6 +89,7 @@ class DeterministicSimulationRunner:
         *,
         on_step_completed: SimulationStepObserver | None = None,
         on_step_applied: SimulationStepAppliedObserver | None = None,
+        on_step_ready: SimulationStepGate | None = None,
         on_event: SimulationEventObserver | None = None,
     ) -> SimulationResult:
         """Apply simulation capital changes in order and stop only at safe boundaries."""
@@ -127,9 +130,18 @@ class DeterministicSimulationRunner:
                     record(SimulationEventType.TOP_UP_APPLIED, top_up_amount=top_up.amount)
 
         record(SimulationEventType.RUN_STARTED)
-        apply_top_ups()
+        initial_top_ups_applied = False
 
         for step in ordered_steps:
+            if on_step_ready is not None and not on_step_ready(step):
+                self._status = SimulationStatus.STOPPED
+                record(SimulationEventType.RUN_STOPPED, step_id=step.id)
+                break
+
+            if not initial_top_ups_applied:
+                apply_top_ups()
+                initial_top_ups_applied = True
+
             remaining_duration = config.max_duration - self._elapsed_duration
             if step.simulated_duration > remaining_duration:
                 record(SimulationEventType.DURATION_LIMIT_REACHED)
@@ -160,6 +172,8 @@ class DeterministicSimulationRunner:
                 record(SimulationEventType.RUN_STOPPED)
                 break
         else:
+            if not initial_top_ups_applied:
+                apply_top_ups()
             self._status = SimulationStatus.COMPLETED
             self._progress = Decimal("1")
             record(SimulationEventType.RUN_COMPLETED)
