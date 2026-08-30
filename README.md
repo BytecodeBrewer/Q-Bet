@@ -1,4 +1,4 @@
-﻿# Q-Bet
+# Q-Bet
 
 > A modular Python quant engine for matched betting, sports arbitrage, strategy simulation, controlled execution, and automated opportunity detection.
 
@@ -6,8 +6,8 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 13 - Simulation reporting and SQLite history ready for review**:
-Q-Bet has the expectation model, agent workflow docs, typed domain models, and tested deterministic calculators for qualifying bets, free bets, two-way arbitrage, dutching, and stake rounding. `BonusEngine` and `SportsCapitalEngine` already produce approval-only execution plans. The current legacy `CapitalOrchestrator` checks provider state and ranks proposals by EV, ROI, risk, liquidity, capital lock-up, and available capital; this should evolve toward the `LiquidityChecker` role from the pipeline architecture. Operational risk checks, the deterministic simulation flow, compact reports, selected detail rebuilding, and local SQLite report history are in place. Next up: provider-state persistence, workflow pipeline refactors, data aggregation, Playwright/API adapters, bank connector, Supabase/CI/CD, richer GUI, and real execution adapters. Progress is real; finished product is still loading, please do not shake the machine.
+**Stage 14 - Workflow orchestration contracts ready for review**:
+Q-Bet has the expectation model, agent workflow docs, typed domain models, and tested deterministic calculators for qualifying bets, free bets, two-way arbitrage, dutching, and stake rounding. `BonusEngine` and `SportsCapitalEngine` already produce approval-only execution plans. The current legacy `CapitalOrchestrator` checks provider state and ranks proposals by EV, ROI, risk, liquidity, capital lock-up, and available capital; this should evolve toward the `LiquidityChecker` role from the pipeline architecture. Operational risk checks, the deterministic simulation flow, compact reports, selected detail rebuilding, and local SQLite report history are in place. Next up: provider-state persistence, workflow pipeline implementation, data aggregation, Playwright/API adapters, bank connector, Supabase/CI/CD, richer GUI, and real execution adapters. Progress is real; finished product is still loading, please do not shake the machine.
 
 Update this section after every accepted ticket. It should always say where the project really is.
 
