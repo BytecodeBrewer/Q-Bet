@@ -27,6 +27,7 @@ class SimulationLogRecordType(StrEnum):
     WARNING = "warning"
     ERROR = "error"
     RUN_FINISHED = "run_finished"
+    WORKFLOW_TRANSITION = "workflow_transition"
 
 
 class SimulationLogRecord(DomainModel):
