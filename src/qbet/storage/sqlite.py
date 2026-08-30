@@ -1,11 +1,14 @@
-"""SQLite persistence adapter for structured simulation records and reports."""
+"""SQLite persistence adapters for simulation records and provider state."""
 
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
+from qbet.domain.models import Identifier
+from qbet.domain.verification import ProviderState
 from qbet.layers.logging import SimulationLogRecord
 from qbet.reporting import SimulationReport
 
@@ -76,6 +79,62 @@ class SQLiteSimulationReportStore:
                 (limit,),
             ).fetchall()
         return tuple(SimulationReport.model_validate_json(row[0]) for row in rows)
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self._database_path)
+
+
+class SQLiteProviderStateRepository:
+    """Local provider state adapter; replace through ProviderStateRepository for Supabase."""
+
+    def __init__(self, database_path: str | Path) -> None:
+        self._database_path = str(database_path)
+        with self._connect() as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS provider_states ("
+                "provider_id TEXT PRIMARY KEY, active_bets_count INTEGER NOT NULL, "
+                "last_bet_timestamp TEXT, is_cooldown_active INTEGER NOT NULL)"
+            )
+
+    def get(self, provider_id: Identifier) -> ProviderState | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT provider_id, active_bets_count, last_bet_timestamp, "
+                "is_cooldown_active FROM provider_states WHERE provider_id = ?",
+                (provider_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return ProviderState(
+            provider_id=row[0],
+            active_bets_count=row[1],
+            last_bet_timestamp=(
+                datetime.fromisoformat(row[2]) if row[2] is not None else None
+            ),
+            is_cooldown_active=bool(row[3]),
+        )
+
+    def upsert(self, state: ProviderState) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO provider_states "
+                "(provider_id, active_bets_count, last_bet_timestamp, is_cooldown_active) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(provider_id) DO UPDATE SET "
+                "active_bets_count = excluded.active_bets_count, "
+                "last_bet_timestamp = excluded.last_bet_timestamp, "
+                "is_cooldown_active = excluded.is_cooldown_active",
+                (
+                    state.provider_id,
+                    state.active_bets_count,
+                    (
+                        state.last_bet_timestamp.isoformat()
+                        if state.last_bet_timestamp is not None
+                        else None
+                    ),
+                    int(state.is_cooldown_active),
+                ),
+            )
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._database_path)

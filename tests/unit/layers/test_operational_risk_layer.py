@@ -48,3 +48,33 @@ def test_structured_decision_logs_with_the_workflow_correlation_id() -> None:
     assert record.run_id == correlation_id
     assert record.record_type is SimulationLogRecordType.RISK_DECISION
     assert record.payload["decision_code"] == DomainRiskDecisionCode.ACTIVE_BET_LIMIT_APPROACHING
+
+
+def test_repository_injection_reloads_provider_state_and_rechecks_unknown_provider(tmp_path) -> None:
+    from datetime import datetime, timezone
+
+    from qbet.storage import SQLiteProviderStateRepository
+
+    database_path = tmp_path / "provider-state.sqlite3"
+    repository = SQLiteProviderStateRepository(database_path)
+    layer = OperationalRiskLayer(provider_state_repository=repository)
+
+    unknown = layer.verify_opportunity(bonus_request(), provider_id="book")
+    assert unknown.status is DomainRiskStatus.RECHECK
+    assert unknown.decision_code is DomainRiskDecisionCode.RECHECK_REQUIRED
+
+    repository.upsert(
+        state(
+            active_bets_count=1,
+            last_bet_timestamp=datetime(2026, 8, 30, tzinfo=timezone.utc),
+        )
+    )
+    reloaded_layer = OperationalRiskLayer(
+        provider_state_repository=SQLiteProviderStateRepository(database_path)
+    )
+
+    assert reloaded_layer.verify_opportunity(bonus_request(), provider_id="book").status is DomainRiskStatus.WARN
+
+    repository.upsert(state(active_bets_count=2, is_cooldown_active=True))
+
+    assert reloaded_layer.verify_opportunity(bonus_request(), provider_id="book").decision_code is DomainRiskDecisionCode.FREQUENCY_LIMIT
