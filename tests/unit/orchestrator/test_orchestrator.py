@@ -12,14 +12,21 @@ from qbet.engines import (
     SportsCapitalEngineRequest,
 )
 from qbet.orchestrator import (
-    CapitalOrchestrator,
     CapitalSnapshot,
     EngineCandidate,
     EngineId,
+    LiquidityChecker,
     OrchestratorConfig,
     RejectionReason,
     SandboxEngineAdapter,
     VerifiedStrategyCandidateAdapter,
+)
+from qbet.workflow import (
+    WorkflowDecision,
+    WorkflowMode,
+    WorkflowOrchestrator,
+    WorkflowRequest,
+    WorkflowStage,
 )
 
 
@@ -146,14 +153,14 @@ def test_orchestrator_ranks_and_rejects_sandbox_candidates() -> None:
         ),
     )
 
-    result = CapitalOrchestrator().allocate(snapshot(), config(), adapters)
+    result = LiquidityChecker().allocate(snapshot(), config(), adapters)
 
     assert result.allocations[0].candidate.id == "alpha"
     assert result.rejections[0].reason is RejectionReason.RISK_LIMIT
 
 
 def test_verified_bonus_and_sports_candidates_reach_the_existing_allocator() -> None:
-    result = CapitalOrchestrator().allocate(
+    result = LiquidityChecker().allocate(
         snapshot(), config(), (bonus_adapter(), sports_adapter())
     )
 
@@ -165,7 +172,7 @@ def test_verified_bonus_and_sports_candidates_reach_the_existing_allocator() -> 
 
 
 def test_provider_frequency_rejection_prevents_bonus_allocation() -> None:
-    result = CapitalOrchestrator().allocate(
+    result = LiquidityChecker().allocate(
         snapshot(),
         config(),
         (bonus_adapter(state=provider_state(active_bets_count=2)),),
@@ -176,7 +183,7 @@ def test_provider_frequency_rejection_prevents_bonus_allocation() -> None:
 
 
 def test_provider_cooldown_rejection_prevents_sports_allocation() -> None:
-    result = CapitalOrchestrator().allocate(
+    result = LiquidityChecker().allocate(
         snapshot(),
         config(),
         (sports_adapter(state=provider_state(is_cooldown_active=True)),),
@@ -187,7 +194,7 @@ def test_provider_cooldown_rejection_prevents_sports_allocation() -> None:
 
 
 def test_existing_allocator_limits_still_apply_after_verification() -> None:
-    result = CapitalOrchestrator().allocate(
+    result = LiquidityChecker().allocate(
         snapshot(), config(), (bonus_adapter(risk="0.9"),)
     )
 
@@ -232,6 +239,69 @@ def test_recheck_result_prevents_capital_allocation() -> None:
         ) -> tuple[EngineCandidate, ...]:
             return (candidate,)
 
-    result = CapitalOrchestrator().allocate(snapshot(), config(), (RecheckAdapter(),))
+    result = LiquidityChecker().allocate(snapshot(), config(), (RecheckAdapter(),))
     assert result.allocations == ()
     assert result.rejections[0].reason is RejectionReason.PROVIDER_RECHECK_REQUIRED
+
+
+def test_concrete_liquidity_checker_allows_eligible_workflow_candidate() -> None:
+    checker = LiquidityChecker(
+        snapshot(),
+        config(),
+        (
+            SandboxEngineAdapter(
+                candidate("eligible", EngineId.ALPHA, "40", "6", sandbox=True)
+            ),
+        ),
+    )
+
+    result = WorkflowOrchestrator(liquidity_checker=checker).process(
+        WorkflowRequest(
+            id="workflow-liquidity-allow",
+            mode=WorkflowMode.SIMULATION,
+            stages=(WorkflowStage.LIQUIDITY_CHECK,),
+        )
+    )
+
+    assert result.final_decision is WorkflowDecision.ALLOW
+    assert checker.last_result is not None
+    assert checker.last_result.allocations[0].candidate.id == "eligible"
+
+
+def test_concrete_liquidity_checker_rechecks_and_blocks_workflow() -> None:
+    from qbet.domain.verification import (
+        DomainRiskDecisionCode,
+        DomainRiskStatus,
+        VerificationResult,
+    )
+
+    recheck_candidate = candidate(
+        "recheck", EngineId.ALPHA, "40", "6", sandbox=True
+    ).model_copy(
+        update={
+            "verification_result": VerificationResult(
+                is_allowed=False,
+                status=DomainRiskStatus.RECHECK,
+                decision_code=DomainRiskDecisionCode.RECHECK_REQUIRED,
+            )
+        }
+    )
+    checker = LiquidityChecker(
+        snapshot(), config(), (SandboxEngineAdapter(recheck_candidate),)
+    )
+
+    result = WorkflowOrchestrator(liquidity_checker=checker).process(
+        WorkflowRequest(
+            id="workflow-liquidity-recheck",
+            mode=WorkflowMode.SIMULATION,
+            stages=(WorkflowStage.LIQUIDITY_CHECK,),
+        )
+    )
+
+    assert result.final_decision is WorkflowDecision.RECHECK
+    assert checker.last_result is not None
+    assert checker.last_result.allocations == ()
+    assert (
+        checker.last_result.rejections[0].reason
+        is RejectionReason.PROVIDER_RECHECK_REQUIRED
+    )

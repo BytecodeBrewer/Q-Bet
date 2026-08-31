@@ -85,7 +85,7 @@ flowchart LR
 
 - `WorkflowOrchestrator` controls pipeline movement, routing, correlation ids, stage transitions, and engine activation or throttling from GUI settings.
 - `RequestHandler` performs targeted Playwright/API refresh checks for Domain Risk, Liquidity Check, and Execution. It is a side channel, not the main intake stream.
-- `LiquidityChecker` is the future target name for the current capital allocation role. It checks capital, reservations, priority, balances, provider/account availability, and pending/recheck decisions.
+- `LiquidityChecker` is the concrete capital-allocation boundary. It ranks proposal-only candidates, enforces capital and configured thresholds, and maps unavailable or recheck-required liquidity to workflow decisions.
 - Reporting, logging, and persistence are cross-cutting. They record pipeline state, but they are not a final numbered layer.
 - Simulation and Execution are sibling targets. They use separate queues and separate result histories so simulated runs and real execution do not mix.
 
