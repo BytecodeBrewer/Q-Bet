@@ -91,4 +91,4 @@ def test_rejects_invalid_free_bet_inputs(field: str, value: object) -> None:
     values[field] = value
 
     with pytest.raises(ValidationError):
-        FreeBetInput(**values)
+        FreeBetInput.model_validate(values)

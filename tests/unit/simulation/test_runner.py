@@ -23,7 +23,7 @@ def config(**overrides: object) -> SimulationRunConfig:
         "starting_capital": Decimal(100),
     }
     values.update(overrides)
-    return SimulationRunConfig(**values)
+    return SimulationRunConfig.model_validate(values)
 
 
 def steps() -> tuple[SimulationStep, ...]:

@@ -57,7 +57,7 @@ def snapshot(
         "offers": (offer(f"{target.value}-offer"),),
     }
     values.update(changes)
-    return NormalizedMarketSnapshot(**values)
+    return NormalizedMarketSnapshot.model_validate(values)
 
 
 def request(target: DataTarget, correlation_id: UUID) -> DataCollectionRequest:

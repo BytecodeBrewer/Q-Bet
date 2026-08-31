@@ -107,7 +107,7 @@ def test_offer_rejects_invalid_inputs(kwargs: dict[str, object], message: str) -
     values.update(kwargs)
 
     with pytest.raises(ValidationError, match=message):
-        Offer(**values)
+        Offer.model_validate(values)
 
 
 def test_opportunity_requires_two_offer_identifiers() -> None:

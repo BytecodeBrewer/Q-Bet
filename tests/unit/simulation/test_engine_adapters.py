@@ -34,7 +34,7 @@ def config(engine: SimulationEngine, **changes: object) -> SimulationRunConfig:
         "starting_capital": Decimal(100),
     }
     values.update(changes)
-    return SimulationRunConfig(**values)
+    return SimulationRunConfig.model_validate(values)
 
 
 def bonus_requests() -> tuple[BonusEngineRequest, ...]:

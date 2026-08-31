@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
+from typing import Any
 
 from pydantic import Field
 
@@ -63,7 +64,7 @@ class SimulationReport(DomainModel):
     schema_version: int = Field(default=1, ge=1)
     events: tuple[SimulationEvent, ...] = ()
     intermediate_results: tuple[SimulationEvaluation, ...] = ()
-    raw_input_snapshots: tuple[dict[str, object], ...] = ()
+    raw_input_snapshots: tuple[dict[str, Any], ...] = ()
     warnings: tuple[SimulationLogRecord, ...] = ()
     errors: tuple[SimulationLogRecord, ...] = ()
     risk_decisions: tuple[SimulationLogRecord, ...] = ()

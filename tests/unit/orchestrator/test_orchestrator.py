@@ -64,7 +64,7 @@ def provider_state(**changes: object) -> ProviderState:
         "is_cooldown_active": False,
     }
     values.update(changes)
-    return ProviderState(**values)
+    return ProviderState.model_validate(values)
 
 
 def bonus_adapter(
@@ -228,7 +228,7 @@ def test_recheck_result_prevents_capital_allocation() -> None:
 
     class RecheckAdapter:
         def evaluate_candidates(
-            self, _: CapitalSnapshot
+            self, snapshot: CapitalSnapshot
         ) -> tuple[EngineCandidate, ...]:
             return (candidate,)
 

@@ -21,7 +21,7 @@ def make_offer(**overrides: object) -> DutchingOffer:
         "currency": "EUR",
     }
     values.update(overrides)
-    return DutchingOffer(**values)
+    return DutchingOffer.model_validate(values)
 
 
 def test_balances_three_outcomes_for_a_total_stake() -> None:
@@ -222,13 +222,15 @@ def test_rejects_invalid_dutching_inputs(
     exclusive: bool,
 ) -> None:
     with pytest.raises(ValidationError):
-        DutchingInput(
-            outcomes_are_exhaustive=True,
-            offers=offers,
-            target_mode=target_mode,
-            total_stake=total_stake,
-            target_return=target_return,
-            outcomes_are_mutually_exclusive=exclusive,
+        DutchingInput.model_validate(
+            {
+                "outcomes_are_exhaustive": True,
+                "offers": offers,
+                "target_mode": target_mode,
+                "total_stake": total_stake,
+                "target_return": target_return,
+                "outcomes_are_mutually_exclusive": exclusive,
+            }
         )
 
 
@@ -248,11 +250,13 @@ def test_rejects_invalid_offer_inputs(field: str, value: Decimal) -> None:
 
 def test_requires_an_explicit_exhaustive_outcome_guarantee() -> None:
     with pytest.raises(ValidationError, match="outcomes_are_exhaustive"):
-        DutchingInput(
-            offers=(
-                make_offer(outcome="home", odds=Decimal(3)),
-                make_offer(outcome="away", odds=Decimal(3)),
-            ),
-            target_mode=DutchingTargetMode.TOTAL_STAKE,
-            total_stake=Decimal(10),
+        DutchingInput.model_validate(
+            {
+                "offers": (
+                    make_offer(outcome="home", odds=Decimal(3)),
+                    make_offer(outcome="away", odds=Decimal(3)),
+                ),
+                "target_mode": DutchingTargetMode.TOTAL_STAKE,
+                "total_stake": Decimal(10),
+            }
         )

@@ -16,6 +16,7 @@ from qbet.simulation import (
 )
 from qbet.workflow import (
     StaticLiquidityChecker,
+    WorkflowContext,
     WorkflowDecision,
     WorkflowStage,
     WorkflowStageDecision,
@@ -27,9 +28,9 @@ GENERATED_AT = datetime(2026, 8, 30, tzinfo=UTC)
 class RecordingLiquidityChecker:
     def __init__(self, decision: WorkflowStageDecision) -> None:
         self._decision = decision
-        self.contexts = []
+        self.contexts: list[WorkflowContext] = []
 
-    def check(self, context):
+    def check(self, context: WorkflowContext) -> WorkflowStageDecision:
         self.contexts.append(context)
         return self._decision
 
@@ -85,7 +86,7 @@ def request(
         "provider_state": ProviderState(provider_id="book", active_bets_count=0),
     }
     values.update(changes)
-    return WorkflowSimulationRequest(**values)
+    return WorkflowSimulationRequest.model_validate(values)
 
 
 def test_bonus_simulation_routes_allowed_step_through_required_liquidity_gate() -> None:

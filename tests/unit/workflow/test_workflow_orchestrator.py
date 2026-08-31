@@ -27,7 +27,7 @@ def request(**changes: object) -> WorkflowRequest:
         ),
     }
     values.update(changes)
-    return WorkflowRequest(**values)
+    return WorkflowRequest.model_validate(values)
 
 
 def test_normal_workflow_records_ordered_correlated_transitions() -> None:
