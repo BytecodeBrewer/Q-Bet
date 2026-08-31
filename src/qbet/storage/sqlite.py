@@ -54,7 +54,8 @@ class SQLiteSimulationReportStore:
     def load_report(self, run_id: UUID) -> SimulationReport:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT payload FROM simulation_reports WHERE run_id = ?", (str(run_id),)
+                "SELECT payload FROM simulation_reports WHERE run_id = ?",
+                (str(run_id),),
             ).fetchone()
         if row is None:
             raise KeyError(f"simulation report {run_id} was not found")

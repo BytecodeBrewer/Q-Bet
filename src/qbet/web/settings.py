@@ -14,7 +14,9 @@ def parse_allowed_hosts(value: str) -> list[str]:
     return [host.strip() for host in value.split(",") if host.strip()]
 
 
-SECRET_KEY = os.environ.get("QBET_DJANGO_SECRET_KEY", "qbet-local-development-only-secret")
+SECRET_KEY = os.environ.get(
+    "QBET_DJANGO_SECRET_KEY", "qbet-local-development-only-secret"
+)
 DEBUG = os.environ.get("QBET_DJANGO_DEBUG", "true").lower() == "true"
 ALLOWED_HOSTS = parse_allowed_hosts(
     os.environ.get("QBET_DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")
@@ -87,6 +89,10 @@ LOGGING = {
         "console": {"class": "logging.StreamHandler", "formatter": "request_json"},
     },
     "loggers": {
-        "qbet.web.request": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "qbet.web.request": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }

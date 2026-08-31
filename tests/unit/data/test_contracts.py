@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -20,8 +20,7 @@ from qbet.data import (
     SourceTransport,
 )
 
-
-TIMESTAMP = datetime(2026, 8, 31, 9, 0, tzinfo=timezone.utc)
+TIMESTAMP = datetime(2026, 8, 31, 9, 0, tzinfo=UTC)
 SOURCE = DataSourceMetadata(
     provider_id="book-a",
     source_id="sports-feed",
@@ -35,13 +34,15 @@ def offer(identifier: str, selection: str = "home") -> NormalizedOffer:
         market_id="market-1",
         selection=selection,
         odds=Decimal("2.15"),
-        available_stake=Decimal("100"),
+        available_stake=Decimal(100),
         currency="EUR",
         observed_at=TIMESTAMP,
     )
 
 
-def snapshot(target: DataTarget = DataTarget.BONUS, **changes: object) -> NormalizedMarketSnapshot:
+def snapshot(
+    target: DataTarget = DataTarget.BONUS, **changes: object
+) -> NormalizedMarketSnapshot:
     values: dict[str, object] = {
         "id": f"{target.value}-snapshot",
         "correlation_id": UUID("12345678-1234-5678-1234-567812345678"),
@@ -56,11 +57,13 @@ def snapshot(target: DataTarget = DataTarget.BONUS, **changes: object) -> Normal
         "offers": (offer(f"{target.value}-offer"),),
     }
     values.update(changes)
-    return NormalizedMarketSnapshot(**values)
+    return NormalizedMarketSnapshot.model_validate(values)
 
 
 def request(target: DataTarget, correlation_id: UUID) -> DataCollectionRequest:
-    return DataCollectionRequest(correlation_id=correlation_id, target=target, source=SOURCE)
+    return DataCollectionRequest(
+        correlation_id=correlation_id, target=target, source=SOURCE
+    )
 
 
 def test_valid_snapshot_is_ready_for_engine_specific_preparation() -> None:
@@ -73,7 +76,9 @@ def test_valid_snapshot_is_ready_for_engine_specific_preparation() -> None:
 
 def test_invalid_or_incomplete_snapshot_fails_before_preparation() -> None:
     with pytest.raises(ValidationError, match="greater than 1"):
-        NormalizedOffer.model_validate({**offer("invalid", selection="away").model_dump(), "odds": Decimal("1")})
+        NormalizedOffer.model_validate(
+            {**offer("invalid", selection="away").model_dump(), "odds": Decimal(1)}
+        )
 
     stale = snapshot(freshness=FreshnessStatus.STALE)
     with pytest.raises(ValueError, match="fresh"):
@@ -124,4 +129,8 @@ def test_fake_source_implements_both_transport_protocols_without_network() -> No
     assert isinstance(source, DataCollector)
     assert isinstance(source, ApiAdapter)
     with pytest.raises(KeyError, match="no deterministic snapshot"):
-        source.collect(request(DataTarget.SPORTS_CAPITAL, UUID("11111111-1111-1111-1111-111111111111")))
+        source.collect(
+            request(
+                DataTarget.SPORTS_CAPITAL, UUID("11111111-1111-1111-1111-111111111111")
+            )
+        )

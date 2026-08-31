@@ -21,7 +21,11 @@ class DeterministicInMemoryDataSource:
         try:
             snapshot = self._snapshots[request.target]
         except KeyError as error:
-            raise KeyError(f"no deterministic snapshot for {request.target.value}") from error
+            raise KeyError(
+                f"no deterministic snapshot for {request.target.value}"
+            ) from error
         if snapshot.source != request.source:
-            raise ValueError("request source does not match deterministic snapshot source")
+            raise ValueError(
+                "request source does not match deterministic snapshot source"
+            )
         return snapshot.model_copy(update={"correlation_id": request.correlation_id})

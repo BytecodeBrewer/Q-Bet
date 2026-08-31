@@ -10,11 +10,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
-
 Identifier = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Currency = Literal["EUR", "GBP", "USD"]
-PositiveDecimal = Annotated[Decimal, Field(gt=Decimal("0"))]
-NonNegativeDecimal = Annotated[Decimal, Field(ge=Decimal("0"))]
+PositiveDecimal = Annotated[Decimal, Field(gt=Decimal(0))]
+NonNegativeDecimal = Annotated[Decimal, Field(ge=Decimal(0))]
 
 
 class DomainModel(BaseModel):
@@ -61,7 +60,7 @@ class Offer(DomainModel):
     selection: Identifier
     provider: Identifier
     side: OfferSide
-    odds: Annotated[Decimal, Field(gt=Decimal("1"))]
+    odds: Annotated[Decimal, Field(gt=Decimal(1))]
     available_stake: NonNegativeDecimal
     currency: Currency
     observed_at: datetime

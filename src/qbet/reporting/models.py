@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
+from typing import Any
 
 from pydantic import Field
 
@@ -38,7 +39,7 @@ class CompletedStepSummary(DomainModel):
     simulated_duration: timedelta
 
     @classmethod
-    def from_step(cls, step: SimulationStep) -> "CompletedStepSummary":
+    def from_step(cls, step: SimulationStep) -> CompletedStepSummary:
         return cls(
             id=step.id,
             capital_change=step.capital_change,
@@ -63,7 +64,7 @@ class SimulationReport(DomainModel):
     schema_version: int = Field(default=1, ge=1)
     events: tuple[SimulationEvent, ...] = ()
     intermediate_results: tuple[SimulationEvaluation, ...] = ()
-    raw_input_snapshots: tuple[dict[str, object], ...] = ()
+    raw_input_snapshots: tuple[dict[str, Any], ...] = ()
     warnings: tuple[SimulationLogRecord, ...] = ()
     errors: tuple[SimulationLogRecord, ...] = ()
     risk_decisions: tuple[SimulationLogRecord, ...] = ()
@@ -161,11 +162,11 @@ class SimulationReportBuilder:
         )
         top_up_total = sum(
             (
-                event.top_up_amount or Decimal("0")
+                event.top_up_amount or Decimal(0)
                 for event in events
                 if event.event_type.value == "top_up_applied"
             ),
-            Decimal("0"),
+            Decimal(0),
         )
         evaluations = tuple(
             SimulationEvaluation.model_validate(record.payload)
@@ -185,7 +186,7 @@ class SimulationReportBuilder:
             completed_steps=completed_steps,
             elapsed_duration=elapsed_duration,
             progress=progress,
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             events=events if selection.include_events else (),
             intermediate_results=(
                 evaluations if selection.include_intermediate_results else ()
