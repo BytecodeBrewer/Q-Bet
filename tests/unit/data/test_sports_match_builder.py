@@ -32,6 +32,7 @@ from qbet.data.sports_match_builder import (
     build_qualifying_bet_match,
     build_two_way_arbitrage_match,
 )
+from qbet.domain import OfferSide
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 
 TIMESTAMP = datetime(2026, 8, 31, 9, 0, tzinfo=UTC)
@@ -41,12 +42,19 @@ SOURCE = DataSourceMetadata(
 
 
 def offer(
-    identifier: str, selection: str, odds: str, available_stake: str = "100"
+    identifier: str,
+    selection: str,
+    odds: str,
+    available_stake: str = "100",
+    provider: str = "book-a",
+    side: OfferSide = OfferSide.BACK,
 ) -> NormalizedOffer:
     return NormalizedOffer(
         id=identifier,
         market_id="market-1",
         selection=selection,
+        provider=provider,
+        side=side,
         odds=Decimal(odds),
         available_stake=Decimal(available_stake),
         currency="EUR",
@@ -76,7 +84,11 @@ def snapshot(
 
 def test_build_qualifying_bet_match_preserves_context_and_is_deterministic() -> None:
     value = snapshot(
-        DataTarget.BONUS, (offer("back", "home", "2.4"), offer("lay", "home", "2.5"))
+        DataTarget.BONUS,
+        (
+            offer("back", "home", "2.4"),
+            offer("lay", "home", "2.5", provider="exchange-a", side=OfferSide.LAY),
+        ),
     )
     metadata = QualifyingBetMatchMetadata(
         back_offer_id="back",
@@ -103,7 +115,11 @@ def test_build_qualifying_bet_match_preserves_context_and_is_deterministic() -> 
 
 def test_build_free_bet_match_requires_explicit_promotion_rule() -> None:
     value = snapshot(
-        DataTarget.BONUS, (offer("back", "home", "3.0"), offer("lay", "home", "3.2"))
+        DataTarget.BONUS,
+        (
+            offer("back", "home", "3.0"),
+            offer("lay", "home", "3.2", provider="exchange-a", side=OfferSide.LAY),
+        ),
     )
     metadata = FreeBetMatchMetadata(
         back_offer_id="back",
@@ -126,7 +142,11 @@ def test_build_free_bet_match_requires_explicit_promotion_rule() -> None:
 
 def test_build_free_bet_match_rejects_mismatched_selection() -> None:
     value = snapshot(
-        DataTarget.BONUS, (offer("back", "home", "3.0"), offer("lay", "away", "3.2"))
+        DataTarget.BONUS,
+        (
+            offer("back", "home", "3.0"),
+            offer("lay", "away", "3.2", provider="exchange-a", side=OfferSide.LAY),
+        ),
     )
     metadata = FreeBetMatchMetadata(
         back_offer_id="back",
@@ -243,9 +263,9 @@ def test_build_dutching_match_rejects_partial_snapshot_selection() -> None:
             {
                 "offers": (
                     offer("back", "home", "2.4"),
-                    offer("lay", "away", "2.5").model_copy(
-                        update={"availability": OfferAvailability.SUSPENDED}
-                    ),
+                    offer(
+                        "lay", "away", "2.5", provider="exchange-a", side=OfferSide.LAY
+                    ).model_copy(update={"availability": OfferAvailability.SUSPENDED}),
                 )
             },
             QualifyingBetMatchMetadata(
@@ -265,7 +285,10 @@ def test_sports_match_builder_rejects_unready_snapshots(
     changes: dict[str, object], metadata: QualifyingBetMatchMetadata, message: str
 ) -> None:
     values = {
-        "offers": (offer("back", "home", "2.4"), offer("lay", "home", "2.5")),
+        "offers": (
+            offer("back", "home", "2.4"),
+            offer("lay", "home", "2.5", provider="exchange-a", side=OfferSide.LAY),
+        ),
         **changes,
     }
     value = snapshot(DataTarget.BONUS, **values)
@@ -279,7 +302,10 @@ def test_sports_match_builder_rejects_incompatible_selection_currency_and_liquid
 ):
     bonus = snapshot(
         DataTarget.BONUS,
-        (offer("back", "home", "2.4", "5"), offer("lay", "away", "2.5")),
+        (
+            offer("back", "home", "2.4", "5"),
+            offer("lay", "away", "2.5", provider="exchange-a", side=OfferSide.LAY),
+        ),
     )
     metadata = QualifyingBetMatchMetadata(
         back_offer_id="back",
@@ -293,6 +319,23 @@ def test_sports_match_builder_rejects_incompatible_selection_currency_and_liquid
     with pytest.raises(ValueError, match="same outcome"):
         build_qualifying_bet_match(bonus, metadata)
 
+    same_side = snapshot(
+        DataTarget.BONUS,
+        (offer("back", "home", "2.4"), offer("other", "home", "2.5")),
+    )
+    same_side_metadata = metadata.model_copy(update={"lay_offer_id": "other"})
+    with pytest.raises(ValueError, match="bookmaker back and exchange lay pair"):
+        build_qualifying_bet_match(same_side, same_side_metadata)
+
+    same_provider = snapshot(
+        DataTarget.BONUS,
+        (
+            offer("back", "home", "2.4"),
+            offer("lay", "home", "2.5", side=OfferSide.LAY),
+        ),
+    )
+    with pytest.raises(ValueError, match="distinct providers"):
+        build_qualifying_bet_match(same_provider, metadata)
     sports = snapshot(
         DataTarget.SPORTS_CAPITAL,
         (
