@@ -47,17 +47,30 @@ __all__ = [
     "SimulationStep",
     "SimulationTopUpEvent",
     "SportsCapitalSimulationAdapter",
-    "YieldSimulationAdapter",
     "WorkflowSimulationRequest",
     "WorkflowSimulationResult",
     "WorkflowSimulationRunner",
+    "YieldSimulationAdapter",
 ]
 
 
 def __getattr__(name: str) -> object:
-    if name in {"WorkflowSimulationRequest", "WorkflowSimulationResult", "WorkflowSimulationRunner"}:
-        from .workflow import WorkflowSimulationRequest, WorkflowSimulationResult, WorkflowSimulationRunner
-        return {"WorkflowSimulationRequest": WorkflowSimulationRequest, "WorkflowSimulationResult": WorkflowSimulationResult, "WorkflowSimulationRunner": WorkflowSimulationRunner}[name]
+    if name in {
+        "WorkflowSimulationRequest",
+        "WorkflowSimulationResult",
+        "WorkflowSimulationRunner",
+    }:
+        from .workflow import (
+            WorkflowSimulationRequest,
+            WorkflowSimulationResult,
+            WorkflowSimulationRunner,
+        )
+
+        return {
+            "WorkflowSimulationRequest": WorkflowSimulationRequest,
+            "WorkflowSimulationResult": WorkflowSimulationResult,
+            "WorkflowSimulationRunner": WorkflowSimulationRunner,
+        }[name]
     if name == "ReportingSimulationRunner":
         from .reporting import ReportingSimulationRunner
 

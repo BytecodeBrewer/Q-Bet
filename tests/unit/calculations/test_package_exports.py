@@ -1,4 +1,4 @@
-import qbet.calculations as calculations
+from qbet import calculations
 
 
 def test_calculation_package_exports_public_api() -> None:

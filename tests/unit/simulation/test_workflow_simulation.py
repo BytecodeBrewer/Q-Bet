@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -21,8 +21,7 @@ from qbet.workflow import (
     WorkflowStageDecision,
 )
 
-
-GENERATED_AT = datetime(2026, 8, 30, tzinfo=timezone.utc)
+GENERATED_AT = datetime(2026, 8, 30, tzinfo=UTC)
 
 
 class RecordingLiquidityChecker:
@@ -41,10 +40,10 @@ def bonus_request(identifier: str = "bonus-1") -> BonusEngineRequest:
         inputs=QualifyingBetInput(
             back_odds=Decimal("2.5"),
             lay_odds=Decimal("2.6"),
-            back_stake=Decimal("10"),
+            back_stake=Decimal(10),
             exchange_commission=Decimal("0.02"),
             stake_precision=Decimal("0.01"),
-            max_lay_liability=Decimal("100"),
+            max_lay_liability=Decimal(100),
         ),
         currency="EUR",
         execution_offer_ids=("book", "exchange"),
@@ -57,7 +56,7 @@ def sports_request() -> SportsCapitalEngineRequest:
         return ArbitrageOffer(
             outcome=outcome,
             odds=Decimal("2.2"),
-            available_liquidity=Decimal("100"),
+            available_liquidity=Decimal(100),
             stake_precision=Decimal("0.01"),
             currency="EUR",
         )
@@ -67,7 +66,7 @@ def sports_request() -> SportsCapitalEngineRequest:
         inputs=TwoWayArbitrageInput(
             first_offer=offer("home"),
             second_offer=offer("away"),
-            requested_total_stake=Decimal("20"),
+            requested_total_stake=Decimal(20),
         ),
         currency="EUR",
         execution_offer_ids=("home", "away"),
@@ -81,7 +80,7 @@ def request(
     **changes: object,
 ) -> WorkflowSimulationRequest:
     values: dict[str, object] = {
-        "config": SimulationRunConfig(engine=engine, starting_capital=Decimal("100")),
+        "config": SimulationRunConfig(engine=engine, starting_capital=Decimal(100)),
         "opportunities": opportunities,
         "provider_state": ProviderState(provider_id="book", active_bets_count=0),
     }
@@ -91,18 +90,24 @@ def request(
 
 def test_bonus_simulation_routes_allowed_step_through_required_liquidity_gate() -> None:
     correlation_id = UUID("12345678-1234-5678-1234-567812345678")
-    checker = RecordingLiquidityChecker(WorkflowStageDecision(decision=WorkflowDecision.ALLOW))
+    checker = RecordingLiquidityChecker(
+        WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
+    )
     runner = WorkflowSimulationRunner(liquidity_checker=checker)
 
     result = runner.run(
-        request(SimulationEngine.BONUS, (bonus_request(),), correlation_id=correlation_id)
+        request(
+            SimulationEngine.BONUS, (bonus_request(),), correlation_id=correlation_id
+        )
     )
 
     assert result.correlation_id == correlation_id
     assert len(checker.contexts) == 1
     assert len(result.simulation_result.completed_steps) == 1
-    assert result.simulation_result.current_capital != Decimal("100")
-    assert [transition.stage for transition in result.workflow_results[0].transitions] == [
+    assert result.simulation_result.current_capital != Decimal(100)
+    assert [
+        transition.stage for transition in result.workflow_results[0].transitions
+    ] == [
         WorkflowStage.DATA_AGGREGATION,
         WorkflowStage.ENGINE_PREPARATION,
         WorkflowStage.CALCULATION,
@@ -130,7 +135,10 @@ def test_sports_capital_simulation_uses_concrete_engine() -> None:
         request(SimulationEngine.SPORTS_CAPITAL, (sports_request(),))
     )
 
-    assert result.simulation_result.evaluations[0].strategy_result.strategy == "two_way_arbitrage"
+    assert (
+        result.simulation_result.evaluations[0].strategy_result.strategy
+        == "two_way_arbitrage"
+    )
     assert result.workflow_results[0].mode.value == "simulation"
 
 
@@ -142,9 +150,9 @@ def test_risk_rejection_stops_before_initial_top_up_or_virtual_capital_change() 
             (bonus_request(),),
             config=SimulationRunConfig(
                 engine=SimulationEngine.BONUS,
-                starting_capital=Decimal("100"),
+                starting_capital=Decimal(100),
                 top_up_events=(
-                    SimulationTopUpEvent(after_completed_steps=0, amount=Decimal("10")),
+                    SimulationTopUpEvent(after_completed_steps=0, amount=Decimal(10)),
                 ),
             ),
             provider_state=ProviderState(provider_id="book", active_bets_count=2),
@@ -152,7 +160,7 @@ def test_risk_rejection_stops_before_initial_top_up_or_virtual_capital_change() 
     )
 
     assert result.simulation_result.completed_steps == ()
-    assert result.simulation_result.current_capital == Decimal("100")
+    assert result.simulation_result.current_capital == Decimal(100)
     assert result.workflow_results[0].final_decision is WorkflowDecision.REJECT
     assert all(
         event.event_type.value != "top_up_applied"
@@ -182,16 +190,16 @@ def test_liquidity_recheck_stops_before_initial_top_up_and_is_reportable() -> No
             (bonus_request(),),
             config=SimulationRunConfig(
                 engine=SimulationEngine.BONUS,
-                starting_capital=Decimal("100"),
+                starting_capital=Decimal(100),
                 top_up_events=(
-                    SimulationTopUpEvent(after_completed_steps=0, amount=Decimal("10")),
+                    SimulationTopUpEvent(after_completed_steps=0, amount=Decimal(10)),
                 ),
             ),
         )
     )
 
     assert result.simulation_result.completed_steps == ()
-    assert result.simulation_result.current_capital == Decimal("100")
+    assert result.simulation_result.current_capital == Decimal(100)
     assert result.workflow_results[0].final_decision is WorkflowDecision.RECHECK
     assert runner.last_report is not None
     detailed = SimulationReportBuilder().rebuild(
@@ -219,7 +227,7 @@ def test_stop_request_preserves_first_completed_workflow_step() -> None:
     )
 
     assert len(result.simulation_result.completed_steps) == 1
-    assert result.simulation_result.current_capital != Decimal("100")
+    assert result.simulation_result.current_capital != Decimal(100)
     assert len(result.workflow_results) == 1
 
 
@@ -235,5 +243,5 @@ def test_liquidity_rejection_stops_before_virtual_capital_change() -> None:
     result = runner.run(request(SimulationEngine.BONUS, (bonus_request(),)))
 
     assert result.simulation_result.completed_steps == ()
-    assert result.simulation_result.current_capital == Decimal("100")
+    assert result.simulation_result.current_capital == Decimal(100)
     assert result.workflow_results[0].final_decision is WorkflowDecision.REJECT

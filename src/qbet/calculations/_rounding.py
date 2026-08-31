@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, Decimal
 from itertools import product
-from typing import Iterable
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,7 +20,9 @@ class RoundingPlan:
         return min(self.outcome_values)
 
 
-def surrounding_stake_candidates(value: Decimal, increment: Decimal) -> tuple[Decimal, ...]:
+def surrounding_stake_candidates(
+    value: Decimal, increment: Decimal
+) -> tuple[Decimal, ...]:
     """Return the permitted stake increments immediately below and above value.
 
     A zero floor is preserved so callers can reject it while still considering
@@ -65,7 +67,10 @@ def choose_best_plan(
         candidates,
         key=lambda plan: (
             plan.worst_case_value,
-            -sum(abs(stake - ideal) for stake, ideal in zip(plan.stakes, unrounded_stakes, strict=True)),
+            -sum(
+                abs(stake - ideal)
+                for stake, ideal in zip(plan.stakes, unrounded_stakes, strict=True)
+            ),
             -sum(plan.stakes),
         ),
     )

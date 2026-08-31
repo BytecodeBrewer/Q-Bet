@@ -7,7 +7,11 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from qbet.calculations._rounding import RoundingPlan, choose_best_plan, surrounding_stake_candidates
+from qbet.calculations._rounding import (
+    RoundingPlan,
+    choose_best_plan,
+    surrounding_stake_candidates,
+)
 from qbet.domain.models import DomainModel, PositiveDecimal
 
 
@@ -22,9 +26,9 @@ class FreeBetInput(DomainModel):
     """Inputs required to convert one free bet through an exchange lay bet."""
 
     free_bet_amount: PositiveDecimal
-    back_odds: Decimal = Field(gt=Decimal("1"))
-    lay_odds: Decimal = Field(gt=Decimal("1"))
-    exchange_commission: Decimal = Field(ge=Decimal("0"), lt=Decimal("1"))
+    back_odds: Decimal = Field(gt=Decimal(1))
+    lay_odds: Decimal = Field(gt=Decimal(1))
+    exchange_commission: Decimal = Field(ge=Decimal(0), lt=Decimal(1))
     stake_precision: PositiveDecimal
     stake_return_rule: FreeBetStakeReturn
 
@@ -46,15 +50,24 @@ def calculate_free_bet(inputs: FreeBetInput) -> FreeBetResult:
     """Calculate free-bet conversion using the strongest permitted rounded hedge."""
 
     back_win_return = _back_win_return(inputs)
-    unrounded_lay_stake = back_win_return / (inputs.lay_odds - inputs.exchange_commission)
+    unrounded_lay_stake = back_win_return / (
+        inputs.lay_odds - inputs.exchange_commission
+    )
     plans: list[tuple[RoundingPlan, Decimal]] = []
-    for lay_stake in surrounding_stake_candidates(unrounded_lay_stake, inputs.stake_precision):
-        if lay_stake <= Decimal("0"):
+    for lay_stake in surrounding_stake_candidates(
+        unrounded_lay_stake, inputs.stake_precision
+    ):
+        if lay_stake <= Decimal(0):
             continue
-        lay_liability = lay_stake * (inputs.lay_odds - Decimal("1"))
+        lay_liability = lay_stake * (inputs.lay_odds - Decimal(1))
         back_win_profit_loss = back_win_return - lay_liability
-        lay_win_profit_loss = lay_stake * (Decimal("1") - inputs.exchange_commission)
-        plans.append((RoundingPlan((lay_stake,), (back_win_profit_loss, lay_win_profit_loss)), lay_liability))
+        lay_win_profit_loss = lay_stake * (Decimal(1) - inputs.exchange_commission)
+        plans.append(
+            (
+                RoundingPlan((lay_stake,), (back_win_profit_loss, lay_win_profit_loss)),
+                lay_liability,
+            )
+        )
 
     if not plans:
         raise ValueError("stake_precision rounds the lay stake to zero")
@@ -77,4 +90,4 @@ def calculate_free_bet(inputs: FreeBetInput) -> FreeBetResult:
 def _back_win_return(inputs: FreeBetInput) -> Decimal:
     if inputs.stake_return_rule is FreeBetStakeReturn.STAKE_RETURNED:
         return inputs.free_bet_amount * inputs.back_odds
-    return inputs.free_bet_amount * (inputs.back_odds - Decimal("1"))
+    return inputs.free_bet_amount * (inputs.back_odds - Decimal(1))

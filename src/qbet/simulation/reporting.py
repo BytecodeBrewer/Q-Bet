@@ -18,7 +18,11 @@ from qbet.simulation.models import (
     SimulationRunConfig,
     SimulationStep,
 )
-from qbet.simulation.runner import DeterministicSimulationRunner, SimulationStepGate, SimulationStepObserver
+from qbet.simulation.runner import (
+    DeterministicSimulationRunner,
+    SimulationStepGate,
+    SimulationStepObserver,
+)
 from qbet.storage import SimulationReportStore
 
 
@@ -127,7 +131,10 @@ class ReportingSimulationRunner:
         context.record(
             SimulationLogRecordType.RUN_FINISHED,
             "simulation.runner",
-            {"status": result.status.value, "current_capital": str(result.current_capital)},
+            {
+                "status": result.status.value,
+                "current_capital": str(result.current_capital),
+            },
         )
         self.last_records = context.records
         self.last_report = SimulationReportBuilder().build(

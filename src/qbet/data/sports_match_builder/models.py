@@ -8,7 +8,12 @@ from uuid import UUID
 from pydantic import Field
 
 from qbet.calculations import DutchingTargetMode, FreeBetStakeReturn
-from qbet.domain.models import DomainModel, Identifier, NonNegativeDecimal, PositiveDecimal
+from qbet.domain.models import (
+    DomainModel,
+    Identifier,
+    NonNegativeDecimal,
+    PositiveDecimal,
+)
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 
 
@@ -37,7 +42,9 @@ class QualifyingBetMatchMetadata(DomainModel):
     back_offer_id: Identifier
     lay_offer_id: Identifier
     back_stake: PositiveDecimal
-    exchange_commission: Decimal = Field(ge=Decimal("0"), lt=Decimal("1"), allow_inf_nan=False)
+    exchange_commission: Decimal = Field(
+        ge=Decimal(0), lt=Decimal(1), allow_inf_nan=False
+    )
     stake_precision: PositiveDecimal
     max_lay_liability: NonNegativeDecimal
     minimum_lay_available_stake: PositiveDecimal
@@ -47,7 +54,9 @@ class FreeBetMatchMetadata(DomainModel):
     back_offer_id: Identifier
     lay_offer_id: Identifier
     free_bet_amount: PositiveDecimal
-    exchange_commission: Decimal = Field(ge=Decimal("0"), lt=Decimal("1"), allow_inf_nan=False)
+    exchange_commission: Decimal = Field(
+        ge=Decimal(0), lt=Decimal(1), allow_inf_nan=False
+    )
     stake_precision: PositiveDecimal
     minimum_lay_available_stake: PositiveDecimal
     stake_return_rule: FreeBetStakeReturn
@@ -59,8 +68,12 @@ class TwoWayArbitrageMatchMetadata(DomainModel):
     requested_total_stake: PositiveDecimal
     first_stake_precision: PositiveDecimal
     second_stake_precision: PositiveDecimal
-    first_fee_rate: Decimal = Field(default=Decimal("0"), ge=Decimal("0"), lt=Decimal("1"), allow_inf_nan=False)
-    second_fee_rate: Decimal = Field(default=Decimal("0"), ge=Decimal("0"), lt=Decimal("1"), allow_inf_nan=False)
+    first_fee_rate: Decimal = Field(
+        default=Decimal(0), ge=Decimal(0), lt=Decimal(1), allow_inf_nan=False
+    )
+    second_fee_rate: Decimal = Field(
+        default=Decimal(0), ge=Decimal(0), lt=Decimal(1), allow_inf_nan=False
+    )
 
 
 class DutchingMatchMetadata(DomainModel):
@@ -79,8 +92,13 @@ class DutchingMatchMetadata(DomainModel):
             raise ValueError("stake_precisions must match offer_ids")
         if len(self.fee_rates) != len(self.offer_ids):
             raise ValueError("fee_rates must match offer_ids")
-        if any(rate < Decimal("0") or rate >= Decimal("1") or not rate.is_finite() for rate in self.fee_rates):
-            raise ValueError("fee_rates must be finite values from 0 inclusive to 1 exclusive")
+        if any(
+            rate < Decimal(0) or rate >= Decimal(1) or not rate.is_finite()
+            for rate in self.fee_rates
+        ):
+            raise ValueError(
+                "fee_rates must be finite values from 0 inclusive to 1 exclusive"
+            )
         if self.target_mode is DutchingTargetMode.TOTAL_STAKE:
             if self.total_stake is None or self.target_return is not None:
                 raise ValueError("total_stake mode requires only total_stake")

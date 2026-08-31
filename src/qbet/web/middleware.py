@@ -10,7 +10,6 @@ from time import perf_counter
 
 from django.http import HttpRequest, HttpResponse
 
-
 logger = logging.getLogger("qbet.web.request")
 _correlation_id_pattern = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,35}$")
 

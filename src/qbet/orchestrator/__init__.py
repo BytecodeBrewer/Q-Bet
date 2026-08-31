@@ -11,7 +11,12 @@ from pydantic import Field, model_validator
 
 from qbet.calculations import FreeBetResult, QualifyingBetResult
 from qbet.domain.models import Currency, DomainModel, Identifier, PositiveDecimal
-from qbet.domain.verification import DomainRiskStatus, ProviderState, SportsOpportunityRequest, VerificationResult
+from qbet.domain.verification import (
+    DomainRiskStatus,
+    ProviderState,
+    SportsOpportunityRequest,
+    VerificationResult,
+)
 from qbet.engines import (
     BonusEngineEvaluation,
     BonusEngineRequest,
@@ -44,8 +49,8 @@ class CapitalSnapshot(DomainModel):
 
 
 class OrchestratorConfig(DomainModel):
-    max_risk_score: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
-    min_liquidity_score: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
+    max_risk_score: Decimal = Field(ge=Decimal(0), le=Decimal(1))
+    min_liquidity_score: Decimal = Field(ge=Decimal(0), le=Decimal(1))
 
 
 StrategyRequest: TypeAlias = BonusEngineRequest | SportsCapitalEngineRequest
@@ -58,8 +63,8 @@ class EngineCandidate(DomainModel):
     required_capital: PositiveDecimal
     expected_value: Decimal
     roi: Decimal
-    risk_score: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
-    liquidity_score: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
+    risk_score: Decimal = Field(ge=Decimal(0), le=Decimal(1))
+    liquidity_score: Decimal = Field(ge=Decimal(0), le=Decimal(1))
     capital_lock_up: timedelta
     currency: Currency
     is_sandbox: bool = False
@@ -67,7 +72,7 @@ class EngineCandidate(DomainModel):
     verification_result: VerificationResult | None = None
 
     @model_validator(mode="after")
-    def candidate_is_safe_and_bounded(self) -> "EngineCandidate":
+    def candidate_is_safe_and_bounded(self) -> EngineCandidate:
         if self.capital_lock_up < timedelta(0):
             raise ValueError("capital_lock_up must not be negative")
         if self.engine in {EngineId.BONUS, EngineId.SPORTS_CAPITAL}:
@@ -93,13 +98,15 @@ class CandidateRejection(DomainModel):
 class OrchestrationResult(DomainModel):
     allocations: tuple[Allocation, ...]
     rejections: tuple[CandidateRejection, ...]
-    remaining_capital: Decimal = Field(ge=Decimal("0"))
+    remaining_capital: Decimal = Field(ge=Decimal(0))
 
 
 class EngineAdapter(Protocol):
     """Produces proposal-only candidates for a shared capital snapshot."""
 
-    def evaluate_candidates(self, snapshot: CapitalSnapshot) -> tuple[EngineCandidate, ...]: ...
+    def evaluate_candidates(
+        self, snapshot: CapitalSnapshot
+    ) -> tuple[EngineCandidate, ...]: ...
 
 
 class VerifiedStrategyCandidateAdapter:
@@ -116,12 +123,18 @@ class VerifiedStrategyCandidateAdapter:
         capital_lock_up: timedelta,
         risk_layer: OperationalRiskLayer | None = None,
     ) -> None:
-        if isinstance(request, BonusEngineRequest) != isinstance(evaluation, BonusEngineEvaluation):
+        if isinstance(request, BonusEngineRequest) != isinstance(
+            evaluation, BonusEngineEvaluation
+        ):
             raise ValueError("request and evaluation must belong to the same engine")
-        if isinstance(request, SportsCapitalEngineRequest) != isinstance(evaluation, SportsCapitalEngineEvaluation):
+        if isinstance(request, SportsCapitalEngineRequest) != isinstance(
+            evaluation, SportsCapitalEngineEvaluation
+        ):
             raise ValueError("request and evaluation must belong to the same engine")
         if request.opportunity_id != evaluation.strategy_result.opportunity_id:
-            raise ValueError("request and evaluation must identify the same opportunity")
+            raise ValueError(
+                "request and evaluation must identify the same opportunity"
+            )
         if request.currency != evaluation.strategy_result.currency:
             raise ValueError("request and evaluation must use the same currency")
         self._request = request
@@ -132,15 +145,20 @@ class VerifiedStrategyCandidateAdapter:
         self._capital_lock_up = capital_lock_up
         self._risk_layer = risk_layer or OperationalRiskLayer()
 
-    def evaluate_candidates(self, snapshot: CapitalSnapshot) -> tuple[EngineCandidate, ...]:
-        verification_result = self._risk_layer.verify_opportunity(self._request, self._provider_state)
+    def evaluate_candidates(
+        self, snapshot: CapitalSnapshot
+    ) -> tuple[EngineCandidate, ...]:
+        verification_result = self._risk_layer.verify_opportunity(
+            self._request, self._provider_state
+        )
         return (
             EngineCandidate(
                 id=f"{_engine_id_for(self._evaluation)}:{self._evaluation.strategy_result.opportunity_id}",
                 engine=_engine_id_for(self._evaluation),
                 required_capital=_strategy_required_capital(self._evaluation),
                 expected_value=self._evaluation.worst_case_profit_loss,
-                roi=self._evaluation.worst_case_profit_loss / self._evaluation.strategy_result.stake,
+                roi=self._evaluation.worst_case_profit_loss
+                / self._evaluation.strategy_result.stake,
                 risk_score=self._risk_score,
                 liquidity_score=self._liquidity_score,
                 capital_lock_up=self._capital_lock_up,
@@ -159,7 +177,9 @@ class SandboxEngineAdapter:
             raise ValueError("sandbox adapters require sandbox candidates")
         self._candidate = candidate
 
-    def evaluate_candidates(self, snapshot: CapitalSnapshot) -> tuple[EngineCandidate, ...]:
+    def evaluate_candidates(
+        self, snapshot: CapitalSnapshot
+    ) -> tuple[EngineCandidate, ...]:
         return (self._candidate,)
 
 
@@ -172,7 +192,11 @@ class CapitalOrchestrator:
         config: OrchestratorConfig,
         adapters: tuple[EngineAdapter, ...],
     ) -> OrchestrationResult:
-        candidates = tuple(candidate for adapter in adapters for candidate in adapter.evaluate_candidates(snapshot))
+        candidates = tuple(
+            candidate
+            for adapter in adapters
+            for candidate in adapter.evaluate_candidates(snapshot)
+        )
         ordered = sorted(
             candidates,
             key=lambda candidate: (
@@ -190,9 +214,15 @@ class CapitalOrchestrator:
         for candidate in ordered:
             reason = _rejection_reason(candidate, snapshot, config, remaining)
             if reason is not None:
-                rejections.append(CandidateRejection(candidate=candidate, reason=reason))
+                rejections.append(
+                    CandidateRejection(candidate=candidate, reason=reason)
+                )
                 continue
-            allocations.append(Allocation(candidate=candidate, allocated_capital=candidate.required_capital))
+            allocations.append(
+                Allocation(
+                    candidate=candidate, allocated_capital=candidate.required_capital
+                )
+            )
             remaining -= candidate.required_capital
         return OrchestrationResult(
             allocations=tuple(allocations),
@@ -222,6 +252,8 @@ def _rejection_reason(
     if candidate.required_capital > remaining:
         return RejectionReason.CAPITAL_LIMIT
     return None
+
+
 def _engine_id_for(evaluation: StrategyEvaluation) -> EngineId:
     if isinstance(evaluation, BonusEngineEvaluation):
         return EngineId.BONUS

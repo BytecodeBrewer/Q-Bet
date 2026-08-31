@@ -27,17 +27,22 @@ def test_selects_the_candidate_with_the_best_worst_case_outcome() -> None:
 def test_whole_euro_increment_removes_fractional_stakes() -> None:
     result = calculate_free_bet(
         FreeBetInput(
-            free_bet_amount=Decimal("10"),
-            back_odds=Decimal("3"),
+            free_bet_amount=Decimal(10),
+            back_odds=Decimal(3),
             lay_odds=Decimal("3.2"),
             exchange_commission=Decimal("0.02"),
-            stake_precision=Decimal("1"),
+            stake_precision=Decimal(1),
             stake_return_rule=FreeBetStakeReturn.STAKE_NOT_RETURNED,
         )
     )
 
-    assert result.lay_stake == Decimal("6")
+    assert result.lay_stake == Decimal(6)
 
 
-def test_precision_larger_than_the_ideal_stake_keeps_the_smallest_positive_candidate() -> None:
-    assert surrounding_stake_candidates(Decimal("6.28"), Decimal("100")) == (Decimal("0"), Decimal("100"))
+def test_precision_larger_than_the_ideal_stake_keeps_the_smallest_positive_candidate() -> (
+    None
+):
+    assert surrounding_stake_candidates(Decimal("6.28"), Decimal(100)) == (
+        Decimal(0),
+        Decimal(100),
+    )

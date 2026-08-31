@@ -16,12 +16,12 @@ from qbet.data.models import DataTarget, NormalizedMarketSnapshot, NormalizedOff
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 
 from .models import (
-    DutchingMatchMetadata,
-    FreeBetMatchMetadata,
-    SportsMatchContext,
     BuiltBonusMatch,
     BuiltSportsCapitalMatch,
+    DutchingMatchMetadata,
+    FreeBetMatchMetadata,
     QualifyingBetMatchMetadata,
+    SportsMatchContext,
     TwoWayArbitrageMatchMetadata,
 )
 
@@ -31,7 +31,9 @@ def build_qualifying_bet_match(
     metadata: QualifyingBetMatchMetadata,
 ) -> BuiltBonusMatch:
     _require_target(snapshot, DataTarget.BONUS)
-    back_offer, lay_offer = _selected_pair(snapshot, metadata.back_offer_id, metadata.lay_offer_id)
+    back_offer, lay_offer = _selected_pair(
+        snapshot, metadata.back_offer_id, metadata.lay_offer_id
+    )
     _require_available_stake(back_offer, metadata.back_stake)
     _require_available_stake(lay_offer, metadata.minimum_lay_available_stake)
     request = BonusEngineRequest(
@@ -55,7 +57,9 @@ def build_free_bet_match(
     metadata: FreeBetMatchMetadata,
 ) -> BuiltBonusMatch:
     _require_target(snapshot, DataTarget.BONUS)
-    back_offer, lay_offer = _selected_pair(snapshot, metadata.back_offer_id, metadata.lay_offer_id)
+    back_offer, lay_offer = _selected_pair(
+        snapshot, metadata.back_offer_id, metadata.lay_offer_id
+    )
     _require_available_stake(back_offer, metadata.free_bet_amount)
     _require_available_stake(lay_offer, metadata.minimum_lay_available_stake)
     request = BonusEngineRequest(
@@ -79,14 +83,20 @@ def build_two_way_arbitrage_match(
     metadata: TwoWayArbitrageMatchMetadata,
 ) -> BuiltSportsCapitalMatch:
     _require_target(snapshot, DataTarget.SPORTS_CAPITAL)
-    first_offer, second_offer = _selected_pair(snapshot, metadata.first_offer_id, metadata.second_offer_id)
+    first_offer, second_offer = _selected_pair(
+        snapshot, metadata.first_offer_id, metadata.second_offer_id
+    )
     _require_available_stake(first_offer, metadata.requested_total_stake)
     _require_available_stake(second_offer, metadata.requested_total_stake)
     request = SportsCapitalEngineRequest(
         opportunity_id=snapshot.id,
         inputs=TwoWayArbitrageInput(
-            first_offer=_arbitrage_offer(first_offer, metadata.first_stake_precision, metadata.first_fee_rate),
-            second_offer=_arbitrage_offer(second_offer, metadata.second_stake_precision, metadata.second_fee_rate),
+            first_offer=_arbitrage_offer(
+                first_offer, metadata.first_stake_precision, metadata.first_fee_rate
+            ),
+            second_offer=_arbitrage_offer(
+                second_offer, metadata.second_stake_precision, metadata.second_fee_rate
+            ),
             requested_total_stake=metadata.requested_total_stake,
         ),
         currency=first_offer.currency,
@@ -100,7 +110,9 @@ def build_dutching_match(
     metadata: DutchingMatchMetadata,
 ) -> BuiltSportsCapitalMatch:
     _require_target(snapshot, DataTarget.SPORTS_CAPITAL)
-    offers = tuple(_offer_by_id(snapshot, identifier) for identifier in metadata.offer_ids)
+    offers = tuple(
+        _offer_by_id(snapshot, identifier) for identifier in metadata.offer_ids
+    )
     _require_distinct_outcomes(offers)
     _require_consistent_currency(offers)
     for offer in offers:
@@ -114,7 +126,9 @@ def build_dutching_match(
             fee_rate=fee_rate,
             currency=offer.currency,
         )
-        for offer, precision, fee_rate in zip(offers, metadata.stake_precisions, metadata.fee_rates, strict=True)
+        for offer, precision, fee_rate in zip(
+            offers, metadata.stake_precisions, metadata.fee_rates, strict=True
+        )
     )
     request = SportsCapitalEngineRequest(
         opportunity_id=snapshot.id,
@@ -161,7 +175,9 @@ def _selected_pair(
     return first_offer, second_offer
 
 
-def _offer_by_id(snapshot: NormalizedMarketSnapshot, identifier: str) -> NormalizedOffer:
+def _offer_by_id(
+    snapshot: NormalizedMarketSnapshot, identifier: str
+) -> NormalizedOffer:
     try:
         return next(offer for offer in snapshot.offers if offer.id == identifier)
     except StopIteration as error:
@@ -183,7 +199,9 @@ def _require_available_stake(offer: NormalizedOffer, required_stake: Decimal) ->
         raise ValueError(f"offer {offer.id} has insufficient available stake")
 
 
-def _arbitrage_offer(offer: NormalizedOffer, stake_precision: Decimal, fee_rate: Decimal) -> ArbitrageOffer:
+def _arbitrage_offer(
+    offer: NormalizedOffer, stake_precision: Decimal, fee_rate: Decimal
+) -> ArbitrageOffer:
     return ArbitrageOffer(
         outcome=offer.selection,
         odds=offer.odds,

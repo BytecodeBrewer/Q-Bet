@@ -53,7 +53,7 @@ class NormalizedOffer(DomainModel):
     id: Identifier
     market_id: Identifier
     selection: Identifier
-    odds: Decimal = Field(gt=Decimal("1"), allow_inf_nan=False)
+    odds: Decimal = Field(gt=Decimal(1), allow_inf_nan=False)
     available_stake: NonNegativeDecimal = Field(allow_inf_nan=False)
     currency: Currency
     availability: OfferAvailability = OfferAvailability.AVAILABLE
@@ -90,21 +90,24 @@ class NormalizedMarketSnapshot(DomainModel):
         return value
 
     @model_validator(mode="after")
-    def offers_belong_to_snapshot_market(self) -> "NormalizedMarketSnapshot":
+    def offers_belong_to_snapshot_market(self) -> NormalizedMarketSnapshot:
         if any(offer.market_id != self.market_id for offer in self.offers):
             raise ValueError("offers must belong to the snapshot market_id")
         if len({offer.id for offer in self.offers}) != len(self.offers):
             raise ValueError("offers must have distinct identifiers")
         return self
 
-    def require_ready_for_preparation(self) -> "NormalizedMarketSnapshot":
+    def require_ready_for_preparation(self) -> NormalizedMarketSnapshot:
         """Reject stale, partial, or suspended data before a preparation stage."""
 
         if self.freshness is not FreshnessStatus.FRESH:
             raise ValueError("market snapshot must be fresh for preparation")
         if self.completeness is not CompletenessStatus.COMPLETE:
             raise ValueError("market snapshot must be complete for preparation")
-        if any(offer.availability is not OfferAvailability.AVAILABLE for offer in self.offers):
+        if any(
+            offer.availability is not OfferAvailability.AVAILABLE
+            for offer in self.offers
+        ):
             raise ValueError("market snapshot contains unavailable offers")
         return self
 

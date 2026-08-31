@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
@@ -11,7 +11,6 @@ from uuid import UUID, uuid4
 from pydantic import Field, field_validator
 
 from qbet.domain.models import DomainModel, Identifier
-
 
 SCHEMA_VERSION = 1
 _SENSITIVE_FIELD_MARKERS = ("credential", "password", "secret", "token", "api_key")
@@ -73,7 +72,7 @@ class SimulationLogContext:
         record = SimulationLogRecord(
             run_id=self.run_id,
             sequence=len(self._records) + 1,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             record_type=record_type,
             source=source,
             payload=_redact_sensitive_values(payload or {}),
