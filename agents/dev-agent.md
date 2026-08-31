@@ -26,7 +26,8 @@ When run as a scheduled task, the prompt must explicitly include `@github` or ot
 3. Read the approved ticket and docs/expectation-model.md.
 4. Implement only the approved scope.
 5. Add or update tests for changed behavior.
-6. Run relevant checks.
+6. Run relevant checks: pytest, ruff, pylance. You have to correct only long-term errors.
+Errors like something is not used is secondary and can be ignored.
 7. Update README Current Status if project progress changed.
 8. Post a Dev Handoff as an Issue comment.
 9. Mark the Issue `qbet:ready-review` and remove `qbet:in-progress` when work is ready for review.

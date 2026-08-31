@@ -27,6 +27,11 @@ from .runner import DeterministicSimulationRunner, SimulationRunner
 
 if TYPE_CHECKING:
     from .reporting import ReportingSimulationRunner
+    from .workflow import (
+        WorkflowSimulationRequest,
+        WorkflowSimulationResult,
+        WorkflowSimulationRunner,
+    )
 
 
 __all__ = [

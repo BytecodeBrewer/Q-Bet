@@ -5,6 +5,7 @@ from uuid import UUID
 import pytest
 
 from qbet.calculations import (
+    DutchingInput,
     DutchingTargetMode,
     FreeBetInput,
     FreeBetStakeReturn,
@@ -70,7 +71,7 @@ def snapshot(
         "offers": offers,
     }
     values.update(changes)
-    return NormalizedMarketSnapshot(**values)
+    return NormalizedMarketSnapshot.model_validate(values)
 
 
 def test_build_qualifying_bet_match_preserves_context_and_is_deterministic() -> None:
@@ -164,6 +165,7 @@ def test_build_dutching_match_supports_exhaustive_multi_outcome_contract() -> No
 
     prepared = build_dutching_match(value, metadata)
 
+    assert isinstance(prepared.request.inputs, DutchingInput)
     assert prepared.request.inputs.outcomes_are_exhaustive is True
     assert len(prepared.request.execution_offer_ids) == 3
 

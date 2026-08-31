@@ -20,7 +20,7 @@ def make_offer(**overrides: object) -> ArbitrageOffer:
         "currency": "EUR",
     }
     values.update(overrides)
-    return ArbitrageOffer(**values)
+    return ArbitrageOffer.model_validate(values)
 
 
 def test_calculates_a_profitable_two_way_arbitrage() -> None:
@@ -133,7 +133,7 @@ def test_rejects_a_plan_that_exceeds_available_liquidity() -> None:
     ],
 )
 def test_rejects_invalid_offer_inputs(field: str, value: Decimal) -> None:
-    values = {"outcome": "home"}
+    values: dict[str, object] = {"outcome": "home"}
     values[field] = value
 
     with pytest.raises(ValidationError):

@@ -194,7 +194,23 @@ class WorkflowSimulationRunner:
     @staticmethod
     def _adapter_for(request: WorkflowSimulationRequest) -> SimulationEngineAdapter:
         if request.config.engine.value == "bonus":
-            return BonusSimulationAdapter(tuple(request.opportunities))
+            requests = tuple(
+                opportunity
+                for opportunity in request.opportunities
+                if isinstance(opportunity, BonusEngineRequest)
+            )
+            if len(requests) != len(request.opportunities):
+                raise ValueError("bonus simulations require BonusEngineRequest opportunities")
+            return BonusSimulationAdapter(requests)
         if request.config.engine.value == "sports_capital":
-            return SportsCapitalSimulationAdapter(tuple(request.opportunities))
+            requests = tuple(
+                opportunity
+                for opportunity in request.opportunities
+                if isinstance(opportunity, SportsCapitalEngineRequest)
+            )
+            if len(requests) != len(request.opportunities):
+                raise ValueError(
+                    "sports capital simulations require SportsCapitalEngineRequest opportunities"
+                )
+            return SportsCapitalSimulationAdapter(requests)
         raise ValueError("workflow simulation only supports concrete v1 engines")
