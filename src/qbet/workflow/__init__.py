@@ -7,6 +7,7 @@ from .models import (
     WorkflowStage,
     WorkflowStageDecision,
     WorkflowTransition,
+    WorkflowTransitionKind,
 )
 from .orchestrator import (
     StaticLiquidityChecker,
@@ -32,4 +33,5 @@ __all__ = [
     "WorkflowStageDecision",
     "WorkflowStageHandler",
     "WorkflowTransition",
+    "WorkflowTransitionKind",
 ]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from uuid import UUID
 
 from qbet.layers import SimulationLogContext, SimulationLogRecordType
 from qbet.workflow.models import (
@@ -11,6 +12,7 @@ from qbet.workflow.models import (
     WorkflowStage,
     WorkflowStageDecision,
     WorkflowTransition,
+    WorkflowTransitionKind,
     new_correlation_id,
 )
 from qbet.workflow.protocol import (
@@ -73,19 +75,32 @@ class WorkflowOrchestrator:
             context = WorkflowContext(
                 request=request, correlation_id=correlation_id, stage=stage
             )
+            request_handler = self._request_handler
+            if request_handler is not None and stage in {
+                WorkflowStage.DOMAIN_RISK,
+                WorkflowStage.LIQUIDITY_CHECK,
+                WorkflowStage.DISPATCH,
+            }:
+                refresh_decision = request_handler.refresh(context)
+                self._record_transition(
+                    transitions,
+                    log,
+                    correlation_id,
+                    stage,
+                    WorkflowTransitionKind.REFRESH,
+                    refresh_decision,
+                )
+                final_decision = refresh_decision.decision
+                if final_decision is not WorkflowDecision.ALLOW:
+                    break
             decision = self._decide(context)
-            transition = WorkflowTransition(
-                sequence=len(transitions) + 1,
-                correlation_id=correlation_id,
-                stage=stage,
-                decision=decision.decision,
-                reason=decision.reason,
-            )
-            transitions.append(transition)
-            log.record(
-                SimulationLogRecordType.WORKFLOW_TRANSITION,
-                "workflow.orchestrator",
-                transition.model_dump(mode="json"),
+            self._record_transition(
+                transitions,
+                log,
+                correlation_id,
+                stage,
+                WorkflowTransitionKind.STAGE,
+                decision,
             )
             final_decision = decision.decision
             if final_decision is not WorkflowDecision.ALLOW:
@@ -96,6 +111,30 @@ class WorkflowOrchestrator:
             final_decision=final_decision,
             transitions=tuple(transitions),
             log_records=log.records,
+        )
+
+    @staticmethod
+    def _record_transition(
+        transitions: list[WorkflowTransition],
+        log: SimulationLogContext,
+        correlation_id: UUID,
+        stage: WorkflowStage,
+        kind: WorkflowTransitionKind,
+        decision: WorkflowStageDecision,
+    ) -> None:
+        transition = WorkflowTransition(
+            sequence=len(transitions) + 1,
+            correlation_id=correlation_id,
+            stage=stage,
+            kind=kind,
+            decision=decision.decision,
+            reason=decision.reason,
+        )
+        transitions.append(transition)
+        log.record(
+            SimulationLogRecordType.WORKFLOW_TRANSITION,
+            "workflow.orchestrator",
+            transition.model_dump(mode="json"),
         )
 
     def _decide(self, context: WorkflowContext) -> WorkflowStageDecision:
