@@ -26,6 +26,7 @@ from qbet.layers import OperationalRiskLayer
 from qbet.workflow.models import (
     WorkflowContext,
     WorkflowDecision,
+    WorkflowMode,
     WorkflowStage,
     WorkflowStageDecision,
 )
@@ -46,6 +47,7 @@ class RejectionReason(StrEnum):
     RISK_LIMIT = "risk_limit"
     LIQUIDITY_LIMIT = "liquidity_limit"
     CAPITAL_LIMIT = "capital_limit"
+    SANDBOX_EXECUTION_PROHIBITED = "sandbox_execution_prohibited"
 
 
 class CapitalSnapshot(DomainModel):
@@ -221,6 +223,8 @@ class LiquidityChecker:
             )
 
         result = self.allocate(self._snapshot, self._config, self._adapters)
+        if context.request.mode is WorkflowMode.EXECUTION:
+            result = self._exclude_sandbox_allocations(result)
         self.last_result = result
         if result.allocations:
             return WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
@@ -237,6 +241,37 @@ class LiquidityChecker:
             else WorkflowDecision.REJECT
         )
         return WorkflowStageDecision(decision=decision, reason=rejection.reason.value)
+
+    def _exclude_sandbox_allocations(
+        self, result: OrchestrationResult
+    ) -> OrchestrationResult:
+        sandbox_allocations = tuple(
+            allocation
+            for allocation in result.allocations
+            if allocation.candidate.is_sandbox
+        )
+        if not sandbox_allocations:
+            return result
+        return OrchestrationResult(
+            allocations=tuple(
+                allocation
+                for allocation in result.allocations
+                if not allocation.candidate.is_sandbox
+            ),
+            rejections=tuple(
+                CandidateRejection(
+                    candidate=allocation.candidate,
+                    reason=RejectionReason.SANDBOX_EXECUTION_PROHIBITED,
+                )
+                for allocation in sandbox_allocations
+            )
+            + result.rejections,
+            remaining_capital=result.remaining_capital
+            + sum(
+                (allocation.allocated_capital for allocation in sandbox_allocations),
+                start=Decimal(0),
+            ),
+        )
 
     def allocate(
         self,
