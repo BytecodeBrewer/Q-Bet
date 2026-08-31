@@ -110,6 +110,40 @@ def test_request_handler_refreshes_controlled_stages_in_order() -> None:
     }
 
 
+def test_request_handler_refreshes_execution_workflow_without_side_effects() -> None:
+    correlation_id = UUID("87654321-4321-8765-4321-876543218765")
+    handler = RecordingRequestHandler({})
+    result = WorkflowOrchestrator(request_handler=handler).process(
+        request(
+            mode=WorkflowMode.EXECUTION,
+            correlation_id=correlation_id,
+            stages=(
+                WorkflowStage.DOMAIN_RISK,
+                WorkflowStage.LIQUIDITY_CHECK,
+                WorkflowStage.DISPATCH,
+            ),
+        )
+    )
+
+    assert result.mode is WorkflowMode.EXECUTION
+    assert [(context.request.mode, context.stage) for context in handler.contexts] == [
+        (WorkflowMode.EXECUTION, WorkflowStage.DOMAIN_RISK),
+        (WorkflowMode.EXECUTION, WorkflowStage.LIQUIDITY_CHECK),
+        (WorkflowMode.EXECUTION, WorkflowStage.DISPATCH),
+    ]
+    assert {context.correlation_id for context in handler.contexts} == {correlation_id}
+    assert [
+        (transition.kind, transition.stage) for transition in result.transitions
+    ] == [
+        (WorkflowTransitionKind.REFRESH, WorkflowStage.DOMAIN_RISK),
+        (WorkflowTransitionKind.STAGE, WorkflowStage.DOMAIN_RISK),
+        (WorkflowTransitionKind.REFRESH, WorkflowStage.LIQUIDITY_CHECK),
+        (WorkflowTransitionKind.STAGE, WorkflowStage.LIQUIDITY_CHECK),
+        (WorkflowTransitionKind.REFRESH, WorkflowStage.DISPATCH),
+        (WorkflowTransitionKind.STAGE, WorkflowStage.DISPATCH),
+    ]
+
+
 @pytest.mark.parametrize(
     ("decision", "reason"),
     [
