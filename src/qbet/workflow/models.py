@@ -30,6 +30,11 @@ class WorkflowDecision(StrEnum):
     RECHECK = "recheck"
 
 
+class WorkflowTransitionKind(StrEnum):
+    STAGE = "stage"
+    REFRESH = "refresh"
+
+
 class WorkflowStageDecision(DomainModel):
     decision: WorkflowDecision
     reason: str | None = None
@@ -78,6 +83,7 @@ class WorkflowTransition(DomainModel):
     sequence: int = Field(gt=0)
     correlation_id: UUID
     stage: WorkflowStage
+    kind: WorkflowTransitionKind = WorkflowTransitionKind.STAGE
     decision: WorkflowDecision
     reason: str | None = None
 
