@@ -109,9 +109,14 @@ class SimulationStep(DomainModel):
         return value
 
     @model_validator(mode="after")
-    def evaluated_steps_use_their_evaluated_capital_change(self) -> "SimulationStep":
-        if self.evaluation is not None and self.capital_change != self.evaluation.worst_case_profit_loss:
-            raise ValueError("evaluated simulation steps must use the evaluated capital change")
+    def evaluated_steps_use_their_evaluated_capital_change(self) -> SimulationStep:
+        if (
+            self.evaluation is not None
+            and self.capital_change != self.evaluation.worst_case_profit_loss
+        ):
+            raise ValueError(
+                "evaluated simulation steps must use the evaluated capital change"
+            )
         return self
 
 
@@ -123,7 +128,7 @@ class SimulationContext(DomainModel):
     completed_step_count: int = Field(ge=0)
     current_capital: NonNegativeDecimal
     elapsed_duration: timedelta
-    progress: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
+    progress: Decimal = Field(ge=Decimal(0), le=Decimal(1))
 
 
 class SimulationEvent(DomainModel):
@@ -147,5 +152,5 @@ class SimulationResult(DomainModel):
     evaluations: tuple[SimulationEvaluation, ...] = ()
     current_capital: NonNegativeDecimal
     elapsed_duration: timedelta
-    progress: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
+    progress: Decimal = Field(ge=Decimal(0), le=Decimal(1))
     events: tuple[SimulationEvent, ...]

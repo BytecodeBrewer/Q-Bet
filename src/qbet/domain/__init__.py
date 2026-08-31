@@ -3,8 +3,8 @@
 from .models import (
     Event,
     ExecutionPlan,
-    ExecutionStep,
     ExecutionStatus,
+    ExecutionStep,
     Market,
     Offer,
     OfferSide,
@@ -15,8 +15,8 @@ from .models import (
 __all__ = [
     "Event",
     "ExecutionPlan",
-    "ExecutionStep",
     "ExecutionStatus",
+    "ExecutionStep",
     "Market",
     "Offer",
     "OfferSide",

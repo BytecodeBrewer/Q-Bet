@@ -8,8 +8,18 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from qbet.calculations._rounding import RoundingPlan, choose_best_plan, stake_combinations
-from qbet.domain.models import Currency, DomainModel, Identifier, NonNegativeDecimal, PositiveDecimal
+from qbet.calculations._rounding import (
+    RoundingPlan,
+    choose_best_plan,
+    stake_combinations,
+)
+from qbet.domain.models import (
+    Currency,
+    DomainModel,
+    Identifier,
+    NonNegativeDecimal,
+    PositiveDecimal,
+)
 
 
 class DutchingTargetMode(StrEnum):
@@ -23,15 +33,15 @@ class DutchingOffer(DomainModel):
     """One back offer for a mutually exclusive dutching outcome."""
 
     outcome: Identifier
-    odds: Decimal = Field(gt=Decimal("1"))
+    odds: Decimal = Field(gt=Decimal(1))
     available_liquidity: NonNegativeDecimal
     stake_precision: PositiveDecimal
-    fee_rate: Decimal = Field(default=Decimal("0"), ge=Decimal("0"), lt=Decimal("1"))
+    fee_rate: Decimal = Field(default=Decimal(0), ge=Decimal(0), lt=Decimal(1))
     currency: Currency
 
     @property
     def effective_odds(self) -> Decimal:
-        return self.odds * (Decimal("1") - self.fee_rate)
+        return self.odds * (Decimal(1) - self.fee_rate)
 
 
 class DutchingInput(DomainModel):
@@ -45,7 +55,7 @@ class DutchingInput(DomainModel):
     outcomes_are_exhaustive: Literal[True]
 
     @model_validator(mode="after")
-    def validates_target_and_offers(self) -> "DutchingInput":
+    def validates_target_and_offers(self) -> DutchingInput:
         outcomes = tuple(offer.outcome for offer in self.offers)
         if len(set(outcomes)) != len(outcomes):
             raise ValueError("dutching offers must have distinct outcomes")
@@ -87,7 +97,7 @@ def calculate_dutching(inputs: DutchingInput) -> DutchingResult:
     """Calculate the best legal precision-rounded dutching allocation."""
 
     effective_odds = tuple(offer.effective_odds for offer in inputs.offers)
-    inverse_odds_sum = sum((Decimal("1") / odds for odds in effective_odds), Decimal("0"))
+    inverse_odds_sum = sum((Decimal(1) / odds for odds in effective_odds), Decimal(0))
     if inputs.target_mode == DutchingTargetMode.TOTAL_STAKE:
         requested_total_stake = inputs.total_stake
         assert requested_total_stake is not None
@@ -99,30 +109,45 @@ def calculate_dutching(inputs: DutchingInput) -> DutchingResult:
     assert target_return is not None
     unrounded_stakes = tuple(target_return / odds for odds in effective_odds)
     plans: list[RoundingPlan] = []
-    for stakes in stake_combinations(unrounded_stakes, tuple(offer.stake_precision for offer in inputs.offers)):
-        total_stake = sum(stakes, Decimal("0"))
-        outcome_returns = tuple(stake * odds for stake, odds in zip(stakes, effective_odds, strict=True))
-        if any(stake <= Decimal("0") for stake in stakes):
+    for stakes in stake_combinations(
+        unrounded_stakes, tuple(offer.stake_precision for offer in inputs.offers)
+    ):
+        total_stake = sum(stakes, Decimal(0))
+        outcome_returns = tuple(
+            stake * odds for stake, odds in zip(stakes, effective_odds, strict=True)
+        )
+        if any(stake <= Decimal(0) for stake in stakes):
             continue
-        if any(stake > offer.available_liquidity for stake, offer in zip(stakes, inputs.offers, strict=True)):
+        if any(
+            stake > offer.available_liquidity
+            for stake, offer in zip(stakes, inputs.offers, strict=True)
+        ):
             continue
         if requested_total_stake is not None and total_stake > requested_total_stake:
             continue
-        if inputs.target_mode == DutchingTargetMode.TARGET_RETURN and min(outcome_returns) < target_return:
+        if (
+            inputs.target_mode == DutchingTargetMode.TARGET_RETURN
+            and min(outcome_returns) < target_return
+        ):
             continue
         plans.append(
             RoundingPlan(
                 stakes=stakes,
-                outcome_values=tuple(outcome_return - total_stake for outcome_return in outcome_returns),
+                outcome_values=tuple(
+                    outcome_return - total_stake for outcome_return in outcome_returns
+                ),
             )
         )
 
     if not plans:
-        raise ValueError("no rounded dutching plan fits target, stake, and liquidity limits")
+        raise ValueError(
+            "no rounded dutching plan fits target, stake, and liquidity limits"
+        )
     best_plan = choose_best_plan(plans, unrounded_stakes)
-    total_stake = sum(best_plan.stakes, Decimal("0"))
+    total_stake = sum(best_plan.stakes, Decimal(0))
     outcome_returns = tuple(
-        stake * odds for stake, odds in zip(best_plan.stakes, effective_odds, strict=True)
+        stake * odds
+        for stake, odds in zip(best_plan.stakes, effective_odds, strict=True)
     )
     if requested_total_stake is not None:
         rounding_impact = requested_total_stake - total_stake
@@ -153,5 +178,5 @@ def calculate_dutching(inputs: DutchingInput) -> DutchingResult:
         total_stake=total_stake,
         rounding_impact=rounding_impact,
         worst_case_profit_loss=best_plan.worst_case_value,
-        is_profitable=best_plan.worst_case_value >= Decimal("0"),
+        is_profitable=best_plan.worst_case_value >= Decimal(0),
     )

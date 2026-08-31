@@ -6,10 +6,15 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 14 - Workflow orchestration contracts ready for review**:
-Q-Bet has the expectation model, agent workflow docs, typed domain models, and tested deterministic calculators for qualifying bets, free bets, two-way arbitrage, dutching, and stake rounding. `BonusEngine` and `SportsCapitalEngine` already produce approval-only execution plans. The current legacy `CapitalOrchestrator` checks provider state and ranks proposals by EV, ROI, risk, liquidity, capital lock-up, and available capital; this should evolve toward the `LiquidityChecker` role from the pipeline architecture. Operational risk checks, the deterministic simulation flow, compact reports, selected detail rebuilding, and local SQLite report history are in place. Next up: provider-state persistence, workflow pipeline implementation, data aggregation, Playwright/API adapters, bank connector, Supabase/CI/CD, richer GUI, and real execution adapters. Progress is real; finished product is still loading, please do not shake the machine.
+**Stage 17 - Workflow simulation, provider-state persistence, and typed sports data preparation accepted**:
 
-Update this section after every accepted ticket. It should always say where the project really is.
+Q-Bet has the core of the first sports workflow in place. The agent workflow is documented, `BonusEngine` and `SportsCapitalEngine` are separated, and the main sports strategies are covered by deterministic calculation tests. This includes promotional matched betting, free bets, two-way arbitrage, dutching, stake optimization, rounding, fees, commission, liability, and the first operational risk checks.
+
+The pipeline is taking shape from intake to simulation. Normalized market-data contracts define collected provider data, and the Sports Match Builder now validates typed bookmaker BACK/exchange LAY pairs from distinct providers plus exhaustive Dutching snapshot coverage before creating engine requests. From there, the engines calculate strategy results, domain risk can reject or recheck opportunities, and the legacy `CapitalOrchestrator` still handles proposal ranking and capital allocation while it moves toward the future `LiquidityChecker` role.
+
+The strongest end-to-end path today is simulation: evaluated sports opportunities can move through workflow transitions, risk checks, liquidity decisions, virtual-capital updates, reporting, and SQLite-backed report history without touching real execution. Provider state also has a typed SQLite persistence path, which gives the local version a practical bridge toward Supabase/PostgreSQL later.
+
+The main gaps against the expectation model are now easy to name: real Playwright/API collectors, `RequestHandler` refresh checks, the `LiquidityChecker` refactor, bank connectivity, GUI monitoring, CI/CD, and controlled real execution adapters. The math layer is solid, the preparation and simulation layers are becoming connected, and the remaining work is mostly about turning the pipeline from tested internal flow into usable product flow.
 
 ## Local Web Setup
 

@@ -18,7 +18,11 @@ from qbet.simulation.models import (
     SimulationRunConfig,
     SimulationStep,
 )
-from qbet.simulation.runner import DeterministicSimulationRunner, SimulationStepObserver
+from qbet.simulation.runner import (
+    DeterministicSimulationRunner,
+    SimulationStepGate,
+    SimulationStepObserver,
+)
 from qbet.storage import SimulationReportStore
 
 
@@ -40,9 +44,11 @@ class ReportingSimulationRunner:
         steps: Iterable[SimulationStep],
         *,
         on_step_completed: SimulationStepObserver | None = None,
+        on_step_ready: SimulationStepGate | None = None,
+        log_context: SimulationLogContext | None = None,
     ) -> SimulationResult:
         ordered_steps = tuple(steps)
-        context = SimulationLogContext(on_record=self._append_record)
+        context = log_context or SimulationLogContext(on_record=self._append_record)
         context.record(
             SimulationLogRecordType.RAW_INPUT,
             "simulation.config",
@@ -104,6 +110,7 @@ class ReportingSimulationRunner:
                 ordered_steps,
                 on_step_completed=on_step_completed,
                 on_step_applied=observe_step_applied,
+                on_step_ready=on_step_ready,
                 on_event=observe_event,
             )
         except Exception as error:
@@ -124,7 +131,10 @@ class ReportingSimulationRunner:
         context.record(
             SimulationLogRecordType.RUN_FINISHED,
             "simulation.runner",
-            {"status": result.status.value, "current_capital": str(result.current_capital)},
+            {
+                "status": result.status.value,
+                "current_capital": str(result.current_capital),
+            },
         )
         self.last_records = context.records
         self.last_report = SimulationReportBuilder().build(

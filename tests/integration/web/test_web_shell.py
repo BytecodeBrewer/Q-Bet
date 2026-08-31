@@ -28,7 +28,9 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok", "service": "q-bet-web"})
 
-    def test_home_renders_static_engine_statuses_without_domain_calculations(self) -> None:
+    def test_home_renders_static_engine_statuses_without_domain_calculations(
+        self,
+    ) -> None:
         response = self.client.get("/")
 
         self.assertContains(response, "Q-Bet")
@@ -39,16 +41,22 @@ class WebShellSmokeTests(SimpleTestCase):
     def test_account_boundary_requires_django_authentication(self) -> None:
         response = self.client.get("/account/")
 
-        self.assertRedirects(response, "/accounts/login/?next=/account/", fetch_redirect_response=False)
+        self.assertRedirects(
+            response, "/accounts/login/?next=/account/", fetch_redirect_response=False
+        )
 
     def test_security_and_csrf_middleware_are_enabled(self) -> None:
-        self.assertIn("django.middleware.security.SecurityMiddleware", settings.MIDDLEWARE)
+        self.assertIn(
+            "django.middleware.security.SecurityMiddleware", settings.MIDDLEWARE
+        )
         self.assertIn("django.middleware.csrf.CsrfViewMiddleware", settings.MIDDLEWARE)
 
         response = self.client.get("/accounts/login/")
         self.assertContains(response, "csrfmiddlewaretoken")
 
-    def test_correlation_id_is_propagated_and_log_excludes_secret_bearing_data(self) -> None:
+    def test_correlation_id_is_propagated_and_log_excludes_secret_bearing_data(
+        self,
+    ) -> None:
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
         handler.setFormatter(SafeRequestJSONFormatter())

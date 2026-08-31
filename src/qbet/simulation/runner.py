@@ -18,10 +18,10 @@ from qbet.simulation.models import (
     SimulationStep,
 )
 
-
 SimulationStepObserver = Callable[[SimulationContext], None]
 SimulationStepAppliedObserver = Callable[[SimulationContext], None]
 SimulationEventObserver = Callable[[SimulationEvent], None]
+SimulationStepGate = Callable[[SimulationStep], bool]
 
 
 class SimulationRunner(Protocol):
@@ -38,6 +38,7 @@ class SimulationRunner(Protocol):
         *,
         on_step_completed: SimulationStepObserver | None = None,
         on_step_applied: SimulationStepAppliedObserver | None = None,
+        on_step_ready: SimulationStepGate | None = None,
         on_event: SimulationEventObserver | None = None,
     ) -> SimulationResult:
         """Run deterministic steps synchronously and return an immutable result."""
@@ -51,9 +52,9 @@ class DeterministicSimulationRunner:
         self._stop_requested = False
         self._status = SimulationStatus.PENDING
         self._completed_steps: tuple[SimulationStep, ...] = ()
-        self._current_capital = Decimal("0")
+        self._current_capital = Decimal(0)
         self._elapsed_duration = timedelta(0)
-        self._progress = Decimal("0")
+        self._progress = Decimal(0)
 
     @property
     def status(self) -> SimulationStatus:
@@ -87,6 +88,7 @@ class DeterministicSimulationRunner:
         *,
         on_step_completed: SimulationStepObserver | None = None,
         on_step_applied: SimulationStepAppliedObserver | None = None,
+        on_step_ready: SimulationStepGate | None = None,
         on_event: SimulationEventObserver | None = None,
     ) -> SimulationResult:
         """Apply simulation capital changes in order and stop only at safe boundaries."""
@@ -97,7 +99,7 @@ class DeterministicSimulationRunner:
         self._completed_steps = ()
         self._current_capital = Decimal(config.starting_capital)
         self._elapsed_duration = timedelta(0)
-        self._progress = Decimal("0")
+        self._progress = Decimal(0)
         events: list[SimulationEvent] = []
         evaluations: list[SimulationEvaluation] = []
 
@@ -124,12 +126,23 @@ class DeterministicSimulationRunner:
             for top_up in config.top_up_events:
                 if top_up.after_completed_steps == len(self._completed_steps):
                     self._current_capital += top_up.amount
-                    record(SimulationEventType.TOP_UP_APPLIED, top_up_amount=top_up.amount)
+                    record(
+                        SimulationEventType.TOP_UP_APPLIED, top_up_amount=top_up.amount
+                    )
 
         record(SimulationEventType.RUN_STARTED)
-        apply_top_ups()
+        initial_top_ups_applied = False
 
         for step in ordered_steps:
+            if on_step_ready is not None and not on_step_ready(step):
+                self._status = SimulationStatus.STOPPED
+                record(SimulationEventType.RUN_STOPPED, step_id=step.id)
+                break
+
+            if not initial_top_ups_applied:
+                apply_top_ups()
+                initial_top_ups_applied = True
+
             remaining_duration = config.max_duration - self._elapsed_duration
             if step.simulated_duration > remaining_duration:
                 record(SimulationEventType.DURATION_LIMIT_REACHED)
@@ -138,15 +151,19 @@ class DeterministicSimulationRunner:
                 break
 
             next_capital = self._current_capital + step.capital_change
-            if next_capital < Decimal("0"):
-                raise ValueError("simulation step would make simulated capital negative")
+            if next_capital < Decimal(0):
+                raise ValueError(
+                    "simulation step would make simulated capital negative"
+                )
 
             self._current_capital = next_capital
             self._elapsed_duration += step.simulated_duration
             self._completed_steps = (*self._completed_steps, step)
             if step.evaluation is not None:
                 evaluations.append(step.evaluation)
-            self._progress = Decimal(len(self._completed_steps)) / Decimal(len(ordered_steps))
+            self._progress = Decimal(len(self._completed_steps)) / Decimal(
+                len(ordered_steps)
+            )
             record(SimulationEventType.STEP_COMPLETED, step_id=step.id)
             if on_step_applied is not None:
                 on_step_applied(self._context(config))
@@ -160,8 +177,10 @@ class DeterministicSimulationRunner:
                 record(SimulationEventType.RUN_STOPPED)
                 break
         else:
+            if not initial_top_ups_applied:
+                apply_top_ups()
             self._status = SimulationStatus.COMPLETED
-            self._progress = Decimal("1")
+            self._progress = Decimal(1)
             record(SimulationEventType.RUN_COMPLETED)
 
         return SimulationResult(

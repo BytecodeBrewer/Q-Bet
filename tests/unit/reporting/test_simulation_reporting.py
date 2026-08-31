@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from qbet.calculations import QualifyingBetInput, calculate_qualifying_bet
@@ -19,7 +19,7 @@ from qbet.simulation import (
 def config() -> SimulationRunConfig:
     return SimulationRunConfig(
         engine=SimulationEngine.BONUS,
-        starting_capital=Decimal("100"),
+        starting_capital=Decimal(100),
         strategy_id="qualifying_bet",
     )
 
@@ -29,10 +29,10 @@ def evaluated_step() -> SimulationStep:
         QualifyingBetInput(
             back_odds=Decimal("2.5"),
             lay_odds=Decimal("2.6"),
-            back_stake=Decimal("10"),
+            back_stake=Decimal(10),
             exchange_commission=Decimal("0.02"),
             stake_precision=Decimal("0.01"),
-            max_lay_liability=Decimal("100"),
+            max_lay_liability=Decimal(100),
         )
     )
     worst_case = min(
@@ -46,7 +46,7 @@ def evaluated_step() -> SimulationStep:
             stake=calculation.back_stake,
             expected_profit=worst_case,
             currency="EUR",
-            generated_at=datetime(2026, 8, 29, tzinfo=timezone.utc),
+            generated_at=datetime(2026, 8, 29, tzinfo=UTC),
         ),
         calculation_result=calculation,
         worst_case_profit_loss=worst_case,
@@ -107,8 +107,8 @@ def test_default_report_is_compact_but_selected_detail_is_available() -> None:
 def test_stopped_run_keeps_completed_steps_and_a_chronological_warning() -> None:
     runner = ReportingSimulationRunner()
     steps = (
-        SimulationStep(id="first", capital_change=Decimal("5")),
-        SimulationStep(id="second", capital_change=Decimal("5")),
+        SimulationStep(id="first", capital_change=Decimal(5)),
+        SimulationStep(id="second", capital_change=Decimal(5)),
     )
 
     result = runner.run(
@@ -138,21 +138,21 @@ def test_top_up_records_distinct_reconcilable_capital_movements() -> None:
     runner = ReportingSimulationRunner()
     simulation_config = SimulationRunConfig(
         engine=SimulationEngine.BONUS,
-        starting_capital=Decimal("100"),
+        starting_capital=Decimal(100),
         top_up_events=(
-            SimulationTopUpEvent(after_completed_steps=1, amount=Decimal("10")),
+            SimulationTopUpEvent(after_completed_steps=1, amount=Decimal(10)),
         ),
     )
 
     result = runner.run(
         simulation_config,
-        (SimulationStep(id="gain", capital_change=Decimal("5")),),
+        (SimulationStep(id="gain", capital_change=Decimal(5)),),
     )
 
-    assert result.current_capital == Decimal("115")
+    assert result.current_capital == Decimal(115)
     assert runner.last_report is not None
-    assert runner.last_report.top_up_total == Decimal("10")
-    assert runner.last_report.profit_loss == Decimal("5")
+    assert runner.last_report.top_up_total == Decimal(10)
+    assert runner.last_report.profit_loss == Decimal(5)
     transitions = [
         record.payload
         for record in runner.last_records

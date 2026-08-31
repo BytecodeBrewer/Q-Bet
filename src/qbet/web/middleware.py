@@ -10,7 +10,6 @@ from time import perf_counter
 
 from django.http import HttpRequest, HttpResponse
 
-
 logger = logging.getLogger("qbet.web.request")
 _correlation_id_pattern = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,35}$")
 
@@ -29,7 +28,11 @@ class RequestCorrelationMiddleware:
         response = self.get_response(request)
         response["X-Correlation-ID"] = correlation_id
         user = getattr(request, "user", None)
-        user_id = str(user.pk) if getattr(user, "is_authenticated", False) else None
+        user_id = (
+            str(getattr(user, "pk", None))
+            if user is not None and getattr(user, "is_authenticated", False)
+            else None
+        )
         logger.info(
             "request.completed",
             extra={

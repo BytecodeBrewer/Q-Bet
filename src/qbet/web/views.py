@@ -6,7 +6,6 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 
-
 ENGINE_STATUSES = (
     {"name": "Base", "status": "amber", "detail": "Calculation slice in progress"},
     {"name": "Yield", "status": "red", "detail": "Sandbox adapter pending"},
