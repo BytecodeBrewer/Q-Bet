@@ -76,7 +76,7 @@ def snapshot(
 
 def test_build_qualifying_bet_match_preserves_context_and_is_deterministic() -> None:
     value = snapshot(
-        DataTarget.BONUS, (offer("back", "home", "2.4"), offer("lay", "away", "2.5"))
+        DataTarget.BONUS, (offer("back", "home", "2.4"), offer("lay", "home", "2.5"))
     )
     metadata = QualifyingBetMatchMetadata(
         back_offer_id="back",
@@ -103,7 +103,7 @@ def test_build_qualifying_bet_match_preserves_context_and_is_deterministic() -> 
 
 def test_build_free_bet_match_requires_explicit_promotion_rule() -> None:
     value = snapshot(
-        DataTarget.BONUS, (offer("back", "home", "3.0"), offer("lay", "away", "3.2"))
+        DataTarget.BONUS, (offer("back", "home", "3.0"), offer("lay", "home", "3.2"))
     )
     metadata = FreeBetMatchMetadata(
         back_offer_id="back",
@@ -122,6 +122,24 @@ def test_build_free_bet_match_requires_explicit_promotion_rule() -> None:
         prepared.request.inputs.stake_return_rule
         is FreeBetStakeReturn.STAKE_NOT_RETURNED
     )
+
+
+def test_build_free_bet_match_rejects_mismatched_selection() -> None:
+    value = snapshot(
+        DataTarget.BONUS, (offer("back", "home", "3.0"), offer("lay", "away", "3.2"))
+    )
+    metadata = FreeBetMatchMetadata(
+        back_offer_id="back",
+        lay_offer_id="lay",
+        free_bet_amount=Decimal(15),
+        exchange_commission=Decimal("0.02"),
+        stake_precision=Decimal("0.01"),
+        minimum_lay_available_stake=Decimal(10),
+        stake_return_rule=FreeBetStakeReturn.STAKE_NOT_RETURNED,
+    )
+
+    with pytest.raises(ValueError, match="same outcome"):
+        build_free_bet_match(value, metadata)
 
 
 def test_build_two_way_arbitrage_match_creates_existing_engine_request() -> None:
@@ -168,6 +186,28 @@ def test_build_dutching_match_supports_exhaustive_multi_outcome_contract() -> No
     assert isinstance(prepared.request.inputs, DutchingInput)
     assert prepared.request.inputs.outcomes_are_exhaustive is True
     assert len(prepared.request.execution_offer_ids) == 3
+
+
+def test_build_dutching_match_rejects_partial_snapshot_selection() -> None:
+    value = snapshot(
+        DataTarget.SPORTS_CAPITAL,
+        (
+            offer("home", "home", "3.2"),
+            offer("draw", "draw", "3.4"),
+            offer("away", "away", "3.3"),
+        ),
+    )
+    metadata = DutchingMatchMetadata(
+        offer_ids=("home", "away"),
+        target_mode=DutchingTargetMode.TOTAL_STAKE,
+        total_stake=Decimal(30),
+        minimum_available_stake=Decimal(30),
+        stake_precisions=(Decimal("0.01"),) * 2,
+        fee_rates=(Decimal(0),) * 2,
+    )
+
+    with pytest.raises(ValueError, match="cover every snapshot outcome"):
+        build_dutching_match(value, metadata)
 
 
 @pytest.mark.parametrize(
@@ -225,7 +265,7 @@ def test_sports_match_builder_rejects_unready_snapshots(
     changes: dict[str, object], metadata: QualifyingBetMatchMetadata, message: str
 ) -> None:
     values = {
-        "offers": (offer("back", "home", "2.4"), offer("lay", "away", "2.5")),
+        "offers": (offer("back", "home", "2.4"), offer("lay", "home", "2.5")),
         **changes,
     }
     value = snapshot(DataTarget.BONUS, **values)
@@ -239,18 +279,18 @@ def test_sports_match_builder_rejects_incompatible_selection_currency_and_liquid
 ):
     bonus = snapshot(
         DataTarget.BONUS,
-        (offer("back", "home", "2.4", "5"), offer("same", "home", "2.5")),
+        (offer("back", "home", "2.4", "5"), offer("lay", "away", "2.5")),
     )
     metadata = QualifyingBetMatchMetadata(
         back_offer_id="back",
-        lay_offer_id="same",
+        lay_offer_id="lay",
         back_stake=Decimal(10),
         exchange_commission=Decimal("0.02"),
         stake_precision=Decimal("0.01"),
         max_lay_liability=Decimal(100),
         minimum_lay_available_stake=Decimal(10),
     )
-    with pytest.raises(ValueError, match="distinct outcomes"):
+    with pytest.raises(ValueError, match="same outcome"):
         build_qualifying_bet_match(bonus, metadata)
 
     sports = snapshot(

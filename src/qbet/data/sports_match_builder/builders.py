@@ -31,7 +31,7 @@ def build_qualifying_bet_match(
     metadata: QualifyingBetMatchMetadata,
 ) -> BuiltBonusMatch:
     _require_target(snapshot, DataTarget.BONUS)
-    back_offer, lay_offer = _selected_pair(
+    back_offer, lay_offer = _selected_same_outcome_pair(
         snapshot, metadata.back_offer_id, metadata.lay_offer_id
     )
     _require_available_stake(back_offer, metadata.back_stake)
@@ -57,7 +57,7 @@ def build_free_bet_match(
     metadata: FreeBetMatchMetadata,
 ) -> BuiltBonusMatch:
     _require_target(snapshot, DataTarget.BONUS)
-    back_offer, lay_offer = _selected_pair(
+    back_offer, lay_offer = _selected_same_outcome_pair(
         snapshot, metadata.back_offer_id, metadata.lay_offer_id
     )
     _require_available_stake(back_offer, metadata.free_bet_amount)
@@ -114,6 +114,7 @@ def build_dutching_match(
         _offer_by_id(snapshot, identifier) for identifier in metadata.offer_ids
     )
     _require_distinct_outcomes(offers)
+    _require_selected_offers_cover_snapshot(snapshot, offers)
     _require_consistent_currency(offers)
     for offer in offers:
         _require_available_stake(offer, metadata.minimum_available_stake)
@@ -175,6 +176,21 @@ def _selected_pair(
     return first_offer, second_offer
 
 
+def _selected_same_outcome_pair(
+    snapshot: NormalizedMarketSnapshot,
+    first_id: str,
+    second_id: str,
+) -> tuple[NormalizedOffer, NormalizedOffer]:
+    first_offer = _offer_by_id(snapshot, first_id)
+    second_offer = _offer_by_id(snapshot, second_id)
+    if first_offer.id == second_offer.id:
+        raise ValueError("selected offers must use distinct offer records")
+    if first_offer.selection != second_offer.selection:
+        raise ValueError("selected offers must represent the same outcome")
+    _require_consistent_currency((first_offer, second_offer))
+    return first_offer, second_offer
+
+
 def _offer_by_id(
     snapshot: NormalizedMarketSnapshot, identifier: str
 ) -> NormalizedOffer:
@@ -187,6 +203,16 @@ def _offer_by_id(
 def _require_distinct_outcomes(offers: tuple[NormalizedOffer, ...]) -> None:
     if len({offer.selection for offer in offers}) != len(offers):
         raise ValueError("selected offers must represent distinct outcomes")
+
+
+def _require_selected_offers_cover_snapshot(
+    snapshot: NormalizedMarketSnapshot,
+    offers: tuple[NormalizedOffer, ...],
+) -> None:
+    selected_ids = {offer.id for offer in offers}
+    snapshot_ids = {offer.id for offer in snapshot.offers}
+    if selected_ids != snapshot_ids:
+        raise ValueError("dutching selection must cover every snapshot outcome")
 
 
 def _require_consistent_currency(offers: tuple[NormalizedOffer, ...]) -> None:
