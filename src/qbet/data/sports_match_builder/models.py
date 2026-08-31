@@ -85,7 +85,7 @@ class DutchingMatchMetadata(DomainModel):
     stake_precisions: tuple[PositiveDecimal, ...] = Field(min_length=2, max_length=4)
     fee_rates: tuple[Decimal, ...] = Field(min_length=2, max_length=4)
 
-    def model_post_init(self, __context: object) -> None:
+    def model_post_init(self, __context: object, /) -> None:
         if len(set(self.offer_ids)) != len(self.offer_ids):
             raise ValueError("offer_ids must be distinct")
         if len(self.stake_precisions) != len(self.offer_ids):

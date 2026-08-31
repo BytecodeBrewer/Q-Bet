@@ -6,11 +6,11 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 17 - Workflow simulation and provider-state persistence accepted; sports data preparation ready for review**:
+**Stage 17 - Workflow simulation, provider-state persistence, and typed sports data preparation accepted**:
 
 Q-Bet has the core of the first sports workflow in place. The agent workflow is documented, `BonusEngine` and `SportsCapitalEngine` are separated, and the main sports strategies are covered by deterministic calculation tests. This includes promotional matched betting, free bets, two-way arbitrage, dutching, stake optimization, rounding, fees, commission, liability, and the first operational risk checks.
 
-The pipeline is taking shape from intake to simulation. Normalized market-data contracts define what collected provider data must look like, and the current review-ready work adds a Sports Match Builder that turns prepared market snapshots into engine requests. From there, the engines calculate strategy results, domain risk can reject or recheck opportunities, and the legacy `CapitalOrchestrator` still handles proposal ranking and capital allocation while it moves toward the future `LiquidityChecker` role.
+The pipeline is taking shape from intake to simulation. Normalized market-data contracts define collected provider data, and the Sports Match Builder now validates typed bookmaker BACK/exchange LAY pairs from distinct providers plus exhaustive Dutching snapshot coverage before creating engine requests. From there, the engines calculate strategy results, domain risk can reject or recheck opportunities, and the legacy `CapitalOrchestrator` still handles proposal ranking and capital allocation while it moves toward the future `LiquidityChecker` role.
 
 The strongest end-to-end path today is simulation: evaluated sports opportunities can move through workflow transitions, risk checks, liquidity decisions, virtual-capital updates, reporting, and SQLite-backed report history without touching real execution. Provider state also has a typed SQLite persistence path, which gives the local version a practical bridge toward Supabase/PostgreSQL later.
 

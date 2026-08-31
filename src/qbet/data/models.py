@@ -9,7 +9,13 @@ from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 
-from qbet.domain.models import Currency, DomainModel, Identifier, NonNegativeDecimal
+from qbet.domain.models import (
+    Currency,
+    DomainModel,
+    Identifier,
+    NonNegativeDecimal,
+    OfferSide,
+)
 
 
 class DataTarget(StrEnum):
@@ -53,6 +59,8 @@ class NormalizedOffer(DomainModel):
     id: Identifier
     market_id: Identifier
     selection: Identifier
+    provider: Identifier
+    side: OfferSide
     odds: Decimal = Field(gt=Decimal(1), allow_inf_nan=False)
     available_stake: NonNegativeDecimal = Field(allow_inf_nan=False)
     currency: Currency

@@ -19,6 +19,7 @@ from qbet.data import (
     OfferAvailability,
     SourceTransport,
 )
+from qbet.domain import OfferSide
 
 TIMESTAMP = datetime(2026, 8, 31, 9, 0, tzinfo=UTC)
 SOURCE = DataSourceMetadata(
@@ -33,6 +34,8 @@ def offer(identifier: str, selection: str = "home") -> NormalizedOffer:
         id=identifier,
         market_id="market-1",
         selection=selection,
+        provider="book-a",
+        side=OfferSide.BACK,
         odds=Decimal("2.15"),
         available_stake=Decimal(100),
         currency="EUR",
@@ -101,7 +104,7 @@ def test_invalid_or_incomplete_snapshot_fails_before_preparation() -> None:
 
 def test_snapshot_validates_metadata_timestamps_and_market_consistency() -> None:
     with pytest.raises(ValidationError, match="timezone"):
-        snapshot(fetched_at=datetime(2026, 8, 31, 9, 0))
+        snapshot(fetched_at=datetime(2026, 8, 31, 9, 0))  # noqa: DTZ001
 
     with pytest.raises(ValidationError, match="snapshot market_id"):
         snapshot(offers=(offer("other").model_copy(update={"market_id": "market-2"}),))

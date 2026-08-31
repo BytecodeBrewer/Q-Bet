@@ -13,6 +13,7 @@ from qbet.calculations import (
     TwoWayArbitrageInput,
 )
 from qbet.data.models import DataTarget, NormalizedMarketSnapshot, NormalizedOffer
+from qbet.domain import OfferSide
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 
 from .models import (
@@ -31,7 +32,7 @@ def build_qualifying_bet_match(
     metadata: QualifyingBetMatchMetadata,
 ) -> BuiltBonusMatch:
     _require_target(snapshot, DataTarget.BONUS)
-    back_offer, lay_offer = _selected_pair(
+    back_offer, lay_offer = _selected_back_lay_pair(
         snapshot, metadata.back_offer_id, metadata.lay_offer_id
     )
     _require_available_stake(back_offer, metadata.back_stake)
@@ -57,7 +58,7 @@ def build_free_bet_match(
     metadata: FreeBetMatchMetadata,
 ) -> BuiltBonusMatch:
     _require_target(snapshot, DataTarget.BONUS)
-    back_offer, lay_offer = _selected_pair(
+    back_offer, lay_offer = _selected_back_lay_pair(
         snapshot, metadata.back_offer_id, metadata.lay_offer_id
     )
     _require_available_stake(back_offer, metadata.free_bet_amount)
@@ -114,6 +115,7 @@ def build_dutching_match(
         _offer_by_id(snapshot, identifier) for identifier in metadata.offer_ids
     )
     _require_distinct_outcomes(offers)
+    _require_selected_offers_cover_snapshot(snapshot, offers)
     _require_consistent_currency(offers)
     for offer in offers:
         _require_available_stake(offer, metadata.minimum_available_stake)
@@ -175,6 +177,27 @@ def _selected_pair(
     return first_offer, second_offer
 
 
+def _selected_back_lay_pair(
+    snapshot: NormalizedMarketSnapshot,
+    back_offer_id: str,
+    lay_offer_id: str,
+) -> tuple[NormalizedOffer, NormalizedOffer]:
+    back_offer = _offer_by_id(snapshot, back_offer_id)
+    lay_offer = _offer_by_id(snapshot, lay_offer_id)
+    if back_offer.id == lay_offer.id:
+        raise ValueError("selected offers must use distinct offer records")
+    if back_offer.selection != lay_offer.selection:
+        raise ValueError("selected offers must represent the same outcome")
+    if back_offer.side is not OfferSide.BACK or lay_offer.side is not OfferSide.LAY:
+        raise ValueError(
+            "selected offers must be a bookmaker back and exchange lay pair"
+        )
+    if back_offer.provider == lay_offer.provider:
+        raise ValueError("back and lay offers must use distinct providers")
+    _require_consistent_currency((back_offer, lay_offer))
+    return back_offer, lay_offer
+
+
 def _offer_by_id(
     snapshot: NormalizedMarketSnapshot, identifier: str
 ) -> NormalizedOffer:
@@ -187,6 +210,16 @@ def _offer_by_id(
 def _require_distinct_outcomes(offers: tuple[NormalizedOffer, ...]) -> None:
     if len({offer.selection for offer in offers}) != len(offers):
         raise ValueError("selected offers must represent distinct outcomes")
+
+
+def _require_selected_offers_cover_snapshot(
+    snapshot: NormalizedMarketSnapshot,
+    offers: tuple[NormalizedOffer, ...],
+) -> None:
+    selected_ids = {offer.id for offer in offers}
+    snapshot_ids = {offer.id for offer in snapshot.offers}
+    if selected_ids != snapshot_ids:
+        raise ValueError("dutching selection must cover every snapshot outcome")
 
 
 def _require_consistent_currency(offers: tuple[NormalizedOffer, ...]) -> None:
