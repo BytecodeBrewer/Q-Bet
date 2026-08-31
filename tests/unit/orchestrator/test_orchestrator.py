@@ -39,6 +39,8 @@ def candidate(
     risk: str = "0.2",
     liquidity: str = "0.8",
     sandbox: bool = False,
+    currency: str = "EUR",
+    lock_up: timedelta = timedelta(hours=1),
 ) -> EngineCandidate:
     return EngineCandidate(
         id=identifier,
@@ -48,8 +50,8 @@ def candidate(
         roi=Decimal(value) / Decimal(required),
         risk_score=Decimal(risk),
         liquidity_score=Decimal(liquidity),
-        capital_lock_up=timedelta(hours=1),
-        currency="EUR",
+        capital_lock_up=lock_up,
+        currency=currency,
         is_sandbox=sandbox,
     )
 
@@ -305,3 +307,138 @@ def test_concrete_liquidity_checker_rechecks_and_blocks_workflow() -> None:
         checker.last_result.rejections[0].reason
         is RejectionReason.PROVIDER_RECHECK_REQUIRED
     )
+
+
+def test_liquidity_checker_rejects_currency_liquidity_and_capital_limits() -> None:
+    result = LiquidityChecker().allocate(
+        snapshot(),
+        config(),
+        (
+            SandboxEngineAdapter(
+                candidate(
+                    "currency", EngineId.ALPHA, "10", "5", sandbox=True, currency="GBP"
+                )
+            ),
+            SandboxEngineAdapter(
+                candidate(
+                    "liquidity",
+                    EngineId.ALPHA,
+                    "10",
+                    "4",
+                    sandbox=True,
+                    liquidity="0.1",
+                )
+            ),
+            SandboxEngineAdapter(
+                candidate("capital", EngineId.ALPHA, "1001", "3", sandbox=True)
+            ),
+        ),
+    )
+    assert result.allocations == ()
+    assert [rejection.reason for rejection in result.rejections] == [
+        RejectionReason.CURRENCY_MISMATCH,
+        RejectionReason.LIQUIDITY_LIMIT,
+        RejectionReason.CAPITAL_LIMIT,
+    ]
+
+
+def test_execution_workflow_rejects_sandbox_before_dispatch() -> None:
+    checker = LiquidityChecker(
+        snapshot(),
+        config(),
+        (
+            SandboxEngineAdapter(
+                candidate("sandbox", EngineId.ALPHA, "10", "5", sandbox=True)
+            ),
+        ),
+    )
+    result = WorkflowOrchestrator(liquidity_checker=checker).process(
+        WorkflowRequest(
+            id="execution-sandbox",
+            mode=WorkflowMode.EXECUTION,
+            stages=(WorkflowStage.LIQUIDITY_CHECK, WorkflowStage.DISPATCH),
+        )
+    )
+    assert result.final_decision is WorkflowDecision.REJECT
+    assert [transition.stage for transition in result.transitions] == [
+        WorkflowStage.LIQUIDITY_CHECK
+    ]
+    assert checker.last_result is not None
+    assert (
+        checker.last_result.rejections[0].reason
+        is RejectionReason.SANDBOX_EXECUTION_PROHIBITED
+    )
+
+
+def test_liquidity_checker_uses_full_deterministic_tie_break_order() -> None:
+    result = LiquidityChecker().allocate(
+        CapitalSnapshot(available_capital=Decimal(10000), currency="EUR"),
+        config(),
+        (
+            SandboxEngineAdapter(
+                candidate(
+                    "id-b",
+                    EngineId.ALPHA,
+                    "20",
+                    "10",
+                    sandbox=True,
+                    risk="0.2",
+                    liquidity="0.8",
+                    lock_up=timedelta(hours=2),
+                )
+            ),
+            SandboxEngineAdapter(
+                candidate(
+                    "lock",
+                    EngineId.ALPHA,
+                    "20",
+                    "10",
+                    sandbox=True,
+                    risk="0.2",
+                    liquidity="0.8",
+                    lock_up=timedelta(hours=1),
+                )
+            ),
+            SandboxEngineAdapter(
+                candidate(
+                    "liquidity",
+                    EngineId.ALPHA,
+                    "20",
+                    "10",
+                    sandbox=True,
+                    risk="0.2",
+                    liquidity="0.9",
+                )
+            ),
+            SandboxEngineAdapter(
+                candidate("risk", EngineId.ALPHA, "20", "10", sandbox=True, risk="0.1")
+            ),
+            SandboxEngineAdapter(
+                candidate("roi", EngineId.ALPHA, "10", "10", sandbox=True)
+            ),
+            SandboxEngineAdapter(
+                candidate("ev", EngineId.ALPHA, "10", "20", sandbox=True)
+            ),
+            SandboxEngineAdapter(
+                candidate(
+                    "id-a",
+                    EngineId.ALPHA,
+                    "20",
+                    "10",
+                    sandbox=True,
+                    risk="0.2",
+                    liquidity="0.8",
+                    lock_up=timedelta(hours=2),
+                )
+            ),
+        ),
+    )
+    assert [allocation.candidate.id for allocation in result.allocations] == [
+        "ev",
+        "roi",
+        "risk",
+        "liquidity",
+        "lock",
+        "id-a",
+        "id-b",
+    ]
