@@ -1,11 +1,11 @@
-"""Deterministic, proposal-only capital orchestration."""
+"""Deterministic, proposal-only liquidity checking and capital allocation."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import Protocol, TypeAlias
+from typing import Protocol
 
 from pydantic import Field, model_validator
 
@@ -14,7 +14,6 @@ from qbet.domain.models import Currency, DomainModel, Identifier, PositiveDecima
 from qbet.domain.verification import (
     DomainRiskStatus,
     ProviderState,
-    SportsOpportunityRequest,
     VerificationResult,
 )
 from qbet.engines import (
@@ -24,6 +23,12 @@ from qbet.engines import (
     SportsCapitalEngineRequest,
 )
 from qbet.layers import OperationalRiskLayer
+from qbet.workflow.models import (
+    WorkflowContext,
+    WorkflowDecision,
+    WorkflowStage,
+    WorkflowStageDecision,
+)
 
 
 class EngineId(StrEnum):
@@ -53,8 +58,8 @@ class OrchestratorConfig(DomainModel):
     min_liquidity_score: Decimal = Field(ge=Decimal(0), le=Decimal(1))
 
 
-StrategyRequest: TypeAlias = BonusEngineRequest | SportsCapitalEngineRequest
-StrategyEvaluation: TypeAlias = BonusEngineEvaluation | SportsCapitalEngineEvaluation
+type StrategyRequest = BonusEngineRequest | SportsCapitalEngineRequest
+type StrategyEvaluation = BonusEngineEvaluation | SportsCapitalEngineEvaluation
 
 
 class EngineCandidate(DomainModel):
@@ -183,8 +188,55 @@ class SandboxEngineAdapter:
         return (self._candidate,)
 
 
-class CapitalOrchestrator:
-    """Ranks compatible candidates and produces allocations without side effects."""
+class LiquidityChecker:
+    """Ranks proposal-only candidates and exposes a workflow liquidity decision."""
+
+    def __init__(
+        self,
+        snapshot: CapitalSnapshot | None = None,
+        config: OrchestratorConfig | None = None,
+        adapters: tuple[EngineAdapter, ...] | None = None,
+    ) -> None:
+        configured_values = (snapshot, config, adapters)
+        if any(value is not None for value in configured_values) and any(
+            value is None for value in configured_values
+        ):
+            raise ValueError(
+                "snapshot, config, and adapters must be configured together"
+            )
+        self._snapshot = snapshot
+        self._config = config
+        self._adapters = adapters
+        self.last_result: OrchestrationResult | None = None
+
+    def check(self, context: WorkflowContext) -> WorkflowStageDecision:
+        """Run the configured proposal-only allocation at the workflow gate."""
+        if context.stage is not WorkflowStage.LIQUIDITY_CHECK:
+            raise ValueError(
+                "liquidity checks require the liquidity_check workflow stage"
+            )
+        if self._snapshot is None or self._config is None or self._adapters is None:
+            raise ValueError(
+                "workflow liquidity checks require configured capital inputs"
+            )
+
+        result = self.allocate(self._snapshot, self._config, self._adapters)
+        self.last_result = result
+        if result.allocations:
+            return WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
+        if not result.rejections:
+            return WorkflowStageDecision(
+                decision=WorkflowDecision.REJECT,
+                reason="no eligible liquidity candidates",
+            )
+
+        rejection = result.rejections[0]
+        decision = (
+            WorkflowDecision.RECHECK
+            if rejection.reason is RejectionReason.PROVIDER_RECHECK_REQUIRED
+            else WorkflowDecision.REJECT
+        )
+        return WorkflowStageDecision(decision=decision, reason=rejection.reason.value)
 
     def allocate(
         self,
