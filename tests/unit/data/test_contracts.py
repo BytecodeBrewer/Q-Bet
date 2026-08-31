@@ -63,14 +63,6 @@ def request(target: DataTarget, correlation_id: UUID) -> DataCollectionRequest:
     return DataCollectionRequest(correlation_id=correlation_id, target=target, source=SOURCE)
 
 
-def accepts_collector(_: DataCollector) -> None:
-    pass
-
-
-def accepts_api_adapter(_: ApiAdapter) -> None:
-    pass
-
-
 def test_valid_snapshot_is_ready_for_engine_specific_preparation() -> None:
     value = snapshot()
 
@@ -82,6 +74,10 @@ def test_valid_snapshot_is_ready_for_engine_specific_preparation() -> None:
 def test_invalid_or_incomplete_snapshot_fails_before_preparation() -> None:
     with pytest.raises(ValidationError, match="greater than 1"):
         NormalizedOffer.model_validate({**offer("invalid", selection="away").model_dump(), "odds": Decimal("1")})
+
+    stale = snapshot(freshness=FreshnessStatus.STALE)
+    with pytest.raises(ValueError, match="fresh"):
+        stale.require_ready_for_preparation()
 
     partial = snapshot(completeness=CompletenessStatus.PARTIAL)
     with pytest.raises(ValueError, match="complete"):
@@ -125,7 +121,7 @@ def test_deterministic_source_supplies_bonus_and_sports_capital_fixtures() -> No
 def test_fake_source_implements_both_transport_protocols_without_network() -> None:
     source = DeterministicInMemoryDataSource((snapshot(),))
 
-    accepts_collector(source)
-    accepts_api_adapter(source)
+    assert isinstance(source, DataCollector)
+    assert isinstance(source, ApiAdapter)
     with pytest.raises(KeyError, match="no deterministic snapshot"):
         source.collect(request(DataTarget.SPORTS_CAPITAL, UUID("11111111-1111-1111-1111-111111111111")))
