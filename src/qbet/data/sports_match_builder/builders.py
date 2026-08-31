@@ -1,6 +1,8 @@
-"""Pure builders for translating normalized market data to engine requests."""
+"""Pure sports match builders from normalized market data to engine requests."""
 
 from __future__ import annotations
+
+from decimal import Decimal
 
 from qbet.calculations import (
     ArbitrageOffer,
@@ -14,20 +16,20 @@ from qbet.data.models import DataTarget, NormalizedMarketSnapshot, NormalizedOff
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 
 from .models import (
-    DutchingPreparationMetadata,
-    FreeBetPreparationMetadata,
-    PreparationContext,
-    PreparedBonusRequest,
-    PreparedSportsCapitalRequest,
-    QualifyingBetPreparationMetadata,
-    TwoWayArbitragePreparationMetadata,
+    DutchingMatchMetadata,
+    FreeBetMatchMetadata,
+    SportsMatchContext,
+    BuiltBonusMatch,
+    BuiltSportsCapitalMatch,
+    QualifyingBetMatchMetadata,
+    TwoWayArbitrageMatchMetadata,
 )
 
 
-def prepare_qualifying_bet(
+def build_qualifying_bet_match(
     snapshot: NormalizedMarketSnapshot,
-    metadata: QualifyingBetPreparationMetadata,
-) -> PreparedBonusRequest:
+    metadata: QualifyingBetMatchMetadata,
+) -> BuiltBonusMatch:
     _require_target(snapshot, DataTarget.BONUS)
     back_offer, lay_offer = _selected_pair(snapshot, metadata.back_offer_id, metadata.lay_offer_id)
     _require_available_stake(back_offer, metadata.back_stake)
@@ -45,13 +47,13 @@ def prepare_qualifying_bet(
         currency=back_offer.currency,
         execution_offer_ids=(back_offer.id, lay_offer.id),
     )
-    return PreparedBonusRequest(request=request, context=_context(snapshot))
+    return BuiltBonusMatch(request=request, context=_context(snapshot))
 
 
-def prepare_free_bet(
+def build_free_bet_match(
     snapshot: NormalizedMarketSnapshot,
-    metadata: FreeBetPreparationMetadata,
-) -> PreparedBonusRequest:
+    metadata: FreeBetMatchMetadata,
+) -> BuiltBonusMatch:
     _require_target(snapshot, DataTarget.BONUS)
     back_offer, lay_offer = _selected_pair(snapshot, metadata.back_offer_id, metadata.lay_offer_id)
     _require_available_stake(back_offer, metadata.free_bet_amount)
@@ -69,13 +71,13 @@ def prepare_free_bet(
         currency=back_offer.currency,
         execution_offer_ids=(back_offer.id, lay_offer.id),
     )
-    return PreparedBonusRequest(request=request, context=_context(snapshot))
+    return BuiltBonusMatch(request=request, context=_context(snapshot))
 
 
-def prepare_two_way_arbitrage(
+def build_two_way_arbitrage_match(
     snapshot: NormalizedMarketSnapshot,
-    metadata: TwoWayArbitragePreparationMetadata,
-) -> PreparedSportsCapitalRequest:
+    metadata: TwoWayArbitrageMatchMetadata,
+) -> BuiltSportsCapitalMatch:
     _require_target(snapshot, DataTarget.SPORTS_CAPITAL)
     first_offer, second_offer = _selected_pair(snapshot, metadata.first_offer_id, metadata.second_offer_id)
     _require_available_stake(first_offer, metadata.requested_total_stake)
@@ -90,13 +92,13 @@ def prepare_two_way_arbitrage(
         currency=first_offer.currency,
         execution_offer_ids=(first_offer.id, second_offer.id),
     )
-    return PreparedSportsCapitalRequest(request=request, context=_context(snapshot))
+    return BuiltSportsCapitalMatch(request=request, context=_context(snapshot))
 
 
-def prepare_dutching(
+def build_dutching_match(
     snapshot: NormalizedMarketSnapshot,
-    metadata: DutchingPreparationMetadata,
-) -> PreparedSportsCapitalRequest:
+    metadata: DutchingMatchMetadata,
+) -> BuiltSportsCapitalMatch:
     _require_target(snapshot, DataTarget.SPORTS_CAPITAL)
     offers = tuple(_offer_by_id(snapshot, identifier) for identifier in metadata.offer_ids)
     _require_distinct_outcomes(offers)
@@ -126,11 +128,11 @@ def prepare_dutching(
         currency=offers[0].currency,
         execution_offer_ids=metadata.offer_ids,
     )
-    return PreparedSportsCapitalRequest(request=request, context=_context(snapshot))
+    return BuiltSportsCapitalMatch(request=request, context=_context(snapshot))
 
 
-def _context(snapshot: NormalizedMarketSnapshot) -> PreparationContext:
-    return PreparationContext(
+def _context(snapshot: NormalizedMarketSnapshot) -> SportsMatchContext:
+    return SportsMatchContext(
         correlation_id=snapshot.correlation_id,
         snapshot_id=snapshot.id,
         provider_id=snapshot.source.provider_id,
@@ -176,12 +178,12 @@ def _require_consistent_currency(offers: tuple[NormalizedOffer, ...]) -> None:
         raise ValueError("selected offers must use the same currency")
 
 
-def _require_available_stake(offer: NormalizedOffer, required_stake: object) -> None:
+def _require_available_stake(offer: NormalizedOffer, required_stake: Decimal) -> None:
     if offer.available_stake < required_stake:
         raise ValueError(f"offer {offer.id} has insufficient available stake")
 
 
-def _arbitrage_offer(offer: NormalizedOffer, stake_precision: object, fee_rate: object) -> ArbitrageOffer:
+def _arbitrage_offer(offer: NormalizedOffer, stake_precision: Decimal, fee_rate: Decimal) -> ArbitrageOffer:
     return ArbitrageOffer(
         outcome=offer.selection,
         odds=offer.odds,

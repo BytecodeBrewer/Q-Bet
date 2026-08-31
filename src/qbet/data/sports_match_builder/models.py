@@ -1,4 +1,4 @@
-"""Typed metadata and context for engine-specific data preparation."""
+"""Typed metadata and context for sports match building."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from qbet.domain.models import DomainModel, Identifier, NonNegativeDecimal, Posi
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 
 
-class PreparationContext(DomainModel):
+class SportsMatchContext(DomainModel):
     """Source identity retained alongside an engine-owned request."""
 
     correlation_id: UUID
@@ -23,17 +23,17 @@ class PreparationContext(DomainModel):
     market_id: Identifier
 
 
-class PreparedBonusRequest(DomainModel):
+class BuiltBonusMatch(DomainModel):
     request: BonusEngineRequest
-    context: PreparationContext
+    context: SportsMatchContext
 
 
-class PreparedSportsCapitalRequest(DomainModel):
+class BuiltSportsCapitalMatch(DomainModel):
     request: SportsCapitalEngineRequest
-    context: PreparationContext
+    context: SportsMatchContext
 
 
-class QualifyingBetPreparationMetadata(DomainModel):
+class QualifyingBetMatchMetadata(DomainModel):
     back_offer_id: Identifier
     lay_offer_id: Identifier
     back_stake: PositiveDecimal
@@ -43,7 +43,7 @@ class QualifyingBetPreparationMetadata(DomainModel):
     minimum_lay_available_stake: PositiveDecimal
 
 
-class FreeBetPreparationMetadata(DomainModel):
+class FreeBetMatchMetadata(DomainModel):
     back_offer_id: Identifier
     lay_offer_id: Identifier
     free_bet_amount: PositiveDecimal
@@ -53,7 +53,7 @@ class FreeBetPreparationMetadata(DomainModel):
     stake_return_rule: FreeBetStakeReturn
 
 
-class TwoWayArbitragePreparationMetadata(DomainModel):
+class TwoWayArbitrageMatchMetadata(DomainModel):
     first_offer_id: Identifier
     second_offer_id: Identifier
     requested_total_stake: PositiveDecimal
@@ -63,7 +63,7 @@ class TwoWayArbitragePreparationMetadata(DomainModel):
     second_fee_rate: Decimal = Field(default=Decimal("0"), ge=Decimal("0"), lt=Decimal("1"), allow_inf_nan=False)
 
 
-class DutchingPreparationMetadata(DomainModel):
+class DutchingMatchMetadata(DomainModel):
     offer_ids: tuple[Identifier, ...] = Field(min_length=2, max_length=4)
     target_mode: DutchingTargetMode
     total_stake: PositiveDecimal | None = None
