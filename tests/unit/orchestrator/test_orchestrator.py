@@ -442,3 +442,36 @@ def test_liquidity_checker_uses_full_deterministic_tie_break_order() -> None:
         "id-a",
         "id-b",
     ]
+
+
+def test_execution_allocation_skips_sandbox_and_keeps_executable_candidate() -> None:
+    checker = LiquidityChecker(
+        CapitalSnapshot(available_capital=Decimal(120), currency="EUR"),
+        config(),
+        (
+            SandboxEngineAdapter(
+                candidate("sandbox", EngineId.ALPHA, "100", "100", sandbox=True)
+            ),
+            sports_adapter(),
+        ),
+    )
+    result = WorkflowOrchestrator(liquidity_checker=checker).process(
+        WorkflowRequest(
+            id="mixed-execution",
+            mode=WorkflowMode.EXECUTION,
+            stages=(WorkflowStage.LIQUIDITY_CHECK, WorkflowStage.DISPATCH),
+        )
+    )
+    assert result.final_decision is WorkflowDecision.ALLOW
+    assert [transition.stage for transition in result.transitions] == [
+        WorkflowStage.LIQUIDITY_CHECK,
+        WorkflowStage.DISPATCH,
+    ]
+    assert checker.last_result is not None
+    assert [
+        allocation.candidate.engine for allocation in checker.last_result.allocations
+    ] == [EngineId.SPORTS_CAPITAL]
+    assert (
+        checker.last_result.rejections[0].reason
+        is RejectionReason.SANDBOX_EXECUTION_PROHIBITED
+    )
