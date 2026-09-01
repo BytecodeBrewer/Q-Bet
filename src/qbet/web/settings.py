@@ -60,6 +60,10 @@ TEMPLATES = [
 ]
 WSGI_APPLICATION = "qbet.web.wsgi.application"
 
+QBET_SIMULATION_REPORT_DB = Path(
+    os.environ.get("QBET_SIMULATION_REPORT_DB", BASE_DIR / "qbet-simulation.sqlite3")
+)
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",

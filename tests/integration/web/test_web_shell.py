@@ -36,7 +36,7 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok", "service": "q-bet-web"})
 
-    def test_home_renders_static_engine_statuses_without_domain_calculations(
+    def test_home_renders_monitoring_statuses_without_domain_calculations(
         self,
     ) -> None:
         response = self.client.get("/")
@@ -44,8 +44,8 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertContains(response, "Q-Bet")
         self.assertContains(response, "BonusEngine")
         self.assertContains(response, "SportsCapitalEngine")
-        self.assertContains(response, 'status-green')
-        self.assertContains(response, 'status-amber')
+        self.assertContains(response, 'Open monitoring')
+        self.assertContains(response, 'status-gray')
         self.assertNotContains(response, "Base")
         self.assertNotContains(response, "Yield")
         self.assertNotContains(response, "Alpha")
@@ -213,7 +213,8 @@ def test_monitoring_renders_error_summary() -> None:
     assert "not-for-display" not in content
 
 def test_monitoring_renders_unconfigured_history_state() -> None:
-    response = Client().get("/monitoring/")
+    with patch("qbet.web.views.MONITORING_SERVICE", MonitoringService()):
+        response = Client().get("/monitoring/")
 
     assert response.status_code == 200
     assert "Simulation history is not configured." in response.content.decode()
