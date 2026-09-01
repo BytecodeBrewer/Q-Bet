@@ -17,7 +17,7 @@
       <thead><tr><th>Engine</th><th>Status</th><th>Current scope</th></tr></thead>
       <tbody>
         {% for engine in engine_statuses %}
-          <tr>
+          <tr data-engine="{{ engine.name }}">
             <td>{{ engine.name }}</td>
             <td><span class="status status-{{ engine.status }}" aria-label="{{ engine.status }}"></span>{{ engine.status }}</td>
             <td>{{ engine.detail }}</td>
