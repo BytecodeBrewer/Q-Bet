@@ -94,11 +94,17 @@ class SQLiteSimulationReportReader:
         self._database_path = Path(database_path)
 
     def load_records(self, run_id: UUID) -> tuple[SimulationLogRecord, ...]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT payload FROM simulation_records WHERE run_id = ? ORDER BY sequence ASC",
-                (str(run_id),),
-            ).fetchall()
+        try:
+            connection = self._connect()
+            try:
+                rows = connection.execute(
+                    "SELECT payload FROM simulation_records WHERE run_id = ? ORDER BY sequence ASC",
+                    (str(run_id),),
+                ).fetchall()
+            finally:
+                connection.close()
+        except sqlite3.OperationalError as error:
+            raise OSError("simulation history is unavailable") from error
         if not rows:
             raise KeyError(f"simulation records for {run_id} were not found")
         return tuple(SimulationLogRecord.model_validate_json(row[0]) for row in rows)
@@ -106,11 +112,17 @@ class SQLiteSimulationReportReader:
     def list_recent_reports(self, limit: int = 20) -> tuple[SimulationReport, ...]:
         if limit <= 0:
             raise ValueError("limit must be positive")
-        with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT payload FROM simulation_reports ORDER BY generated_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
+        try:
+            connection = self._connect()
+            try:
+                rows = connection.execute(
+                    "SELECT payload FROM simulation_reports ORDER BY generated_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            finally:
+                connection.close()
+        except sqlite3.OperationalError as error:
+            raise OSError("simulation history is unavailable") from error
         return tuple(SimulationReport.model_validate_json(row[0]) for row in rows)
 
     def _connect(self) -> sqlite3.Connection:
@@ -119,6 +131,8 @@ class SQLiteSimulationReportReader:
             return sqlite3.connect(database_uri, uri=True)
         except sqlite3.OperationalError as error:
             raise OSError("simulation history is unavailable") from error
+
+
 class SQLiteProviderStateRepository:
     """Local provider state adapter; replace through ProviderStateRepository for Supabase."""
 
