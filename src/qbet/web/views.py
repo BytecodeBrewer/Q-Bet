@@ -7,9 +7,16 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 
 ENGINE_STATUSES = (
-    {"name": "Base", "status": "amber", "detail": "Calculation slice in progress"},
-    {"name": "Yield", "status": "red", "detail": "Sandbox adapter pending"},
-    {"name": "Alpha", "status": "red", "detail": "Sandbox adapter pending"},
+    {
+        "name": "BonusEngine",
+        "status": "green",
+        "detail": "Promotional strategy calculations ready for simulation",
+    },
+    {
+        "name": "SportsCapitalEngine",
+        "status": "amber",
+        "detail": "Arbitrage and dutching workflow in progress",
+    },
 )
 
 

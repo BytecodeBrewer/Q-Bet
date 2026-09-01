@@ -34,9 +34,13 @@ class WebShellSmokeTests(SimpleTestCase):
         response = self.client.get("/")
 
         self.assertContains(response, "Q-Bet")
-        self.assertContains(response, "Base")
-        self.assertContains(response, "Yield")
-        self.assertContains(response, "Alpha")
+        self.assertContains(response, "BonusEngine")
+        self.assertContains(response, "SportsCapitalEngine")
+        self.assertContains(response, 'status-green')
+        self.assertContains(response, 'status-amber')
+        self.assertNotContains(response, "Base")
+        self.assertNotContains(response, "Yield")
+        self.assertNotContains(response, "Alpha")
 
     def test_account_boundary_requires_django_authentication(self) -> None:
         response = self.client.get("/account/")
