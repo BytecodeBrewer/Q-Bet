@@ -4,6 +4,10 @@ import io
 import json
 import logging
 import os
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from unittest.mock import patch
+from uuid import uuid4
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 
@@ -14,7 +18,11 @@ django.setup()
 from django.conf import settings
 from django.test import Client, SimpleTestCase
 
+from qbet.layers import SimulationLogRecord, SimulationLogRecordType
+from qbet.reporting import SimulationReport
+from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
 from qbet.web.logging import SafeRequestJSONFormatter
+from qbet.web.monitoring import MonitoringService
 from qbet.web.settings import parse_allowed_hosts
 
 
@@ -111,3 +119,101 @@ def test_invalid_host_returns_400_with_correlation_id_before_authentication() ->
 
     assert response.status_code == 400
     assert response["X-Correlation-ID"] == correlation_id
+
+class _ReportStore:
+    def __init__(
+        self,
+        reports: tuple[SimulationReport, ...] = (),
+        records: tuple[SimulationLogRecord, ...] = (),
+    ) -> None:
+        self._reports = reports
+        self._records = records
+
+    def list_recent_reports(self, limit: int = 20) -> tuple[SimulationReport, ...]:
+        return self._reports[:limit]
+
+    def load_records(self, run_id: object) -> tuple[SimulationLogRecord, ...]:
+        return tuple(record for record in self._records if record.run_id == run_id)
+
+
+def _report() -> SimulationReport:
+    return SimulationReport(
+        run_id=uuid4(),
+        config=SimulationRunConfig(
+            engine=SimulationEngine.BONUS,
+            starting_capital=Decimal(100),
+        ),
+        engine="bonus",
+        strategy_id=None,
+        status=SimulationStatus.COMPLETED,
+        starting_capital=Decimal(100),
+        current_capital=Decimal(110),
+        top_up_total=Decimal(0),
+        profit_loss=Decimal(10),
+        completed_steps=(),
+        elapsed_duration=timedelta(minutes=5),
+        progress=Decimal(1),
+        generated_at=datetime(2026, 9, 1, tzinfo=UTC),
+    )
+
+
+def test_monitoring_renders_configured_empty_state() -> None:
+    with patch("qbet.web.views.MONITORING_SERVICE", MonitoringService(_ReportStore())):
+        response = Client().get("/monitoring/")
+
+    assert response.status_code == 200
+    assert "BonusEngine" in response.content.decode()
+    assert "SportsCapitalEngine" in response.content.decode()
+    assert "No simulation reports are available yet." in response.content.decode()
+
+
+def test_monitoring_renders_report_and_safe_warning_summary() -> None:
+    report = _report()
+    warning = SimulationLogRecord(
+        run_id=report.run_id,
+        sequence=1,
+        timestamp=datetime(2026, 9, 1, tzinfo=UTC),
+        record_type=SimulationLogRecordType.WARNING,
+        source="simulation.workflow",
+        payload={"secret": "not-for-display", "message": "not-for-display"},
+    )
+    with patch(
+        "qbet.web.views.MONITORING_SERVICE",
+        MonitoringService(_ReportStore((report,), (warning,))),
+    ):
+        response = Client().get("/monitoring/")
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "bonus" in content
+    assert "completed" in content
+    assert "110" in content
+    assert "10" in content
+    assert "Latest simulation recorded a warning." in content
+    assert "not-for-display" not in content
+
+def test_monitoring_renders_error_summary() -> None:
+    report = _report()
+    error = SimulationLogRecord(
+        run_id=report.run_id,
+        sequence=1,
+        timestamp=datetime(2026, 9, 1, tzinfo=UTC),
+        record_type=SimulationLogRecordType.ERROR,
+        source="simulation.workflow",
+        payload={"token": "not-for-display"},
+    )
+    with patch(
+        "qbet.web.views.MONITORING_SERVICE",
+        MonitoringService(_ReportStore((report,), (error,))),
+    ):
+        response = Client().get("/monitoring/")
+
+    content = response.content.decode()
+    assert "Latest simulation recorded an error." in content
+    assert "not-for-display" not in content
+
+def test_monitoring_renders_unconfigured_history_state() -> None:
+    response = Client().get("/monitoring/")
+
+    assert response.status_code == 200
+    assert "Simulation history is not configured." in response.content.decode()
