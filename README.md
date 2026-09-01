@@ -14,7 +14,7 @@ The pipeline is taking shape from intake to simulation. Normalized market-data c
 
 The strongest end-to-end path today is simulation: evaluated sports opportunities can move through workflow transitions, risk checks, liquidity decisions, virtual-capital updates, reporting, and SQLite-backed report history without touching real execution. Provider state also has a typed SQLite persistence path, which gives the local version a practical bridge toward Supabase/PostgreSQL later.
 
-The main gaps against the expectation model are now easy to name: real Playwright/API collectors, bank connectivity, GUI monitoring, CI/CD, and controlled real execution adapters. `RequestHandler` refresh checks are now wired into the workflow at Domain Risk, Liquidity Check, and Dispatch, while concrete provider refresh clients remain future work. The math layer is solid, the preparation and simulation layers are becoming connected, and the remaining work is mostly about turning the pipeline from tested internal flow into usable product flow.
+The main gaps against the expectation model are now easy to name: real Playwright/API collectors, production bank connectivity, GUI monitoring, CI/CD, and controlled real execution adapters. The first bank-connector evaluation is complete; the bank layer remains mock-only until the account type and approved provider-onboarding route are chosen. `RequestHandler` refresh checks are now wired into the workflow at Domain Risk, Liquidity Check, and Dispatch, while concrete provider refresh clients remain future work. The math layer is solid, the preparation and simulation layers are becoming connected, and the remaining work is mostly about turning the pipeline from tested internal flow into usable product flow.
 
 ## Local Web Setup
 
