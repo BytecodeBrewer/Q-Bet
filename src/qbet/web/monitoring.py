@@ -99,19 +99,19 @@ class MonitoringService:
     def _engine_statuses(
         reports: tuple[SimulationReport, ...], *, history_available: bool
     ) -> tuple[MonitoringEngineStatus, ...]:
-        latest_reports = {report.engine: report for report in reports}
-        return tuple(
-            MonitoringEngineStatus(
-                name=name,
-                status=MonitoringService._status_for(
-                    latest_reports.get(engine_id), history_available=history_available
-                )[0],
-                detail=MonitoringService._status_for(
-                    latest_reports.get(engine_id), history_available=history_available
-                )[1],
+        latest_reports: dict[str, SimulationReport] = {}
+        for report in reports:
+            latest_reports.setdefault(report.engine, report)
+
+        statuses = []
+        for name, engine_id in _V1_ENGINES:
+            status, detail = MonitoringService._status_for(
+                latest_reports.get(engine_id), history_available=history_available
             )
-            for name, engine_id in _V1_ENGINES
-        )
+            statuses.append(
+                MonitoringEngineStatus(name=name, status=status, detail=detail)
+            )
+        return tuple(statuses)
 
     @staticmethod
     def _status_for(

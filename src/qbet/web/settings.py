@@ -60,8 +60,8 @@ TEMPLATES = [
 ]
 WSGI_APPLICATION = "qbet.web.wsgi.application"
 
-QBET_SIMULATION_REPORT_DB = Path(
-    os.environ.get("QBET_SIMULATION_REPORT_DB", BASE_DIR / "qbet-simulation.sqlite3")
+QBET_SIMULATION_REPORT_DB = (
+    Path(value) if (value := os.environ.get("QBET_SIMULATION_REPORT_DB")) else None
 )
 
 DATABASES = {
