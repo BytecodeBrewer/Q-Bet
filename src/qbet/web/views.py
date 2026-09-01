@@ -7,12 +7,18 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 
-from qbet.storage import SQLiteSimulationReportStore
+from qbet.storage import SQLiteSimulationReportReader
 from qbet.web.monitoring import MonitoringService
 
-MONITORING_SERVICE = MonitoringService(
-    SQLiteSimulationReportStore(settings.QBET_SIMULATION_REPORT_DB)
-)
+
+def _monitoring_service() -> MonitoringService:
+    database_path = settings.QBET_SIMULATION_REPORT_DB
+    if database_path is None:
+        return MonitoringService()
+    return MonitoringService(SQLiteSimulationReportReader(database_path))
+
+
+MONITORING_SERVICE = _monitoring_service()
 
 
 def health(_: HttpRequest) -> JsonResponse:

@@ -6,6 +6,8 @@ import logging
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -16,7 +18,7 @@ import django
 django.setup()
 
 from django.conf import settings
-from django.test import Client, SimpleTestCase
+from django.test import Client, SimpleTestCase, override_settings
 
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
 from qbet.reporting import SimulationReport
@@ -24,6 +26,7 @@ from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationSta
 from qbet.web.logging import SafeRequestJSONFormatter
 from qbet.web.monitoring import MonitoringService
 from qbet.web.settings import parse_allowed_hosts
+from qbet.web.views import _monitoring_service
 
 
 class WebShellSmokeTests(SimpleTestCase):
@@ -218,3 +221,29 @@ def test_monitoring_renders_unconfigured_history_state() -> None:
 
     assert response.status_code == 200
     assert "Simulation history is not configured." in response.content.decode()
+
+
+def test_configured_read_only_history_does_not_create_a_sqlite_file() -> None:
+    with TemporaryDirectory() as directory:
+        database_path = Path(directory) / "simulation-history.sqlite3"
+        with override_settings(QBET_SIMULATION_REPORT_DB=database_path):
+            snapshot = _monitoring_service().snapshot()
+
+        assert snapshot.history_available is False
+        assert database_path.exists() is False
+
+
+def test_monitoring_uses_newest_report_for_engine_status() -> None:
+    older_report = _report()
+    newer_report = older_report.model_copy(
+        update={
+            "status": SimulationStatus.RUNNING,
+            "generated_at": datetime(2026, 9, 2, tzinfo=UTC),
+        }
+    )
+
+    snapshot = MonitoringService(_ReportStore((newer_report, older_report))).snapshot()
+
+    bonus_engine = next(engine for engine in snapshot.engines if engine.name == "BonusEngine")
+    assert bonus_engine.status == "green"
+    assert bonus_engine.detail == "Simulation running."

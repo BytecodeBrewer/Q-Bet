@@ -85,6 +85,40 @@ class SQLiteSimulationReportStore:
         return sqlite3.connect(self._database_path)
 
 
+
+
+class SQLiteSimulationReportReader:
+    """Read simulation history without creating databases or schema."""
+
+    def __init__(self, database_path: str | Path) -> None:
+        self._database_path = Path(database_path)
+
+    def load_records(self, run_id: UUID) -> tuple[SimulationLogRecord, ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT payload FROM simulation_records WHERE run_id = ? ORDER BY sequence ASC",
+                (str(run_id),),
+            ).fetchall()
+        if not rows:
+            raise KeyError(f"simulation records for {run_id} were not found")
+        return tuple(SimulationLogRecord.model_validate_json(row[0]) for row in rows)
+
+    def list_recent_reports(self, limit: int = 20) -> tuple[SimulationReport, ...]:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT payload FROM simulation_reports ORDER BY generated_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return tuple(SimulationReport.model_validate_json(row[0]) for row in rows)
+
+    def _connect(self) -> sqlite3.Connection:
+        database_uri = f"file:{self._database_path.resolve().as_posix()}?mode=ro"
+        try:
+            return sqlite3.connect(database_uri, uri=True)
+        except sqlite3.OperationalError as error:
+            raise OSError("simulation history is unavailable") from error
 class SQLiteProviderStateRepository:
     """Local provider state adapter; replace through ProviderStateRepository for Supabase."""
 
