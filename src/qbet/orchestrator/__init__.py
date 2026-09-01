@@ -116,6 +116,23 @@ class EngineAdapter(Protocol):
     ) -> tuple[EngineCandidate, ...]: ...
 
 
+class _ExecutionSafeEngineAdapter:
+    """Filters sandbox candidates before execution-mode capital allocation."""
+
+    def __init__(self, adapter: EngineAdapter) -> None:
+        self._adapter = adapter
+        self.excluded_candidates: tuple[EngineCandidate, ...] = ()
+
+    def evaluate_candidates(
+        self, snapshot: CapitalSnapshot
+    ) -> tuple[EngineCandidate, ...]:
+        candidates = self._adapter.evaluate_candidates(snapshot)
+        self.excluded_candidates = tuple(
+            candidate for candidate in candidates if candidate.is_sandbox
+        )
+        return tuple(candidate for candidate in candidates if not candidate.is_sandbox)
+
+
 class VerifiedStrategyCandidateAdapter:
     """Adapts an evaluated concrete strategy after Layer 2 verification."""
 
@@ -222,9 +239,26 @@ class LiquidityChecker:
                 "workflow liquidity checks require configured capital inputs"
             )
 
-        result = self.allocate(self._snapshot, self._config, self._adapters)
+        adapters = self._adapters
+        execution_adapters: tuple[_ExecutionSafeEngineAdapter, ...] = ()
         if context.request.mode is WorkflowMode.EXECUTION:
-            result = self._exclude_sandbox_allocations(result)
+            execution_adapters = tuple(
+                _ExecutionSafeEngineAdapter(adapter) for adapter in adapters
+            )
+            adapters = execution_adapters
+        result = self.allocate(self._snapshot, self._config, adapters)
+        excluded_rejections = tuple(
+            CandidateRejection(
+                candidate=candidate,
+                reason=RejectionReason.SANDBOX_EXECUTION_PROHIBITED,
+            )
+            for adapter in execution_adapters
+            for candidate in adapter.excluded_candidates
+        )
+        if excluded_rejections:
+            result = result.model_copy(
+                update={"rejections": excluded_rejections + result.rejections}
+            )
         self.last_result = result
         if result.allocations:
             return WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
@@ -241,37 +275,6 @@ class LiquidityChecker:
             else WorkflowDecision.REJECT
         )
         return WorkflowStageDecision(decision=decision, reason=rejection.reason.value)
-
-    def _exclude_sandbox_allocations(
-        self, result: OrchestrationResult
-    ) -> OrchestrationResult:
-        sandbox_allocations = tuple(
-            allocation
-            for allocation in result.allocations
-            if allocation.candidate.is_sandbox
-        )
-        if not sandbox_allocations:
-            return result
-        return OrchestrationResult(
-            allocations=tuple(
-                allocation
-                for allocation in result.allocations
-                if not allocation.candidate.is_sandbox
-            ),
-            rejections=tuple(
-                CandidateRejection(
-                    candidate=allocation.candidate,
-                    reason=RejectionReason.SANDBOX_EXECUTION_PROHIBITED,
-                )
-                for allocation in sandbox_allocations
-            )
-            + result.rejections,
-            remaining_capital=result.remaining_capital
-            + sum(
-                (allocation.allocated_capital for allocation in sandbox_allocations),
-                start=Decimal(0),
-            ),
-        )
 
     def allocate(
         self,
