@@ -1,4 +1,8 @@
-from .protocol import ProviderStateRepository, SimulationReportStore
+from .protocol import (
+    ProviderStateRepository,
+    SimulationReportReader,
+    SimulationReportStore,
+)
 from .sqlite import (
     SQLiteProviderStateRepository,
     SQLiteSimulationReportReader,
@@ -10,5 +14,6 @@ __all__ = [
     "SQLiteProviderStateRepository",
     "SQLiteSimulationReportReader",
     "SQLiteSimulationReportStore",
+    "SimulationReportReader",
     "SimulationReportStore",
 ]

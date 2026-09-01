@@ -223,14 +223,15 @@ def test_monitoring_renders_unconfigured_history_state() -> None:
     assert "Simulation history is not configured." in response.content.decode()
 
 
-def test_configured_read_only_history_does_not_create_a_sqlite_file() -> None:
+def test_configured_read_only_history_with_missing_schema_is_unavailable() -> None:
     with TemporaryDirectory() as directory:
         database_path = Path(directory) / "simulation-history.sqlite3"
+        database_path.touch()
         with override_settings(QBET_SIMULATION_REPORT_DB=database_path):
             snapshot = _monitoring_service().snapshot()
 
         assert snapshot.history_available is False
-        assert database_path.exists() is False
+        assert database_path.exists() is True
 
 
 def test_monitoring_uses_newest_report_for_engine_status() -> None:

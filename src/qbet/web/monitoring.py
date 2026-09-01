@@ -11,7 +11,7 @@ from uuid import UUID
 from qbet.layers.logging import SimulationLogRecordType
 from qbet.reporting import SimulationReport
 from qbet.simulation import SimulationStatus
-from qbet.storage import SimulationReportStore
+from qbet.storage import SimulationReportReader
 
 _REPORT_LIMIT: Final = 10
 _V1_ENGINES: Final = (
@@ -55,7 +55,7 @@ class MonitoringSnapshot:
 class MonitoringService:
     """Build safe, read-only monitoring data from an optional report store."""
 
-    def __init__(self, report_store: SimulationReportStore | None = None) -> None:
+    def __init__(self, report_store: SimulationReportReader | None = None) -> None:
         self._report_store = report_store
 
     def snapshot(self) -> MonitoringSnapshot:
