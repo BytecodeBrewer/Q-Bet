@@ -2,25 +2,17 @@
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 
+from qbet.storage import SQLiteSimulationReportStore
 from qbet.web.monitoring import MonitoringService
 
-ENGINE_STATUSES = (
-    {
-        "name": "BonusEngine",
-        "status": "green",
-        "detail": "Promotional strategy calculations ready for simulation",
-    },
-    {
-        "name": "SportsCapitalEngine",
-        "status": "amber",
-        "detail": "Arbitrage and dutching workflow in progress",
-    },
+MONITORING_SERVICE = MonitoringService(
+    SQLiteSimulationReportStore(settings.QBET_SIMULATION_REPORT_DB)
 )
-MONITORING_SERVICE = MonitoringService()
 
 
 def health(_: HttpRequest) -> JsonResponse:
@@ -31,12 +23,12 @@ def monitoring(request: HttpRequest) -> HttpResponse:
     return render(
         request,
         "qbet_web/monitoring.html",
-        {"engine_statuses": ENGINE_STATUSES, "monitoring": MONITORING_SERVICE.snapshot()},
+        {"monitoring": MONITORING_SERVICE.snapshot()},
     )
 
 
 def home(request: HttpRequest) -> HttpResponse:
-    return render(request, "qbet_web/home.html", {"engine_statuses": ENGINE_STATUSES})
+    return render(request, "qbet_web/home.html", {"monitoring": MONITORING_SERVICE.snapshot()})
 
 
 @login_required

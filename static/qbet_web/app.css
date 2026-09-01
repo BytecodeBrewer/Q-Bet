@@ -7,6 +7,7 @@ table { width: 100%; border-collapse: collapse; background: #fff; }
 th, td { padding: 12px; border-bottom: 1px solid #d9dee3; text-align: left; }
 .status { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; }
 .status-amber { background: #d99a1e; }
+.status-gray { background: #75808a; }
 .status-red { background: #bf3b3b; }
 .status-green { background: #287a52; }
 a { color: #155e9d; }

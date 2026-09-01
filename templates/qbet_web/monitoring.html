@@ -12,13 +12,14 @@
     <header>
       <h1>Q-Bet monitoring</h1>
       <p>Read-only workflow and simulation status</p>
+      <p><a href="{% url 'home' %}">Back to overview</a></p>
     </header>
     <section aria-labelledby="engines-heading">
       <h2 id="engines-heading">V1 engines</h2>
       <table>
-        <thead><tr><th>Engine</th><th>Status</th><th>Current scope</th></tr></thead>
+        <thead><tr><th>Engine</th><th>Status</th><th>Current activity</th></tr></thead>
         <tbody>
-          {% for engine in engine_statuses %}
+          {% for engine in monitoring.engines %}
             <tr data-engine="{{ engine.name }}">
               <td>{{ engine.name }}</td>
               <td><span class="status status-{{ engine.status }}" aria-label="{{ engine.status }}"></span>{{ engine.status }}</td>

@@ -12,11 +12,12 @@
     <header>
       <h1>Q-Bet</h1>
       <p>Engine status</p>
+      <p><a href="{% url 'monitoring' %}">Open monitoring</a></p>
     </header>
     <table>
-      <thead><tr><th>Engine</th><th>Status</th><th>Current scope</th></tr></thead>
+      <thead><tr><th>Engine</th><th>Status</th><th>Current activity</th></tr></thead>
       <tbody>
-        {% for engine in engine_statuses %}
+        {% for engine in monitoring.engines %}
           <tr data-engine="{{ engine.name }}">
             <td>{{ engine.name }}</td>
             <td><span class="status status-{{ engine.status }}" aria-label="{{ engine.status }}"></span>{{ engine.status }}</td>
