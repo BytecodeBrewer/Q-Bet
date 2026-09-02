@@ -26,6 +26,16 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
+## Validation
+
+The same baseline checks used by GitHub Actions can be run locally with:
+
+```powershell
+python -m pip install . -r requirements-dev.txt
+python -m pytest
+python manage.py check
+```
+
 ## Version 1 Target
 
 Version 1 should include:
