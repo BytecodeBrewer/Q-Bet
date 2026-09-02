@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 from io import StringIO
 from uuid import UUID
 
@@ -13,21 +12,18 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.views.decorators.http import require_GET
 
 from qbet.reporting import ReportDetailSelection
 from qbet.storage import SQLiteSimulationReportReader
 from qbet.web.controls import (
-    GuiFeatureControlStore,
     PresentationPreferences,
     presentation_preferences,
     save_presentation_preferences,
 )
-from qbet.web.forms import (
-    PresentationSettingsForm,
-    RegistrationForm,
-    SimulationAvailabilityForm,
-)
+from qbet.web.forms import PresentationSettingsForm, RegistrationForm
 from qbet.web.monitoring import MonitoringService
+from qbet.web.report_exports import SimulationReportExport
 
 _DETAIL_FIELDS = (
     "include_events",
@@ -48,14 +44,19 @@ def _monitoring_service() -> MonitoringService:
 
 
 MONITORING_SERVICE = _monitoring_service()
-GUI_FEATURES = GuiFeatureControlStore(
-    simulation_enabled=getattr(settings, "QBET_SIMULATION_MODE_ENABLED", False)
-)
+
+
+def _simulation_enabled() -> bool:
+    return bool(getattr(settings, "QBET_SIMULATION_MODE_ENABLED", False))
+
+
+def _is_staff(user: object) -> bool:
+    return bool(getattr(user, "is_staff", False))
 
 
 def _context(request: HttpRequest, **values: object) -> dict[str, object]:
     values.setdefault("preferences", presentation_preferences(request.session))
-    values.setdefault("simulation_enabled", GUI_FEATURES.simulation_enabled)
+    values.setdefault("simulation_enabled", _simulation_enabled())
     return values
 
 
@@ -63,7 +64,6 @@ def _selection(request: HttpRequest) -> ReportDetailSelection:
     return ReportDetailSelection(
         **{field: request.GET.get(field) == "1" for field in _DETAIL_FIELDS}
     )
-
 
 
 def health(_: HttpRequest) -> JsonResponse:
@@ -113,7 +113,11 @@ def dashboard(request: HttpRequest) -> HttpResponse:
 def engine_detail(request: HttpRequest, engine_id: str) -> HttpResponse:
     snapshot = MONITORING_SERVICE.snapshot()
     engine = next(
-        (candidate for candidate in snapshot.engines if candidate.engine_id == engine_id),
+        (
+            candidate
+            for candidate in snapshot.engines
+            if candidate.engine_id == engine_id
+        ),
         None,
     )
     if engine is None:
@@ -128,7 +132,7 @@ def engine_detail(request: HttpRequest, engine_id: str) -> HttpResponse:
 
 @login_required
 def simulation(request: HttpRequest) -> HttpResponse:
-    if not GUI_FEATURES.simulation_enabled:
+    if not _simulation_enabled():
         raise Http404("Simulation visibility is disabled.")
     return render(
         request,
@@ -186,7 +190,9 @@ def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
         return render(
             request,
             "qbet_web/report_unavailable.html",
-            _context(request, message=lookup.message or "This report is not available."),
+            _context(
+                request, message=lookup.message or "This report is not available."
+            ),
             status=404,
         )
     return render(
@@ -202,15 +208,19 @@ def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
 
 
 @login_required
-def report_export(request: HttpRequest, run_id: UUID, export_format: str) -> HttpResponse:
+def report_export(
+    request: HttpRequest, run_id: UUID, export_format: str
+) -> HttpResponse:
     selection = _selection(request)
     lookup = MONITORING_SERVICE.load_report(run_id, selection)
     if lookup.report is None:
         raise Http404(lookup.message or "Report not found.")
-    report = lookup.report
+    export = SimulationReportExport.from_report(lookup.report, selection)
     if export_format == "json":
-        response = JsonResponse(report.model_dump(mode="json"), json_dumps_params={"indent": 2})
-        response["Content-Disposition"] = f'attachment; filename="qbet-report-{run_id}.json"'
+        response = JsonResponse(export.json_document(), json_dumps_params={"indent": 2})
+        response["Content-Disposition"] = (
+            f'attachment; filename="qbet-report-{run_id}.json"'
+        )
         return response
     if export_format != "csv":
         raise Http404("Export format not found.")
@@ -218,29 +228,14 @@ def report_export(request: HttpRequest, run_id: UUID, export_format: str) -> Htt
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(("field", "value"))
-    writer.writerows(
-        (
-            ("run_id", report.run_id),
-            ("engine", report.engine),
-            ("mode", "simulation"),
-            ("status", report.status),
-            ("progress", report.progress),
-            ("starting_capital", report.starting_capital),
-            ("current_capital", report.current_capital),
-            ("profit_loss", report.profit_loss),
-            ("completed_steps", len(report.completed_steps)),
-            ("generated_at", report.generated_at.isoformat()),
-        )
-    )
-    for field in _DETAIL_FIELDS:
-        value = getattr(report, field.removeprefix("include_").replace("raw_inputs", "raw_input_snapshots"), None)
-        if value:
-            writer.writerow((field, json.dumps(value, default=str, sort_keys=True)))
+    writer.writerows(export.csv_rows())
     response = HttpResponse(output.getvalue(), content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="qbet-report-{run_id}.csv"'
     return response
 
 
+@user_passes_test(_is_staff, login_url="login")
+@require_GET
 def monitoring(request: HttpRequest) -> HttpResponse:
     return render(
         request,
@@ -249,26 +244,15 @@ def monitoring(request: HttpRequest) -> HttpResponse:
     )
 
 
-@user_passes_test(lambda user: bool(getattr(user, "is_staff", False)), login_url="login")
+@user_passes_test(_is_staff, login_url="login")
 def admin_area(request: HttpRequest) -> HttpResponse:
     return render(request, "qbet_web/admin_area.html", _context(request))
 
 
-@user_passes_test(lambda user: bool(getattr(user, "is_staff", False)), login_url="login")
+@user_passes_test(_is_staff, login_url="login")
+@require_GET
 def admin_gui_settings(request: HttpRequest) -> HttpResponse:
-    form = SimulationAvailabilityForm(
-        request.POST or None,
-        initial={"simulation_enabled": GUI_FEATURES.simulation_enabled},
-    )
-    if request.method == "POST" and form.is_valid():
-        GUI_FEATURES.set_simulation_enabled(form.cleaned_data["simulation_enabled"])
-        messages.success(request, "Simulation visibility updated for this application.")
-        return redirect("admin-gui-settings")
-    return render(
-        request,
-        "qbet_web/admin_gui_settings.html",
-        _context(request, form=form),
-    )
+    return render(request, "qbet_web/admin_gui_settings.html", _context(request))
 
 
 @login_required

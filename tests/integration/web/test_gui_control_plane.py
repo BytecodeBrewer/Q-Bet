@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from unittest.mock import patch
+from uuid import UUID, uuid4
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 
@@ -8,19 +13,12 @@ import django
 
 django.setup()
 
-import json
-from datetime import UTC, datetime, timedelta
-from decimal import Decimal
-from unittest.mock import patch
-from uuid import uuid4
-
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
 from qbet.reporting import SimulationReport
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
-from qbet.web.controls import GuiFeatureControlStore
 from qbet.web.monitoring import MonitoringService
 
 
@@ -36,20 +34,22 @@ class _ReportStore:
     def list_recent_reports(self, limit: int = 20) -> tuple[SimulationReport, ...]:
         return self._reports[:limit]
 
-    def load_report(self, run_id):
+    def load_report(self, run_id: UUID) -> SimulationReport:
         for report in self._reports:
             if report.run_id == run_id:
                 return report
         raise KeyError(run_id)
 
-    def load_records(self, run_id):
+    def load_records(self, run_id: UUID) -> tuple[SimulationLogRecord, ...]:
         records = tuple(record for record in self._records if record.run_id == run_id)
         if not records:
             raise KeyError(run_id)
         return records
 
 
-def _report(engine: SimulationEngine, *, status: SimulationStatus = SimulationStatus.COMPLETED) -> SimulationReport:
+def _report(
+    engine: SimulationEngine, *, status: SimulationStatus = SimulationStatus.COMPLETED
+) -> SimulationReport:
     return SimulationReport(
         run_id=uuid4(),
         config=SimulationRunConfig(engine=engine, starting_capital=Decimal(100)),
@@ -89,6 +89,22 @@ def _records(report: SimulationReport) -> tuple[SimulationLogRecord, ...]:
             run_id=report.run_id,
             sequence=3,
             timestamp=datetime(2026, 9, 2, tzinfo=UTC),
+            record_type=SimulationLogRecordType.ERROR,
+            source="workflow.orchestrator",
+            payload={"message": "safe error"},
+        ),
+        SimulationLogRecord(
+            run_id=report.run_id,
+            sequence=4,
+            timestamp=datetime(2026, 9, 2, tzinfo=UTC),
+            record_type=SimulationLogRecordType.RISK_DECISION,
+            source="workflow.orchestrator",
+            payload={"decision": "allow"},
+        ),
+        SimulationLogRecord(
+            run_id=report.run_id,
+            sequence=5,
+            timestamp=datetime(2026, 9, 2, tzinfo=UTC),
             record_type=SimulationLogRecordType.RAW_INPUT,
             source="simulation.runner",
             payload={"credential": "[redacted]", "market": "fixture"},
@@ -102,7 +118,9 @@ class GuiControlPlaneTests(TestCase):
         self.staff = User.objects.create_user(
             "staff", password="Strong-pass-123", is_staff=True
         )
-        self.bonus_report = _report(SimulationEngine.BONUS, status=SimulationStatus.RUNNING)
+        self.bonus_report = _report(
+            SimulationEngine.BONUS, status=SimulationStatus.RUNNING
+        )
         self.sports_report = _report(SimulationEngine.SPORTS_CAPITAL)
         self.service = MonitoringService(
             _ReportStore(
@@ -110,13 +128,9 @@ class GuiControlPlaneTests(TestCase):
                 _records(self.bonus_report) + _records(self.sports_report),
             )
         )
-        self.feature_store = GuiFeatureControlStore()
         self.monitoring_patch = patch("qbet.web.views.MONITORING_SERVICE", self.service)
-        self.feature_patch = patch("qbet.web.views.GUI_FEATURES", self.feature_store)
         self.monitoring_patch.start()
-        self.feature_patch.start()
         self.addCleanup(self.monitoring_patch.stop)
-        self.addCleanup(self.feature_patch.stop)
 
     def test_dashboard_is_protected_and_has_exactly_two_v1_engine_widgets(self) -> None:
         self.assertRedirects(
@@ -139,7 +153,9 @@ class GuiControlPlaneTests(TestCase):
         self.assertNotContains(response, "YieldEngine")
         self.assertNotContains(response, "AlphaEngine")
 
-    def test_engine_detail_uses_read_model_for_activity_and_workflow_state(self) -> None:
+    def test_engine_detail_uses_read_model_for_activity_and_workflow_state(
+        self,
+    ) -> None:
         self.client.force_login(self.user)
 
         response = self.client.get("/engines/bonus/")
@@ -150,25 +166,44 @@ class GuiControlPlaneTests(TestCase):
         self.assertContains(response, "Execution Layer state")
         self.assertContains(response, "All BonusEngine reports")
 
-    def test_simulation_visibility_is_admin_controlled(self) -> None:
+    def test_monitoring_requires_staff_access(self) -> None:
+        self.assertRedirects(
+            self.client.get("/monitoring/"),
+            "/accounts/login/?next=/monitoring/",
+            fetch_redirect_response=False,
+        )
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get("/monitoring/").status_code, 302)
+
+        self.client.force_login(self.staff)
+        response = self.client.get("/monitoring/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "BonusEngine")
+
+    @override_settings(QBET_SIMULATION_MODE_ENABLED=False)
+    def test_simulation_visibility_is_deployment_configured(self) -> None:
         self.client.force_login(self.user)
         self.assertEqual(self.client.get("/simulation/").status_code, 404)
         self.assertEqual(self.client.get("/admin-area/gui-settings/").status_code, 302)
 
         self.client.force_login(self.staff)
-        response = self.client.post(
-            "/admin-area/gui-settings/", {"simulation_enabled": "on"}
-        )
-        self.assertRedirects(response, "/admin-area/gui-settings/")
+        response = self.client.get("/admin-area/gui-settings/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "QBET_SIMULATION_MODE_ENABLED")
+        self.assertEqual(self.client.post("/admin-area/gui-settings/").status_code, 405)
 
-        self.client.force_login(self.user)
-        response = self.client.get("/simulation/")
+        with override_settings(QBET_SIMULATION_MODE_ENABLED=True):
+            self.client.force_login(self.user)
+            response = self.client.get("/simulation/")
+
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content.decode().count("data-simulation-engine="), 2)
 
-    def test_presentation_preferences_are_session_persisted(self) -> None:
+    def test_presentation_preferences_are_session_scoped_and_disclosed(self) -> None:
         self.client.force_login(self.user)
 
+        settings_response = self.client.get("/settings/presentation/")
+        self.assertContains(settings_response, "browser session only")
         response = self.client.post(
             "/settings/presentation/", {"theme": "dark", "font_size": "large"}
         )
@@ -178,27 +213,58 @@ class GuiControlPlaneTests(TestCase):
         self.assertContains(dashboard, 'data-theme="dark"')
         self.assertContains(dashboard, 'data-font-size="large"')
 
-    def test_report_detail_hides_raw_data_by_default_and_exports_selected_data(self) -> None:
+    def test_report_exports_share_required_metadata_and_selected_sections(self) -> None:
         self.client.force_login(self.user)
         detail_url = f"/reports/{self.bonus_report.run_id}/"
+        all_sections = (
+            "include_events=1&include_intermediate_results=1&include_raw_inputs=1&"
+            "include_warnings=1&include_errors=1&include_risk_decisions=1&"
+            "include_workflow_transitions=1"
+        )
 
         compact = self.client.get(detail_url)
-        selected = self.client.get(f"{detail_url}?include_raw_inputs=1&include_warnings=1")
+        selected = self.client.get(f"{detail_url}?{all_sections}")
         json_export = self.client.get(
-            f"/reports/{self.bonus_report.run_id}/export/json/?include_raw_inputs=1"
+            f"/reports/{self.bonus_report.run_id}/export/json/?{all_sections}"
         )
         csv_export = self.client.get(
-            f"/reports/{self.bonus_report.run_id}/export/csv/?include_warnings=1"
+            f"/reports/{self.bonus_report.run_id}/export/csv/?{all_sections}"
         )
 
         self.assertEqual(compact.status_code, 200)
         self.assertNotIn("fixture", compact.content.decode())
         self.assertIn("fixture", selected.content.decode())
+
+        payload = json.loads(json_export.content)
         self.assertEqual(json_export.status_code, 200)
-        self.assertEqual(json.loads(json_export.content)["engine"], "bonus")
+        self.assertEqual(payload["run_id"], str(self.bonus_report.run_id))
+        self.assertEqual(payload["engine"], "bonus")
+        self.assertEqual(payload["mode"], "simulation")
+        self.assertTrue(payload["generated_at"].endswith("+00:00"))
+        self.assertEqual(
+            set(payload["details"]),
+            {
+                "events",
+                "intermediate_results",
+                "raw_input_snapshots",
+                "warnings",
+                "errors",
+                "risk_decisions",
+                "workflow_transitions",
+            },
+        )
+        self.assertEqual(
+            payload["details"]["raw_input_snapshots"][0]["market"], "fixture"
+        )
+
+        content = csv_export.content.decode()
         self.assertEqual(csv_export.status_code, 200)
-        self.assertIn("engine,bonus", csv_export.content.decode())
-        self.assertIn("include_warnings", csv_export.content.decode())
+        self.assertIn("run_id," + str(self.bonus_report.run_id), content)
+        self.assertIn("engine,bonus", content)
+        self.assertIn("mode,simulation", content)
+        self.assertIn(f"generated_at,{payload['generated_at']}", content)
+        for field in payload["details"]:
+            self.assertIn(f"detail.{field}", content)
 
     def test_report_history_and_missing_report_have_safe_states(self) -> None:
         self.client.force_login(self.user)

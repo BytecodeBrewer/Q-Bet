@@ -20,7 +20,3 @@ class PresentationSettingsForm(forms.Form):
         choices=(("small", "Small"), ("medium", "Medium"), ("large", "Large")),
         widget=forms.RadioSelect,
     )
-
-
-class SimulationAvailabilityForm(forms.Form):
-    simulation_enabled = forms.BooleanField(required=False)
