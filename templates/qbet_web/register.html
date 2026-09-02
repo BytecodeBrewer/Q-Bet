@@ -1,1 +1,12 @@
-{% extends "qbet_web/base.html" %}{% block content %}<h1>Create account</h1><form method="post" class="auth-form">{% csrf_token %}{{ form.as_p }}<button class="primary">Create account</button></form>{% endblock %}
+{% extends "qbet_web/base.html" %}
+{% block content %}
+<h1>Create account</h1>
+<form method="post" class="auth-form">
+  {% csrf_token %}
+  {% if registration_error %}<p class="error">Registration details were not accepted.</p>{% endif %}
+  <p><label for="{{ form.username.id_for_label }}">Username</label>{{ form.username }}</p>
+  <p><label for="{{ form.password1.id_for_label }}">Password</label>{{ form.password1 }}</p>
+  <p><label for="{{ form.password2.id_for_label }}">Confirm password</label>{{ form.password2 }}</p>
+  <button class="primary">Create account</button>
+</form>
+{% endblock %}

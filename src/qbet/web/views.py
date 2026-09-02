@@ -37,12 +37,20 @@ def home(request: HttpRequest) -> HttpResponse:
 def register(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
         return redirect("dashboard")
+
     form = RegistrationForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        user = form.save()
-        login(request, user)
-        messages.success(request, "Your Q-Bet account is ready.")
-        return redirect("dashboard")
+    if request.method == "POST":
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            messages.success(request, "Your Q-Bet account is ready.")
+            return redirect("dashboard")
+        return render(
+            request,
+            "qbet_web/register.html",
+            {"form": RegistrationForm(), "registration_error": True},
+        )
+
     return render(request, "qbet_web/register.html", {"form": form})
 
 
