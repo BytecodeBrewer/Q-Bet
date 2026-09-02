@@ -9,7 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 
@@ -135,8 +135,14 @@ class _ReportStore:
     def list_recent_reports(self, limit: int = 20) -> tuple[SimulationReport, ...]:
         return self._reports[:limit]
 
-    def load_records(self, run_id: object) -> tuple[SimulationLogRecord, ...]:
+    def load_records(self, run_id: UUID) -> tuple[SimulationLogRecord, ...]:
         return tuple(record for record in self._records if record.run_id == run_id)
+
+    def load_report(self, run_id: UUID) -> SimulationReport:
+        for report in self._reports:
+            if report.run_id == run_id:
+                return report
+        raise KeyError(run_id)
 
 
 def _report() -> SimulationReport:

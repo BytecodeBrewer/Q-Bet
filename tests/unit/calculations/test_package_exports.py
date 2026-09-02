@@ -4,7 +4,7 @@ from qbet import calculations
 def test_calculation_package_exports_public_api() -> None:
     namespace: dict[str, object] = {}
 
-    exec("from qbet.calculations import *", namespace)
+    exec("from qbet.calculations import *", namespace)  # noqa: S102
 
     for name in (
         "ArbitrageOffer",

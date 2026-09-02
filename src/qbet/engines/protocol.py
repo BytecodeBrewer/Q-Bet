@@ -2,9 +2,9 @@
 
 from typing import Protocol, TypeVar
 
-RequestT = TypeVar("RequestT", contravariant=True)
-EvaluationT = TypeVar("EvaluationT", covariant=True)
+RequestT_contra = TypeVar("RequestT_contra", contravariant=True)
+EvaluationT_co = TypeVar("EvaluationT_co", covariant=True)
 
 
-class StrategyEngine(Protocol[RequestT, EvaluationT]):
-    def evaluate(self, request: RequestT) -> EvaluationT: ...
+class StrategyEngine(Protocol[RequestT_contra, EvaluationT_co]):
+    def evaluate(self, request: RequestT_contra) -> EvaluationT_co: ...

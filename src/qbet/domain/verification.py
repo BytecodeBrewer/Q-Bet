@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import TypeAlias
 
 from pydantic import Field, field_validator, model_validator
 
@@ -12,7 +11,7 @@ from qbet.domain.models import DomainModel, Identifier
 from qbet.engines.bonus import BonusEngineRequest
 from qbet.engines.sports_capital import SportsCapitalEngineRequest
 
-SportsOpportunityRequest: TypeAlias = BonusEngineRequest | SportsCapitalEngineRequest
+type SportsOpportunityRequest = BonusEngineRequest | SportsCapitalEngineRequest
 
 
 class DomainRiskStatus(StrEnum):
