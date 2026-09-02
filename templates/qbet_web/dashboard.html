@@ -1,0 +1,1 @@
+{% extends "qbet_web/base.html" %}{% block content %}<h1>Dashboard</h1><p>Current engine activity</p><div class="engine-grid">{% for engine in monitoring.engines %}<section class="engine"><h2>{{ engine.name }}</h2><p><span class="status status-{{ engine.status }}"></span>{{ engine.status }}</p><p>{{ engine.detail }}</p></section>{% endfor %}</div>{% endblock %}
