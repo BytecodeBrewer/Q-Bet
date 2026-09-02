@@ -11,16 +11,20 @@ from qbet.layers.logging import SimulationLogRecord
 from qbet.reporting import SimulationReport
 
 
-class SimulationReportStore(Protocol):
+class SimulationReportReader(Protocol):
+    """Read-only report history needed by monitoring and report views."""
+
+    def load_records(self, run_id: UUID) -> tuple[SimulationLogRecord, ...]: ...
+
+    def list_recent_reports(self, limit: int = 20) -> tuple[SimulationReport, ...]: ...
+
+
+class SimulationReportStore(SimulationReportReader, Protocol):
     def append_records(self, records: tuple[SimulationLogRecord, ...]) -> None: ...
 
     def finalize_run(self, report: SimulationReport) -> None: ...
 
     def load_report(self, run_id: UUID) -> SimulationReport: ...
-
-    def load_records(self, run_id: UUID) -> tuple[SimulationLogRecord, ...]: ...
-
-    def list_recent_reports(self, limit: int = 20) -> tuple[SimulationReport, ...]: ...
 
 
 class ProviderStateRepository(Protocol):

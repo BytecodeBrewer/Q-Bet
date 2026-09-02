@@ -10,11 +10,11 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 Q-Bet has the core of the first sports workflow in place. The agent workflow is documented, `BonusEngine` and `SportsCapitalEngine` are separated, and the main sports strategies are covered by deterministic calculation tests. This includes promotional matched betting, free bets, two-way arbitrage, dutching, stake optimization, rounding, fees, commission, liability, and the first operational risk checks.
 
-The pipeline is taking shape from intake to simulation. Normalized market-data contracts define collected provider data, and the Sports Match Builder now validates typed bookmaker BACK/exchange LAY pairs from distinct providers plus exhaustive Dutching snapshot coverage before creating engine requests. From there, the engines calculate strategy results, domain risk can reject or recheck opportunities, and the legacy `CapitalOrchestrator` still handles proposal ranking and capital allocation while it moves toward the future `LiquidityChecker` role.
+The pipeline is taking shape from intake to simulation. Normalized market-data contracts define collected provider data, and the Sports Match Builder now validates typed bookmaker BACK/exchange LAY pairs from distinct providers plus exhaustive Dutching snapshot coverage before creating engine requests. From there, the engines calculate strategy results, domain risk can reject or recheck opportunities, and the concrete `LiquidityChecker` now handles proposal ranking, capital allocation, and workflow liquidity decisions.
 
 The strongest end-to-end path today is simulation: evaluated sports opportunities can move through workflow transitions, risk checks, liquidity decisions, virtual-capital updates, reporting, and SQLite-backed report history without touching real execution. Provider state also has a typed SQLite persistence path, which gives the local version a practical bridge toward Supabase/PostgreSQL later.
 
-The main gaps against the expectation model are now easy to name: real Playwright/API collectors, `RequestHandler` refresh checks, the `LiquidityChecker` refactor, bank connectivity, GUI monitoring, CI/CD, and controlled real execution adapters. The math layer is solid, the preparation and simulation layers are becoming connected, and the remaining work is mostly about turning the pipeline from tested internal flow into usable product flow.
+The first read-only GUI monitoring slice now shows the two v1 engines, safe report summaries, and workflow warnings from configured simulation history. The remaining GUI gap is the control plane: simulation start/stop, engine enablement, approvals, report detail/export, and runtime configuration. The broader gaps against the expectation model remain real Playwright/API collectors, production bank connectivity, CI/CD, and controlled real execution adapters. The first bank-connector evaluation is complete; the bank layer remains mock-only until the account type and approved provider-onboarding route are chosen. `RequestHandler` refresh checks are now wired into the workflow at Domain Risk, Liquidity Check, and Dispatch, while concrete provider refresh clients remain future work. The math layer is solid, the preparation and simulation layers are becoming connected, and the remaining work is mostly about turning the pipeline from tested internal flow into usable product flow.
 
 ## Local Web Setup
 
@@ -24,6 +24,16 @@ For the local Django shell, initialize Django's built-in authentication and sess
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
+```
+
+## Validation
+
+The same baseline checks used by GitHub Actions can be run locally with:
+
+```powershell
+python -m pip install . -r requirements-dev.txt
+python -m pytest
+python manage.py check
 ```
 
 ## Version 1 Target

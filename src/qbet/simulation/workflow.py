@@ -200,7 +200,9 @@ class WorkflowSimulationRunner:
                 if isinstance(opportunity, BonusEngineRequest)
             )
             if len(requests) != len(request.opportunities):
-                raise ValueError("bonus simulations require BonusEngineRequest opportunities")
+                raise ValueError(
+                    "bonus simulations require BonusEngineRequest opportunities"
+                )
             return BonusSimulationAdapter(requests)
         if request.config.engine.value == "sports_capital":
             requests = tuple(

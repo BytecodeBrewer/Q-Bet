@@ -1,4 +1,4 @@
-﻿# Q-Bet Expectation Model
+# Q-Bet Expectation Model
 
 This document is the authoritative expectation model for Q-Bet code, tickets, agents, and review. It is the single working source for product direction, architecture, roadmap, and agent decisions.
 
@@ -45,8 +45,7 @@ Important separation rule: calculation engines produce deterministic strategy ou
 
 - `WorkflowOrchestrator` owns pipeline movement, routing, correlation ids, stage transitions, and engine activation/throttling from GUI settings.
 - `RequestHandler` performs targeted Playwright/API refresh checks for Risk, Liquidity, and Execution without becoming the main data stream.
-- `LiquidityChecker` is the preferred future name for the current capital/capital-allocation role. It checks capital, reservations, priority, balances, provider/account availability, and pending/recheck decisions.
-- The current `CapitalOrchestrator` name should be treated as legacy naming for liquidity and capital allocation until the code is refactored.
+- `LiquidityChecker` is the concrete capital and liquidity boundary. It checks configured capital, proposal ranking, configured risk/liquidity thresholds, and provider recheck decisions before the workflow can dispatch.
 - Reporting, logging, and persistence are cross-cutting architecture concerns, not a final numbered layer.
 - The GUI is the Admin Control and Monitoring Plane. It observes pipeline state, data ingestion, simulation, execution, bank/funding state, queues, warnings, reports, exports, and approvals. It must not bypass `WorkflowOrchestrator` or directly mutate engine/calculation state.
 
@@ -342,7 +341,7 @@ Expected output: a short recommendation and connector decision. Until then, the 
 
 ## Current Implementation Alignment
 
-The code currently has significant v1 foundations: typed domain models, pure calculators, deterministic rounding, a Base Engine dispatcher, simulation contracts, a Django web shell, and a proposal-only `CapitalOrchestrator`. The desired target is to evolve that legacy capital-allocation role toward `LiquidityChecker` and introduce `WorkflowOrchestrator` plus `RequestHandler` boundaries while preserving shared calculation primitives and explicit `BonusEngine` / `SportsCapitalEngine` engine boundaries.
+The code currently has significant v1 foundations: typed domain models, pure calculators, deterministic rounding, a Base Engine dispatcher, simulation contracts, a Django web shell, a proposal-only `LiquidityChecker`, `WorkflowOrchestrator`, and `RequestHandler` boundaries while preserving shared calculation primitives and explicit `BonusEngine` / `SportsCapitalEngine` engine boundaries.
 
 Provider-state persistence, simulation history, data aggregation, match building, request refresh handling, execution adapters, bank connector, Supabase integration, and richer GUI monitoring remain future implementation work.
 
