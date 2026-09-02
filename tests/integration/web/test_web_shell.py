@@ -8,7 +8,6 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 from uuid import UUID, uuid4
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
@@ -47,8 +46,8 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertContains(response, "Q-Bet")
         self.assertContains(response, "BonusEngine")
         self.assertContains(response, "SportsCapitalEngine")
-        self.assertContains(response, 'Open monitoring')
-        self.assertContains(response, 'status-gray')
+        self.assertContains(response, "Open monitoring")
+        self.assertContains(response, "status-gray")
         self.assertNotContains(response, "Base")
         self.assertNotContains(response, "Yield")
         self.assertNotContains(response, "Alpha")
@@ -123,6 +122,7 @@ def test_invalid_host_returns_400_with_correlation_id_before_authentication() ->
     assert response.status_code == 400
     assert response["X-Correlation-ID"] == correlation_id
 
+
 class _ReportStore:
     def __init__(
         self,
@@ -166,17 +166,18 @@ def _report() -> SimulationReport:
     )
 
 
-def test_monitoring_renders_configured_empty_state() -> None:
-    with patch("qbet.web.views.MONITORING_SERVICE", MonitoringService(_ReportStore())):
-        response = Client().get("/monitoring/")
+def test_monitoring_snapshot_renders_configured_empty_state() -> None:
+    snapshot = MonitoringService(_ReportStore()).snapshot()
 
-    assert response.status_code == 200
-    assert "BonusEngine" in response.content.decode()
-    assert "SportsCapitalEngine" in response.content.decode()
-    assert "No simulation reports are available yet." in response.content.decode()
+    assert snapshot.history_available is True
+    assert tuple(engine.name for engine in snapshot.engines) == (
+        "BonusEngine",
+        "SportsCapitalEngine",
+    )
+    assert not snapshot.reports
 
 
-def test_monitoring_renders_report_and_safe_warning_summary() -> None:
+def test_monitoring_snapshot_renders_safe_warning_summary() -> None:
     report = _report()
     warning = SimulationLogRecord(
         run_id=report.run_id,
@@ -186,22 +187,15 @@ def test_monitoring_renders_report_and_safe_warning_summary() -> None:
         source="simulation.workflow",
         payload={"secret": "not-for-display", "message": "not-for-display"},
     )
-    with patch(
-        "qbet.web.views.MONITORING_SERVICE",
-        MonitoringService(_ReportStore((report,), (warning,))),
-    ):
-        response = Client().get("/monitoring/")
 
-    content = response.content.decode()
-    assert response.status_code == 200
-    assert "bonus" in content
-    assert "completed" in content
-    assert "110" in content
-    assert "10" in content
-    assert "Latest simulation recorded a warning." in content
-    assert "not-for-display" not in content
+    snapshot = MonitoringService(_ReportStore((report,), (warning,))).snapshot()
 
-def test_monitoring_renders_error_summary() -> None:
+    assert snapshot.latest_alert is not None
+    assert snapshot.latest_alert.summary == "Latest simulation recorded a warning."
+    assert snapshot.engines[0].warning_count == 1
+
+
+def test_monitoring_snapshot_renders_error_summary() -> None:
     report = _report()
     error = SimulationLogRecord(
         run_id=report.run_id,
@@ -211,22 +205,19 @@ def test_monitoring_renders_error_summary() -> None:
         source="simulation.workflow",
         payload={"token": "not-for-display"},
     )
-    with patch(
-        "qbet.web.views.MONITORING_SERVICE",
-        MonitoringService(_ReportStore((report,), (error,))),
-    ):
-        response = Client().get("/monitoring/")
 
-    content = response.content.decode()
-    assert "Latest simulation recorded an error." in content
-    assert "not-for-display" not in content
+    snapshot = MonitoringService(_ReportStore((report,), (error,))).snapshot()
 
-def test_monitoring_renders_unconfigured_history_state() -> None:
-    with patch("qbet.web.views.MONITORING_SERVICE", MonitoringService()):
-        response = Client().get("/monitoring/")
+    assert snapshot.latest_alert is not None
+    assert snapshot.latest_alert.summary == "Latest simulation recorded an error."
+    assert snapshot.engines[0].error_count == 1
 
-    assert response.status_code == 200
-    assert "Simulation history is not configured." in response.content.decode()
+
+def test_monitoring_snapshot_renders_unconfigured_history_state() -> None:
+    snapshot = MonitoringService().snapshot()
+
+    assert snapshot.history_available is False
+    assert snapshot.engines[0].detail == "Simulation history is not configured."
 
 
 def test_configured_read_only_history_with_missing_schema_is_unavailable() -> None:
@@ -251,6 +242,8 @@ def test_monitoring_uses_newest_report_for_engine_status() -> None:
 
     snapshot = MonitoringService(_ReportStore((newer_report, older_report))).snapshot()
 
-    bonus_engine = next(engine for engine in snapshot.engines if engine.name == "BonusEngine")
+    bonus_engine = next(
+        engine for engine in snapshot.engines if engine.name == "BonusEngine"
+    )
     assert bonus_engine.status == "green"
     assert bonus_engine.detail == "Simulation running."

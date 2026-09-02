@@ -1,2 +1,13 @@
 {% extends "qbet_web/base.html" %}
-{% block content %}<section class="page-heading"><p><a href="{% url 'admin-area' %}">Admin</a></p><h1>GUI availability</h1><p>Only this presentation feature is configured here. It does not start or stop a simulation.</p></section><form method="post" class="settings-form">{% csrf_token %}<fieldset><legend>Simulation area</legend>{{ form.simulation_enabled }} <label for="{{ form.simulation_enabled.id_for_label }}">Show the simulation area to signed-in users</label></fieldset><button class="primary" type="submit">Save availability</button></form>{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <p><a href="{% url 'admin-area' %}">Admin</a></p>
+  <h1>GUI availability</h1>
+  <p>Simulation visibility is deployment configuration. This page does not change engine, workflow, or execution state.</p>
+</section>
+<section class="detail-panel">
+  <h2>Simulation area</h2>
+  <dl class="metric-list"><div><dt>Configured state</dt><dd>{% if simulation_enabled %}Enabled{% else %}Disabled{% endif %}</dd></div></dl>
+  <p class="muted">Set <code>QBET_SIMULATION_MODE_ENABLED</code> in deployment configuration, then restart the application to change this value globally.</p>
+</section>
+{% endblock %}
