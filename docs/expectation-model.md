@@ -1,293 +1,173 @@
 # Q-Bet Expectation Model
 
-This document is the authoritative expectation model for Q-Bet code, tickets, agents, and review. It is the single working source for product direction, architecture, roadmap, and agent decisions.
+This document is the authoritative expectation model for Q-Bet code, tickets, agents, and review. It is the single working source for product direction, architecture, delivery phases, and agent decisions.
 
 ## Source Of Truth
 
-Agents must use this Markdown file as the working source of truth for product direction, architecture, roadmap, and review.
+Agents must follow this file first. [Pipeline Architecture](pipeline-architecture.md) provides four visual views of the same system and must use the canonical component names defined here. If code, README text, older issues, or previous architecture wording conflict with this model, create or prioritize the smallest refactor ticket needed to restore alignment.
 
 ## North Star
 
 Q-Bet is a deterministic, mathematically protected multi-asset quant platform. It identifies and evaluates market inefficiencies, promotional opportunities, arbitrage situations, and yield mechanisms across sports betting, event tickets, crypto delta-neutral strategies, and prediction markets.
 
-The system should eliminate directional risk where possible, or operate only under clearly positive expected value where risk remains. It must expose decisions through a full GUI, keep mathematical logic isolated from execution and persistence, and protect capital through explicit risk and liquidity controls.
+The system should eliminate directional risk where possible, or operate only under clearly positive expected value where risk remains. It exposes decisions through a full GUI, isolates mathematical logic from execution and persistence, and protects capital through explicit domain-risk and liquidity controls.
 
 Core principles:
 
-- **Zero-CLI / Full GUI First:** End users should not need a console. Simulation, execution approval, settings, logs, exports, and analysis belong in the GUI.
-- **Decoupled engines via Protocol:** Engines are autonomous modules with typed request/result contracts.
-- **Domain and pipeline separation:** Pure formulas do not know live balances, execution adapters, providers, or GUI state.
-- **Capital safety:** The `WorkflowOrchestrator` and `LiquidityChecker` protect against insolvency, over-allocation, liquidity gaps, and user-side capital changes.
-- **Small implementation tickets:** Build quickly, but keep reviewable slices.
+- **Zero-CLI / Full GUI First:** End users operate simulation, approvals, settings, logs, exports, and analysis through the GUI.
+- **Typed autonomous engines:** Engines implement explicit request/result contracts and share only pure calculation primitives.
+- **Domain and pipeline separation:** Pure calculations never read databases, accounts, sessions, balances, browser profiles, GUI state, or execution state.
+- **Capital separation:** `WorkflowOrchestrator` never owns balances or moves capital. `LiquidityChecker` validates proposed allocations; `PortfolioLedger` owns balances, reservations, settlements, and capital-movement proposals.
+- **Conformant data access:** Quotation and market ingestion uses permitted, structured REST/WebSocket APIs. Browser automation is not a quotation-scraping channel.
+- **Controlled execution:** Money movement and irreversible live actions require explicit user approval.
+- **Observable workflows:** Every material transition emits structured, correlatable events.
+- **Small implementation tickets:** Work remains independently testable and reviewable.
 
-## Workflow Pipeline Architecture
+## Architecture Contract
 
-Q-Bet follows a workflow-orchestrated pipeline rather than a rigid numbered layer stack. The detailed Mermaid model lives in [Pipeline Architecture](pipeline-architecture.md).
-
-Core target flow:
+Q-Bet is a workflow-orchestrated pipeline. Not every engine uses every stage; each takes the shortest valid path.
 
 ```text
-Data Aggregation -> Engine-specific Preparation -> Calculation -> Domain Risk -> Liquidity Check -> Simulation / Execution
+Data Aggregation -> Engine-specific Preparation -> Calculation -> Domain Risk -> LiquidityChecker -> Simulation / Execution -> Settlement
 ```
 
-Numbered layers are avoided in the active architecture because not every engine uses every stage. Engines should take the shortest valid path from intake to calculation, risk checks where needed, liquidity checking, and simulation or execution.
+The detailed architecture is intentionally split into four Mermaid views in `docs/pipeline-architecture.md`:
 
-Engine-specific paths:
+1. Data and Processing Flow
+2. Capital and Liquidity Flow
+3. Monitoring and Tracking Flow
+4. System Context
 
-- `BonusEngine` / `SportsCapitalEngine`: Data Aggregation -> Sports Match Builder -> Calculation -> Sports Domain Risk -> Liquidity Check.
-- `TicketEngine`: Data Aggregation -> TicketEngine -> Liquidity Check.
-- `PredictionMarketEngine`: Data Aggregation -> optional Feature/Signal Builder -> PredictionMarketEngine -> optional Domain Risk -> Liquidity Check.
-- `CryptoYieldEngine`: Streaming Data -> Market State Aggregator -> CryptoYieldEngine -> optional Crypto Risk -> Liquidity Check.
+### Canonical Components
 
-Important separation rule: calculation engines produce deterministic strategy outputs. They must not read databases, accounts, sessions, live balances, browser profiles, GUI state, or execution state. Domain Risk, Liquidity Check, Dispatch, Simulation, and Execution decide whether, when, and how a valid plan may be simulated, presented, or executed.
+- `WorkflowOrchestrator`: pipeline routing, correlation ids, stage transitions, engine activation, throttling, and GUI-originated control.
+- `RequestHandler`: optional side channel for targeted risk, balance, provider, or execution refreshes. It is not the main intake stream.
+- `Data Aggregation`: normalized batch/stream intake from conformant structured APIs.
+- `Sports Match Builder`: validated event, market, bookmaker BACK, exchange LAY, and Dutching coverage preparation.
+- Calculation engines: deterministic strategy evaluation with typed inputs and outputs.
+- `Domain Risk`: engine/domain-specific policy after calculation and before liquidity allocation.
+- `LiquidityChecker`: validates whether an engine proposal may use the required capital, based on availability, allocation priority, exposure, account/provider state, and policy.
+- `PortfolioLedger`: independent capital-domain authority for available, working, reserved, locked, pending, cost, settlement, and capital-movement state.
+- Simulation and Execution: sibling targets with separate queues, adapters, histories, and capital contexts.
+- Monitoring and Tracking Plane: structured events, logging, persistence, reports, exports, GUI visibility, and approvals.
 
-## Pipeline Component Naming
+### Engine Paths
 
-- `WorkflowOrchestrator` owns pipeline movement, routing, correlation ids, stage transitions, and engine activation/throttling from GUI settings.
-- `RequestHandler` performs targeted Playwright/API refresh checks for Risk, Liquidity, and Execution without becoming the main data stream.
-- `LiquidityChecker` is the concrete capital and liquidity boundary. It checks configured capital, proposal ranking, configured risk/liquidity thresholds, and provider recheck decisions before the workflow can dispatch.
-- Reporting, logging, and persistence are cross-cutting architecture concerns, not a final numbered layer.
-- The GUI is the Admin Control and Monitoring Plane. It observes pipeline state, data ingestion, simulation, execution, bank/funding state, queues, warnings, reports, exports, and approvals. It must not bypass `WorkflowOrchestrator` or directly mutate engine/calculation state.
+- `BonusEngine` and `SportsCapitalEngine`: `Data Aggregation` -> `Sports Match Builder` -> calculation -> `Domain Risk` -> `LiquidityChecker`.
+- `TicketEngine`: `Data Aggregation` -> `Ticket Preparation` -> `TicketEngine` -> `Domain Risk` where required -> `LiquidityChecker`.
+- `PredictionMarketEngine`: `Data Aggregation` -> optional `Feature / Signal Builder` -> `PredictionMarketEngine` -> optional `Domain Risk` -> `LiquidityChecker`.
+- `CryptoYieldEngine`: streaming `Data Aggregation` -> `Market State Aggregator` -> `CryptoYieldEngine` -> optional `Domain Risk` -> `LiquidityChecker`.
 
-## Engine And Strategy Matrix
+### Hard Separation Rules
 
-| Tier / Category | Engine Name | Primary Mechanism | Roadmap Target |
+- `WorkflowOrchestrator` does not own capital, balances, reservations, or ledger mutations.
+- `LiquidityChecker` is a pipeline stage, not a child of `WorkflowOrchestrator`.
+- `PortfolioLedger` is the capital authority. It is not an internal subcomponent of `LiquidityChecker` and does not belong to `WorkflowOrchestrator`.
+- Bank, exchange, bookmaker, market, notification, and browser integrations belong under adapters.
+- Execution emits results; `Capital Settlement` applies those results to the ledger and persistence.
+- The GUI observes/configures through `WorkflowOrchestrator` and never directly mutates calculation, risk, liquidity, or execution state.
+- Simulation and live execution must never share balances, queues, or result histories.
+
+## API-First Data Ingestion And Settlement
+
+- Market and quotation ingestion uses structured, permitted REST/WebSocket APIs.
+- Scraping bookmaker pages to harvest quotations is out of scope.
+- Initial odds candidates are `The Odds API` and `Odds-API.io`, subject to a connector research ticket checking coverage, terms, limits, and costs.
+- Initial free or low-cost result-data candidates are `football-data.org` and `OpenLigaDB`. They are settlement candidates, not authoritative assumptions for every sport or league.
+- Exchange and market adapters should prefer official APIs such as the Betfair Exchange Betting/Stream/Accounts APIs, Polymarket CLOB/market-data APIs, and later suitable crypto exchange REST/WebSocket APIs.
+- Smart Polling performs targeted, provider-efficient requests rather than periodic full-data crawling. A target policy may include baseline discovery, a T-24h candidate check, a T-2h liquidity check, and a final T-15m execution check. Requests should group relevant markets when the provider supports multi-market endpoints and respect provider rate limits, caching rules, and terms.
+- Match settlement uses separate result-data APIs where practical so quotation API budgets are not consumed by settlement.
+- Adapters normalize provider-specific payloads before domain preparation.
+- Mock providers remain mandatory for integration tests and sandbox runs.
+
+### Pre-Execution Revalidation
+
+Only live Execution triggers mandatory last-mile provider refresh. Before an approved order is submitted, `RequestHandler` revalidates current odds, market availability, balance, provider/account state, exposure, and timing. If data changed, the plan is recalculated and returned through `Domain Risk` and `LiquidityChecker`; if it is no longer valid, it is discarded.
+
+Simulation does not perform live refreshes or send user notifications. It nevertheless uses the same typed invalidation outcomes: an invalid, rejected, expired, or underfunded plan is discarded rather than force-completed. Both paths therefore share decision semantics without sharing live side effects.
+
+## Engine And Strategy Portfolio
+
+| Category | Engine | Primary mechanism | Product horizon |
 | --- | --- | --- | --- |
-| Phase 1 / Base Promo Engine (EUR 100-500) | `BonusEngine` | Matched betting with qualifying bets, SNR/SR free bets, reloads, cashback, and promo conversion | Version 1.0 |
-| Phase 2 / Sports Capital Engine (EUR 500-2,000) | `SportsCapitalEngine` | Sports arbitrage, odds boosts, real-capital matched betting, and multi-outcome dutching | Version 1.0 |
-| Phase 3 / Ticket Engine (EUR 2,000-5,000) | `TicketEngine` | Event-driven secondary ticket arbitrage | Version 2.0 |
-| Phase 4 / Prediction Engine (EUR 5,000-10,000) | `PredictionMarketEngine` | Prediction-market making, order-book arbitrage, and latency analysis through supported APIs | Version 2.5 |
-| Phase 5 / Crypto Yield And ML Engine (EUR 10,000+) | `CryptoYieldEngine` + `MLEdgeLayer` | Delta-neutral funding-rate arbitrage, fair-odds modeling, value detection, and drift detection | Version 3.0 |
+| Promotional sports | `BonusEngine` | Qualifying bets, SNR/SR free bets, reloads, cashback, promo conversion | Current product |
+| Sports capital | `SportsCapitalEngine` | Arbitrage, odds boosts, real-capital matched betting, dutching | Current product |
+| Tickets | `TicketEngine` | Event-driven secondary ticket opportunities | Later engine |
+| Prediction markets | `PredictionMarketEngine` | Market making, order-book arbitrage, supported API strategies | Later engine |
+| Crypto yield | `CryptoYieldEngine` | Delta-neutral spot/perpetual and funding-rate strategies | Later engine |
+| Statistical edge | `MLEdgeLayer` | Fair odds, value detection, and drift checks | Later support layer |
 
-### Base Tier: Promotional And Low-Risk Cashflow
-
-- **Qualifying Bet Matched Betting:** Hedge qualifying bookmaker bets with minimal mathematical loss to unlock bonus value.
-- **SNR Free Bets:** Convert stake-not-returned free bets into cash value; target conversion should be measured and simulated.
-- **SR Free Bets:** Convert stake-returned free bets where the promotional stake is returned on a win.
-- **Reload and Cashback Harvesting:** Handle recurring promotional offers for existing users.
-- **Fintech and Depot Promo Harvesting:** Track and evaluate broker, neobank, and crypto-exchange promotional bonuses as a later adjacent module.
-
-### Yield Tier: Real-Capital Arbitrage And Systemic Yields
-
-- **Two-Way and Multi-Outcome Arbitrage:** Exploit odds differences across providers to target guaranteed positive return.
-- **Multi-Bookmaker Dutching:** Split stake across all possible outcomes of a market without requiring a betting exchange.
-- **Middle Betting and Asian Handicap Spreads:** Evaluate overlapping payout ranges, such as Over 2.25 versus Under 2.75.
-- **Event-Driven Secondary Ticket Arbitrage:** Later module for buying high-demand event tickets at face value and reselling on secondary markets with a target margin.
-- **Crypto Delta-Neutral Funding Rate Arbitrage:** Hold spot and opposing perpetual/futures exposure to target funding-rate yield while reducing price-direction exposure.
-
-### Alpha Tier: Probabilistic Edge And Market Making
-
-- **Value Betting via Sharp-Market Benchmark:** Compare consumer bookmaker odds against margin-adjusted fair odds from sharp markets and use fractional Kelly sizing.
-- **Prediction Market AMM:** Place bid/ask orders around fair value on prediction markets and measure spread/reward capture.
-- **Cross-Platform Latency Arbitrage:** Compare delayed prices across supported prediction-market venues where official APIs allow access.
-- **Statistical Predictive Modeling:** Build fair odds and drift models with methods such as Poisson regression, Dixon-Coles, xG-style features, or XGBoost.
-
-## Version Roadmap
-
-### Version 1.0: Foundation, Full GUI, Simulation And Controlled Execution
-
-Version 1.0 delivers the operational MVP for promo and sports-betting workflows with transparency and user control.
-
-Must include:
-
-- Full GUI operation with no required CLI for end users.
-- Visual execution-order approval through `[Approve Order]` / `[Reject]` style prompts.
-- No real-money execution without explicit GUI approval.
-- Live-market data can be used in sandbox simulation, but simulation execution must remain isolated from real execution.
-- Simulation and live execution cannot run at the same time in v1 if they share state.
-- A simulation orchestrator with virtual capital, configurable starting capital, optional top-ups, selectable engines, visible progress, stop/end control, and persisted reports.
-- GUI-integrated logs, reports, and CSV/JSON exports for calculations, odds history, simulation logs, and cashflow analysis.
-- `BonusEngine` for qualifying bets and SNR/SR free bets.
-- `SportsCapitalEngine` for two-way arbitrage and two-to-four-outcome dutching.
-
-### Version 2.0: Ticket Engine And Advanced Safety Orchestrator
-
-Version 2.0 expands the portfolio with event-driven ticket arbitrage and stronger safety controls.
-
-Should include:
-
-- `TicketEngine` for event-driven secondary ticket arbitrage.
-- GUI risk profiles such as Conservative, Balanced, and Aggressive.
-- Risk profiles controlling minimum margins, maximum stake per opportunity, and rounding aggressiveness.
-- Continuous account and liquidity monitoring across bookmakers, exchanges, banks, and supported ticket venues.
-- Multi-tier threshold system:
-  - Green: normal operation.
-  - Yellow: warning, such as unusual withdrawal size or failed deposits.
-  - Red: critical liquidity condition.
-- Emergency stop behavior:
-  - stop generating new orders on red threshold or major capital withdrawal
-  - finish already running transactions in an orderly way
-  - run rebalance and liquidity checks afterward
-  - pause execution if capital remains below the red threshold
-
-### Version 2.5: Prediction Markets And Order-Book Strategies
-
-Version 2.5 adds prediction-market making and order-book arbitrage through supported APIs.
-
-Could include:
-
-- `PredictionMarketEngine` for market making, arbitrage, and liquidity rewards.
-- Cross-platform price comparison where official APIs or permitted data access allow it.
-- Prediction-market reporting, exposure controls, and sandbox/live separation.
-
-### Version 3.0: Crypto Yield, ML Edge, Multi-User And Cloud Scaling
-
-Version 3.0 turns Q-Bet into a broader multi-engine quant platform with crypto yield, ML support, and multi-user readiness.
-
-Could include:
-
-- `CryptoYieldEngine` for spot/perpetual funding-rate strategies.
-- `MLEdgeLayer` for fair-odds models, value betting, drift detection, and market-inefficiency detection.
-- Multi-tenant architecture with isolated bankrolls, API keys, roles, and permissions.
-- Cryptographic audit logging for system actions, security events, and financial evaluations.
-
-## Five-Phase Scaling Roadmap
-
-| Phase | Capital Level | Enabled Modules | Primary Mechanism | Target Cashflow |
-| --- | --- | --- | --- | --- |
-| Phase 1 | EUR 100-500 | `BonusEngine` | New-user bonuses, promo cashflow, reloads, cashback, and later fintech/depot promos | EUR 300-600 / month |
-| Phase 2 | EUR 500-2,000 | `SportsCapitalEngine` | Arbitrage, reloads, odds boosts, real-capital matched betting | EUR 600-1,000 / month |
-| Phase 3 | EUR 2,000-5,000 | `TicketEngine` | Automated ticket sourcing and secondary-market margin | EUR 800-1,400 / month |
-| Phase 4 | EUR 5,000-10,000 | `PredictionMarketEngine` | Market making and order-book arbitrage | EUR 1,200-2,000 / month |
-| Phase 5 | EUR 10,000+ | `CryptoYieldEngine` + `MLEdgeLayer` | Delta-neutral funding-rate arbitrage, statistical value detection, and drift analysis | EUR 1,800-3,500+ / month |
-
-These numbers are planning hypotheses for simulation, not guaranteed returns.
-
-## Storage And Persistence Model
-
-| Pipeline Area | Storage Type | Necessity | Reason |
-| --- | --- | --- | --- |
-| Math / Calculation | Pure stateless in-memory | No DB storage | Pure calculations must remain isolated and deterministic. |
-| Domain Risk / Verification | In-memory cache synchronized with SQLite locally, then Supabase/PostgreSQL as cloud target | Required | Stores provider/account state, cooldowns, active bet counts, last action timestamps, market filters, and warning state. |
-| Liquidity Check / Capital | ACID-compliant ledger in SQLite locally, then Supabase/PostgreSQL as cloud target | Critical | Central authority for bankroll, balances, reserved funds, thresholds, and race-condition protection. |
-| Execution, Simulation, And GUI | SQLite/Supabase plus filesystem export for CSV/JSON; cloud deployments may mirror export artifacts to object storage | Required | Stores execution history, GUI session state, simulation results, reports, and CSV/JSON exports. |
-
-The local implementation may start with SQLite. The cloud target should use Supabase/Postgres unless a later technical decision proves a better fit.
+Yield and profit figures are simulation hypotheses, never promises. Capital bands may be used in experiments and reports, but they do not define the delivery roadmap.
 
 ## Formula And Calculation Standards
 
-All calculations must be deterministic and should use `Decimal` for money-sensitive arithmetic. NumPy may be introduced for vectorized analysis or simulations where precision boundaries are explicit.
-
-Required formula standards:
+All money-sensitive calculations use `Decimal` and deterministic rounding. NumPy may be used for vectorized analysis or simulation only when precision boundaries are explicit.
 
 - Qualifying Bet Lay Stake: `L = (B * O_b) / (O_l - c)`.
 - SNR Free Bet Lay Stake: `L_SNR = (B * (O_b - 1)) / (O_l - c)`.
-- Value Bet EV: compare offered odds against margin-adjusted fair probability, then size using fractional Kelly when enabled.
+- Value Bet EV: compare offered odds with margin-adjusted fair probability, then use fractional Kelly sizing when enabled.
 
-Where:
+Where `B` is bookmaker back stake, `O_b` is bookmaker back odds, `O_l` is exchange lay odds, and `c` is exchange commission.
 
-- `B` = back stake at bookmaker
-- `O_b` = bookmaker back odds
-- `O_l` = exchange lay odds
-- `c` = exchange commission rate, e.g. `0.02` for 2 percent
-- `p_sharp` = implied fair probability from a sharp or exchange benchmark after margin removal
+Calculations explicitly model stake precision, rounding, fees, taxes, commission, liquidity, stake limits, total-stake limits, liability, and capital lock-up.
 
-Calculations must model stake precision, rounding, fees, taxes, exchange commission, liquidity, stake limits, total-stake limits, liability, and capital lock-up explicitly.
+Implementation standards:
 
-Engine implementation standards:
-
-- Do not introduce monolithic request or input unions for v1 sports betting, including catch-all request models in files such as `base.py` that own strategy-specific inputs.
-- `BonusEngine` and `SportsCapitalEngine` must be autonomous classes implementing `StrategyEngine[RequestT, EvaluationT]`.
-- Shared formulas, value objects, and calculation primitives may live in domain/calculation modules, but engine-specific requests, evaluations, reports, and risk categories must remain separate.
+- No monolithic catch-all request/input union may own strategy-specific inputs.
+- `BonusEngine` and `SportsCapitalEngine` remain autonomous `StrategyEngine[RequestT, EvaluationT]` implementations.
+- Shared value objects and pure calculators may be reused; engine requests, evaluations, reports, and risk categories remain separate.
+- Every `calculate_*` function requires at least a happy-path test and a material edge-case test.
+- Dynamic rounding tests cover zero/near-zero candidates, configured increments, liability limits, liquidity limits, and total-stake limits.
 
 German market tax modes:
 
-- `STAKE`: apply a 5.3 percent tax deduction to stake-based taxable turnover.
-- `PROFIT`: apply a 5.3 percent tax deduction to taxable winnings/profit.
+- `STAKE`: apply 5.3 percent to stake-based taxable turnover.
+- `PROFIT`: apply 5.3 percent to taxable winnings/profit.
 - `NONE`: no betting-tax deduction.
-- Tax mode must be explicit in calculation inputs, reports, and tests wherever it can affect final P/L.
+- Tax mode is explicit in inputs, reports, and tests whenever final P/L can change.
 
-## MoSCoW
+## Matched-Betting Requirements
 
-### Must
-
-- Follow this expectation model as the primary source of truth.
-- Keep architecture modular across the workflow pipeline stages.
-- Implement `BonusEngine` and `SportsCapitalEngine` as distinct v1 engines, even if they share calculators.
-- Keep Yield, Alpha, Ticket, and ML modules behind explicit contracts until their production logic is built.
-- Implement a `WorkflowOrchestrator` that coordinates pipeline movement and a `LiquidityChecker` that routes capital by EV, ROI, risk, liquidity, and capital lock-up.
-- Provide data collection contracts for all engine types:
-  - Playwright collectors for permitted web data collection where API access is unavailable or insufficient
-  - API adapter interfaces for crypto yield and prediction-market engines
-  - mock providers for integration tests and sandbox runs
-- Provide controlled real execution for supported v1 workflows, with user approval boundaries for money movement or irreversible actions.
-- Provide full simulation mode for v1 engines and sandbox simulation for later engines.
-- Provide bank connectivity behind an interface for balances and approved funding flows.
-- Never pull money from a bank account without explicit user approval.
-- Implement matched-betting stake optimization, including dynamic rounding that preserves calculation quality while producing valid practical stake sizes.
-- Implement Domain Risk checks for provider limits, cooldowns, market/liquidity filters, exposure thresholds, timing/pacing rules, withdrawal warnings, and strategy intensity where the engine path requires them.
-- Provide a main dashboard with compact engine widgets showing traffic-light status plus warning/error symbols.
-- Provide separate views for each engine; clicking a widget opens or expands the relevant engine view.
-- Provide visual order approval and rejection in the GUI.
-- Provide performance reports for realized and simulated outcomes.
-- Provide GUI-integrated CSV/JSON export for calculation, odds, simulation, and cashflow records.
-- Maintain tests for calculation logic, strategy evaluation, dynamic rounding, mock integrations, simulation flow, execution safety boundaries, and capital allocation.
-- Add CI/CD checks for lint, tests, build, and deployment readiness.
-- Keep tickets small enough for meaningful review.
-
-### Should
-
-- Provide first provider/service templates for known bookmakers, exchanges, banks, crypto venues, and prediction-market APIs, with clear notes that user credentials must be supplied later.
-- Use Python 3.12+ and Pydantic v2 for engine/domain models.
-- Use typed models for Event, Market, Offer, Opportunity, StrategyResult, ExecutionPlan, CapitalAllocation, SimulationRun, AccountAction, BankTransaction, ProviderState, VerificationResult, Bankroll, AccountBalance, Thresholds, and Report.
-- Keep strategy providers pluggable behind protocols.
-- Use GUI risk profiles to tune risk thresholds, allowed stakes, margin requirements, and rounding aggressiveness.
-- Research regulated/open banking options before selecting the first real bank connector. Desired candidates include Revolut, ING, Commerzbank, and other viable providers.
-- Treat yield/profit numbers in this expectation model as simulation hypotheses, not promises.
-- Keep the first UI practical: main dashboard, engine views, simulation controls, reports, settings, and status.
-
-### Could
-
-- Add richer bank balance views and transaction breakdowns.
-- Add detailed warning dashboards beyond traffic-light status.
-- Add configurable themes or visual design settings.
-- Add drag-and-drop UI customization.
-- Add performance tests over large historical simulation datasets.
-- Add historical replay datasets.
-- Add richer cloud observability and alert routing.
-- Add multi-user tenant isolation once single-user flows are stable.
-
-### Won't For Now
-
-- No unmanaged full automation: unattended runs are capped at 48 hours.
-- No bank withdrawals/top-ups without explicit user approval.
-
-## Matched-Betting Strategy Requirements
-
-The v1 sports-betting system is split into two engines:
+The current sports product contains two engines:
 
 - `BonusEngine`: qualifying bets, SNR/SR free bets, reload/cashback offers, bonus-condition tracking, and promo conversion reports.
 - `SportsCapitalEngine`: two-way arbitrage, multi-outcome dutching, odds boosts, real-capital matched-betting opportunities, and later value-betting candidates.
 
-Both engines may share pure calculation primitives, but their request/result models, reporting categories, risk checks, and GUI views must remain distinct.
+The stack includes qualifying-bet calculation, SNR/SR free-bet calculation, arbitrage detection, two-to-four-outcome dutching, dynamic rounding, stake optimization, tax/fee/commission handling, liquidity and stake limits, liability, execution-plan generation, result reporting, and account-operation warnings.
 
-The matched-betting stack must include:
+Dynamic rounding evaluates permitted floor/ceiling candidates at configured increments against final outcome values. The selected plan maximizes the least favorable eligible outcome while respecting liability, liquidity, total-stake limits, and strategy tolerance. A rounded plan is valid only when it remains mathematically sound.
 
-- qualifying-bet calculation
-- SNR and SR free-bet calculation
-- arbitrage detection
-- two-to-four-outcome dutching
-- dynamic rounding and stake optimization
-- tax, fee, commission, liquidity, stake-limit, and total-stake handling
-- execution-plan generation
-- result/report generation
-- account-operation risk warnings
+## Domain Risk And Controlled Execution
 
-Dynamic rounding must evaluate permitted floor/ceiling candidates at configured stake increments against final outcome values. The selected plan must maximize the least favorable eligible outcome while respecting liability, liquidity, total-stake limits, and configured strategy tolerance. Rounding is only acceptable when the resulting plan remains mathematically sound.
+Domain risk never alters pure math. It evaluates a completed strategy result and emits typed allow, warn, approval-required, reject, or recheck outcomes.
 
-Operational risk checks must not alter pure math. They run after strategy calculation and before capital allocation/execution. They should emit structured statuses, warnings, required approvals, or rejections.
+Required policy categories where relevant:
 
-Blueprint operational-risk categories to represent safely in code:
+- kickoff proximity and market freshness
+- provider and account state
+- active-bet and concurrent-execution limits
+- stake and total exposure limits
+- low-liquidity and niche-market filters
+- deterministic operational cooldowns and queue pacing
+- withdrawal warnings and capital-cycle state
+- session safety and credential isolation metadata
+- slippage, funding, and margin risk for crypto paths
 
-- stake rounding policy and allowed deviation thresholds
-- account activity pacing and strategy intensity limits
-- market/liquidity filtering and niche-market restrictions
-- timing windows and delay/pacing rules for operational safety
-- max exposure and provider-limit usage thresholds
-- withdrawal cadence warnings and capital-cycle management
-- browser/session separation as credential/session-safety metadata, not evasion tooling
+Execution policy must be transparent, configurable, deterministic where test reproducibility matters, and documented as stability/capital protection. It must not attempt to conceal automation, imitate human behavior, or bypass provider controls.
 
-The `OperationalRiskLayer` processes domain-specific execution policies in Python 3.12+ prior to capital allocation:
+Browser automation rules:
+
+- The first product approach is API-first and notification-first, without Playwright execution.
+- `qbet.adapters.browser` may later support explicitly permitted, short-lived execution tasks for softbookers or ticket providers where no supported order API exists.
+- Stored session contexts may reduce redundant authentication while remaining encrypted, scoped, and revocable.
+- Browser automation is excluded from quotation scraping.
+- Browser automation must use an ordinary user-controlled browser context. Cloudflare or provider verification is completed through the provider's intended browser flow; Q-Bet must not bypass, defeat, or imitate those controls.
+- Queue pacing prevents race conditions, duplicate submissions, and local resource overload.
+- Live orders require current risk/liquidity checks and explicit approval.
+
+### Operational-Risk Blueprint Preserved From The Previous Model
+
+The following blueprint is preserved verbatim from the previous expectation model. It records the original product requirements. The compliance rule above remains authoritative during implementation: these items may protect capital, stability, and sessions, but must not be implemented to conceal automation or bypass provider controls.
 
 ### A. Pre-Match Liquidity & Kickoff Proximity Scheduling
 
@@ -322,58 +202,174 @@ The `OperationalRiskLayer` processes domain-specific execution policies in Pytho
 
 - **Staggered Order Routing (`qbet.layers.verification.pacing`):** Injects non-deterministic execution delays using `asyncio.sleep(random.uniform(4, 18))` prior to order submission.
 
-## Bank API Feasibility
+## Liquidity, Portfolio Ledger, And Financial Interfaces
 
-Desired first candidates are Revolut or ING. Commerzbank and other banks can be considered.
+`LiquidityChecker` should be reusable and stateless at the service boundary: the check call receives the opportunity snapshot, policy/configuration, and read-only capital/provider state required for that decision. It approves, rejects, or requests re-evaluation of an engine proposal; it does not execute financial flows.
 
-Before choosing, create a research ticket that checks:
+Allocation ranks candidates by expected value, ROI, risk, liquidity, and capital lock-up, followed by a stable business key such as `opportunity_id` or `created_at`. Random UUID ordering must not be the reproducibility tie-breaker.
 
-- whether an official API exists for personal or business accounts
-- whether access is available in the user's country/account type
-- authentication model
-- sandbox availability
-- transaction/balance access
-- payment initiation/top-up support
-- rate limits and costs
-- compliance and data-retention obligations
+`PortfolioLedger` owns financial state transitions and distinguishes:
 
-Expected output: a short recommendation and connector decision. Until then, the bank layer should be designed behind an interface and backed by mock data.
+- available central capital
+- working capital held on bookmaker, exchange, ticket, prediction-market, or crypto accounts
+- reserved capital
+- locked capital in active operations
+- pending transfers or settlement
+- realized P/L
+- taxes, fees, commission, and infrastructure costs
+
+Bank and provider adapters expose narrow typed protocols for balances, transactions, and prepared transfers. `PortfolioLedger` may calculate and propose capital movement; it must not know provider-specific payloads. `LiquidityChecker` reads the resulting state only for allocation decisions.
+
+When capital should move, `PortfolioLedger` creates a `CapitalMovementProposal` containing source, destination, reason, requested amount, minimum useful amount, percentage of source balance, resulting reserve, and risk level. `NotificationService` sends the proposal to the user. The user approves an amount inside the permitted range, rejects it, or completes a manual provider withdrawal. Simulation never sends these notifications.
+
+Email is the default low-cost channel. SMS is an optional paid adapter; current German SMS delivery through services such as Twilio is usage-priced rather than genuinely free. Later channels may include push notifications or another explicitly approved messaging adapter.
+
+The bank/payment implementation proceeds in increasing authority:
+
+1. read-only balances and transactions
+2. sandbox transfer simulation
+3. payment draft or prepared transfer requiring human approval
+4. live payment initiation only through an officially supported interface and eligible account or regulated provider
+
+Revolut Business is a concrete research candidate because its Business API documents accounts, transactions, payment drafts, transfers, sandbox simulations, and webhooks. ING PSD2 sandbox APIs are useful for feasibility tests, but production payment initiation generally requires an appropriately certified third party. A normal private bank account must not be assumed to provide unrestricted payment automation.
+
+Before selecting a real bank connector, a research ticket must verify official API availability, country/account eligibility, authentication, sandbox support, balance/transaction access, payment initiation, rate limits, cost, compliance, and retention requirements. Until that decision, the bank layer uses mock/sandbox data.
+
+## Simulation And Execution
+
+- Simulation and Execution are sibling dispatch targets.
+- Simulation uses virtual capital, simulated adapters, selectable engines, visible progress, stop/end controls, and persisted reports.
+- Placeholder adapters for later engines remain explicit until their real logic exists.
+- Live execution is enabled only for supported workflows and requires approval boundaries.
+- API execution is the preferred target for betting exchanges, prediction markets, and crypto markets. Betfair Exchange and Polymarket are concrete initial research candidates.
+- Manual notification is the initial execution path for softbookers and ticket providers. Narrowly scoped Playwright execution is a later opt-in adapter, not a v1 prerequisite.
+- Result payloads are validated with typed models before report or settlement generation; invalid payloads fail visibly and do not partially update capital state.
+- Execution and simulation results carry correlation ids and remain queryable in separate histories.
+
+## Storage, Logging, And GUI
+
+| Concern | Current/local target | Later target |
+| --- | --- | --- |
+| Pure calculation | Stateless in memory | Same |
+| Operational state and ledger | SQLite with ACID transactions | Supabase/Postgres |
+| Analytics, replay, backtesting | DuckDB and export files | Cloud/lakehouse placement as justified |
+| Reports and exports | SQLite plus CSV/JSON | Postgres/object storage as justified |
+
+Structured JSON logging is the machine-readable contract for pipeline diagnostics and agentic tickets. Material events include correlation id, stage, engine, status, reason/decision code, timestamp, and safe references to inputs/outputs. Secrets, credentials, session tokens, and raw sensitive payloads are never logged.
+
+The Django GUI is the Admin Control and Monitoring Plane. Admin users can inspect every pipeline stage, queues, warnings, capital state, approvals, reports, and exports. Normal users see their engine views, approvals, reports, and assigned capital/subaccount state. Compact engine widgets show traffic-light status and warning/error symbols. Drag-and-drop layout is optional, not a current completion requirement.
+
+## Delivery Roadmap
+
+Global MoSCoW prioritization is removed. Each delivery phase has explicit completion scope and explicit exclusions. Later phases may begin discovery work, but a phase is not complete until all its in-scope outcomes are verified.
+
+### Phase 1 - Pipeline Foundation (Completed Baseline)
+
+In scope:
+
+- typed domain models and deterministic sports calculators
+- separate `BonusEngine` and `SportsCapitalEngine`
+- dynamic rounding and core operational-risk contracts
+- sports data contracts and `Sports Match Builder`
+- simulation contracts, workflow transitions, provider-state persistence, and SQLite-backed report history
+- legacy proposal allocation through `CapitalOrchestrator` as a bridge to `LiquidityChecker`
+
+Out of scope for completion:
+
+- polished GUI, live provider adapters, bank connectivity, production execution, cloud scaling
+
+### Phase 2 - Monitoring And Operability (Current)
+
+In scope:
+
+- `WorkflowOrchestrator` boundary and correlation ids across the connected sports simulation path
+- structured logging for every material stage and decision
+- persistent pipeline, simulation, provider, and report state
+- usable Django admin/control GUI with stage visibility, queues, warnings, logs, reports, exports, and simulation controls
+- admin-wide visibility plus a bounded normal-user engine/report/subaccount view
+- `LiquidityChecker` naming/boundary plan without introducing real bank movement
+- end-to-end tests for the current connected simulation path
+
+Out of scope for completion:
+
+- real bank transfers, production browser execution, multi-user cloud tenancy, later engine production logic
+
+### Phase 3 - Adapters, Sandbox, And Full E2E Verification
+
+In scope:
+
+- conformant odds/market API adapters and separate result-data adapters
+- configurable smart polling
+- `RequestHandler` refresh seam
+- `LiquidityChecker`, `Portfolio Ledger`, stable allocation tie-breakers, reservation, settlement, and cost tracking
+- bank sandbox plus mock bank/provider APIs
+- explicitly permitted browser execution adapter tested against a controlled simulation website
+- separate simulation/live queues and histories
+- specification-driven black/grey-box E2E suites derived from this model, including 10-20 material scenarios covering success, rejection, recheck, rounding, balance changes, logging, persistence, exports, settlement, and failure recovery
+
+Out of scope for completion:
+
+- unattended production-scale live operation, broad multi-user rollout, cloud migration
+
+### Phase 4 - Live-Execution Readiness And Stabilization
+
+In scope:
+
+- controlled live-execution readiness for supported sports workflows
+- final GUI approval, recovery, and operational controls
+- CI/CD, lint, unit/integration/E2E checks, build and deployment readiness
+- performance, reliability, security, and observability work, including Prometheus-compatible metrics where useful
+- limited multi-user preparation and international/provider extensibility
+- incremental later-engine development behind stable contracts
+- analytics/replay scale-up with DuckDB where justified
+
+Out of scope for completion:
+
+- mandatory full cloud migration or open public multi-tenant service
+
+### Phase 5 - Cloud And Scaling
+
+In scope:
+
+- cloud deployment and infrastructure as code such as Terraform
+- Supabase/Postgres or another justified operational database target
+- deliberate placement of DuckDB/lakehouse analytics workloads
+- isolated multi-user bankrolls, credentials, roles, and permissions
+- 24/7-capable operation with alerts and human approval notifications
+- expanded engines and supported markets after current-product stability
+
+Out of scope:
+
+- unmanaged full autonomy or unapproved money movement
 
 ## Current Implementation Alignment
 
-The code currently has significant v1 foundations: typed domain models, pure calculators, deterministic rounding, a Base Engine dispatcher, simulation contracts, a Django web shell, a proposal-only `LiquidityChecker`, `WorkflowOrchestrator`, and `RequestHandler` boundaries while preserving shared calculation primitives and explicit `BonusEngine` / `SportsCapitalEngine` engine boundaries.
+The current code already provides significant Phase 1 foundations: typed models, pure calculators, deterministic rounding, separate sports engines, simulation contracts, a Django shell, provider-state persistence, typed sports preparation, and a proposal-only legacy `CapitalOrchestrator`.
 
-Provider-state persistence, simulation history, data aggregation, match building, request refresh handling, execution adapters, bank connector, Supabase integration, and richer GUI monitoring remain future implementation work.
+The current priority is Phase 2: connect orchestration, correlation, structured logging, persistent monitoring, GUI visibility, reports/exports, and the existing sports simulation path. Phase 3 then introduces real adapter seams, sandbox capital flows, the `LiquidityChecker`/ledger implementation, and specification-driven full E2E verification.
 
-## Suggested Next Milestones
+## Agent And Ticket Rules
 
-1. Add workflow pipeline architecture in code: data aggregation, engine-specific preparation, `WorkflowOrchestrator`, `RequestHandler`, and `LiquidityChecker` boundaries.
-2. Strengthen sports Domain Risk models: `ProviderState`, `AccountState`, `VerificationResult`, cooldowns, exposure thresholds, market filters, and warning statuses.
-3. Connect simulation flows through the workflow pipeline, not only through prebuilt engine requests or mocked generic steps.
-4. Add persistence for provider state, simulation runs, execution plans, account actions, reports, and pipeline correlation ids.
-5. Add GUI order approval/rejection, engine detail views, simulation controls, pipeline monitoring, and report/export actions.
-6. Add data aggregation, match-builder, request-handler, and adapter contracts for Playwright collectors and API-backed engines.
-7. Research and implement the selected bank connector behind a strict approval interface.
-8. Add CI/CD and deployment readiness for a cloud-hosted web app.
-
-## Source-Of-Truth Revision Rule
-
-This expectation model supersedes earlier architecture wording. If current or future implementation violates this renewed workflow pipeline model, the Ticket Agent must prioritize a refactor ticket before adding unrelated feature work.
-
-New tickets must follow the newest `docs/expectation-model.md` first, even if older code, README wording, or prior issues used older names.
+- Tickets reference the delivery phase and name the affected canonical components.
+- Acceptance criteria derive from this model, not merely from current implementation behavior.
+- Test tickets may inspect public contracts and required instantiation points, but should avoid copying internal implementation structure into expected outcomes.
+- If implementation conflicts with a hard separation rule, prioritize a bounded refactor ticket before unrelated features.
+- Keep real credentials, bank movement, and live execution outside tickets unless explicitly approved by the user.
 
 ## Definition Of Done
 
 A ticket is done when:
 
-- its acceptance criteria pass
-- tests relevant to changed behavior exist and pass
+- acceptance criteria pass
+- tests for changed behavior and material edge cases exist and pass
+- logs and failure behavior are observable where pipeline behavior changed
 - README Current Status is updated when project progress changed
 - architecture docs are updated when contracts or direction changed
-- the change is small enough to review without archaeology
-- money movement and execution boundaries are explicit when bank or execution code is touched
-- new engine behavior remains assigned to the correct pipeline stage and engine boundary
+- simulation and live boundaries remain explicit
+- money movement and execution approval boundaries remain explicit
+- engine behavior remains assigned to the correct stage and domain
+- the change remains reviewable without archaeology
 
 ## Product Bias
 
-Build the working v1 sports-betting product first: `BonusEngine`, `SportsCapitalEngine`, sports Domain Risk checks, workflow orchestration, liquidity checking, simulation, controlled execution, reports, and GUI approvals. Keep later engines connected through contracts and sandbox adapters so the system can grow without being rebuilt from scratch.
+Complete the working sports product first: `BonusEngine`, `SportsCapitalEngine`, sports `Domain Risk`, workflow orchestration, `LiquidityChecker`, simulation, controlled execution, reports, and GUI approvals. Keep later engines connected through typed contracts and sandbox adapters so the system can grow without being rebuilt.
