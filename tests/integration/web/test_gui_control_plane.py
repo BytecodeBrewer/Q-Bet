@@ -75,7 +75,11 @@ def _records(report: SimulationReport) -> tuple[SimulationLogRecord, ...]:
             timestamp=datetime(2026, 9, 2, tzinfo=UTC),
             record_type=SimulationLogRecordType.WORKFLOW_TRANSITION,
             source="workflow.orchestrator",
-            payload={"stage": "data_aggregation", "decision": "allow"},
+            payload={
+                "stage": "data_aggregation",
+                "decision": "allow",
+                "secret": "workflow-secret",
+            },
         ),
         SimulationLogRecord(
             run_id=report.run_id,
@@ -83,7 +87,11 @@ def _records(report: SimulationReport) -> tuple[SimulationLogRecord, ...]:
             timestamp=datetime(2026, 9, 2, tzinfo=UTC),
             record_type=SimulationLogRecordType.WARNING,
             source="workflow.orchestrator",
-            payload={"message": "safe warning"},
+            payload={
+                "message": "safe warning",
+                "credential": "warning-credential",
+                "account_id": "warning-account",
+            },
         ),
         SimulationLogRecord(
             run_id=report.run_id,
@@ -91,7 +99,7 @@ def _records(report: SimulationReport) -> tuple[SimulationLogRecord, ...]:
             timestamp=datetime(2026, 9, 2, tzinfo=UTC),
             record_type=SimulationLogRecordType.ERROR,
             source="workflow.orchestrator",
-            payload={"message": "safe error"},
+            payload={"message": "safe error", "token": "error-token"},
         ),
         SimulationLogRecord(
             run_id=report.run_id,
@@ -99,7 +107,10 @@ def _records(report: SimulationReport) -> tuple[SimulationLogRecord, ...]:
             timestamp=datetime(2026, 9, 2, tzinfo=UTC),
             record_type=SimulationLogRecordType.RISK_DECISION,
             source="workflow.orchestrator",
-            payload={"decision": "allow"},
+            payload={
+                "decision": "allow",
+                "account_identifier": "risk-account",
+            },
         ),
         SimulationLogRecord(
             run_id=report.run_id,
@@ -107,7 +118,7 @@ def _records(report: SimulationReport) -> tuple[SimulationLogRecord, ...]:
             timestamp=datetime(2026, 9, 2, tzinfo=UTC),
             record_type=SimulationLogRecordType.RAW_INPUT,
             source="simulation.runner",
-            payload={"credential": "[redacted]", "market": "fixture"},
+            payload={"credential": "raw-input-secret", "market": "fixture"},
         ),
     )
 
@@ -256,6 +267,10 @@ class GuiControlPlaneTests(TestCase):
         self.assertEqual(
             payload["details"]["raw_input_snapshots"][0]["market"], "fixture"
         )
+        self.assertEqual(
+            payload["details"]["raw_input_snapshots"][0]["credential"],
+            "raw-input-secret",
+        )
 
         content = csv_export.content.decode()
         self.assertEqual(csv_export.status_code, 200)
@@ -265,6 +280,50 @@ class GuiControlPlaneTests(TestCase):
         self.assertIn(f"generated_at,{payload['generated_at']}", content)
         for field in payload["details"]:
             self.assertIn(f"detail.{field}", content)
+
+    def test_report_exports_redact_non_raw_sensitive_log_payloads(self) -> None:
+        self.client.force_login(self.user)
+        selection = (
+            "include_warnings=1&include_errors=1&include_risk_decisions=1&"
+            "include_workflow_transitions=1"
+        )
+        json_export = self.client.get(
+            f"/reports/{self.bonus_report.run_id}/export/json/?{selection}"
+        )
+        csv_export = self.client.get(
+            f"/reports/{self.bonus_report.run_id}/export/csv/?{selection}"
+        )
+
+        json_content = json_export.content.decode()
+        csv_content = csv_export.content.decode()
+        for sensitive_value in (
+            "workflow-secret",
+            "warning-credential",
+            "warning-account",
+            "error-token",
+            "risk-account",
+        ):
+            self.assertNotIn(sensitive_value, json_content)
+            self.assertNotIn(sensitive_value, csv_content)
+        for sensitive_key in (
+            "secret",
+            "credential",
+            "account_id",
+            "token",
+            "account_identifier",
+        ):
+            self.assertNotIn(sensitive_key, json_content)
+            self.assertNotIn(sensitive_key, csv_content)
+
+        payload = json.loads(json_content)
+        self.assertEqual(
+            payload["details"]["warnings"][0]["payload"],
+            {"message": "safe warning"},
+        )
+        self.assertEqual(
+            payload["details"]["workflow_transitions"][0]["payload"],
+            {"stage": "data_aggregation", "decision": "allow"},
+        )
 
     def test_report_history_and_missing_report_have_safe_states(self) -> None:
         self.client.force_login(self.user)
