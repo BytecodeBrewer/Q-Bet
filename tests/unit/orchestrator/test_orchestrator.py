@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 from qbet.calculations import ArbitrageOffer, QualifyingBetInput, TwoWayArbitrageInput
+from qbet.domain.models import Currency
 from qbet.domain.verification import ProviderState
 from qbet.engines import (
     BonusEngine,
@@ -39,7 +40,7 @@ def candidate(
     risk: str = "0.2",
     liquidity: str = "0.8",
     sandbox: bool = False,
-    currency: str = "EUR",
+    currency: Currency = "EUR",
     lock_up: timedelta = timedelta(hours=1),
 ) -> EngineCandidate:
     return EngineCandidate(

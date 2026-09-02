@@ -88,7 +88,7 @@ def test_core_models_represent_a_matched_betting_plan() -> None:
         ({"odds": Decimal(1)}, "greater than 1"),
         ({"available_stake": Decimal("-0.01")}, "greater than or equal to 0"),
         ({"currency": "BTC"}, "Input should be"),
-        ({"observed_at": datetime(2026, 8, 20, 12, 0)}, "timezone information"),
+        ({"observed_at": datetime(2026, 8, 20, 12, 0)}, "timezone information"),  # noqa: DTZ001
         ({"id": " "}, "at least 1 character"),
     ],
 )

@@ -93,6 +93,21 @@ class SQLiteSimulationReportReader:
     def __init__(self, database_path: str | Path) -> None:
         self._database_path = Path(database_path)
 
+    def load_report(self, run_id: UUID) -> SimulationReport:
+        try:
+            connection = self._connect()
+            try:
+                row = connection.execute(
+                    "SELECT payload FROM simulation_reports WHERE run_id = ?",
+                    (str(run_id),),
+                ).fetchone()
+            finally:
+                connection.close()
+        except sqlite3.OperationalError as error:
+            raise OSError("simulation history is unavailable") from error
+        if row is None:
+            raise KeyError(f"simulation report {run_id} was not found")
+        return SimulationReport.model_validate_json(row[0])
     def load_records(self, run_id: UUID) -> tuple[SimulationLogRecord, ...]:
         try:
             connection = self._connect()

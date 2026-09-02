@@ -113,6 +113,7 @@ class SimulationReportBuilder:
             progress=compact_report.progress,
             records=records,
             selection=selection,
+            generated_at=compact_report.generated_at,
         )
 
     def _build(
@@ -127,6 +128,7 @@ class SimulationReportBuilder:
         progress: Decimal,
         records: tuple[SimulationLogRecord, ...],
         selection: ReportDetailSelection,
+        generated_at: datetime | None = None,
     ) -> SimulationReport:
         warnings = tuple(
             record
@@ -186,7 +188,7 @@ class SimulationReportBuilder:
             completed_steps=completed_steps,
             elapsed_duration=elapsed_duration,
             progress=progress,
-            generated_at=datetime.now(UTC),
+            generated_at=generated_at or datetime.now(UTC),
             events=events if selection.include_events else (),
             intermediate_results=(
                 evaluations if selection.include_intermediate_results else ()

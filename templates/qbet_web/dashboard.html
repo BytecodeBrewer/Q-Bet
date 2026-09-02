@@ -1,1 +1,34 @@
-{% extends "qbet_web/base.html" %}{% block content %}<h1>Dashboard</h1><p>Current engine activity</p><div class="engine-grid">{% for engine in monitoring.engines %}<section class="engine"><h2>{{ engine.name }}</h2><p><span class="status status-{{ engine.status }}"></span>{{ engine.status }}</p><p>{{ engine.detail }}</p></section>{% endfor %}</div>{% endblock %}
+{% extends "qbet_web/base.html" %}
+{% block content %}
+<section class="page-heading"><h1>Dashboard</h1><p>Operational activity is read from persisted workflow and simulation records.</p></section>
+<section class="summary-grid" aria-label="Overall activity summary">
+  <article class="summary-item"><span>Active matches</span><strong>{{ monitoring.summary.active_matches }}</strong></article>
+  <article class="summary-item"><span>Pending matches</span><strong>{{ monitoring.summary.pending_matches }}</strong></article>
+  <article class="summary-item"><span>Recorded activity</span><strong>{{ monitoring.summary.recorded_activity }}</strong></article>
+  <article class="summary-item"><span>Recorded capital</span><strong>{% if monitoring.summary.involved_capital is not None %}{{ monitoring.summary.involved_capital }}{% else %}Unavailable{% endif %}</strong></article>
+  <article class="summary-item"><span>Warnings</span><strong>{{ monitoring.summary.warning_count }}</strong></article>
+  <article class="summary-item"><span>Errors</span><strong>{{ monitoring.summary.error_count }}</strong></article>
+</section>
+<section class="capital-coverage" aria-label="Capital coverage"><h2>Capital coverage</h2><p><span class="status status-{{ monitoring.capital_coverage.status }}"></span>{{ monitoring.capital_coverage.detail }}</p></section>
+<section><div class="section-heading"><h2>V1 engines</h2><a href="{% url 'report-history' %}">View report history</a></div><div class="engine-grid">
+  {% for engine in monitoring.engines %}
+    <a class="engine-card engine-link" href="{% url 'engine-detail' engine.engine_id %}" data-engine-widget="{{ engine.engine_id }}">
+      <div class="card-heading"><h3>{{ engine.name }}</h3><span class="status status-{{ engine.status }}" aria-label="{{ engine.status }}"></span></div>
+      <dl class="metric-list">
+        <div><dt>Engine</dt><dd>{% if engine.active %}Active{% else %}Inactive{% endif %}</dd></div>
+        <div><dt>Current mode</dt><dd>{{ engine.mode }}</dd></div>
+        <div><dt>Live state</dt><dd>{{ engine.live_state }}</dd></div>
+        <div><dt>Running</dt><dd>{{ engine.running_matches }}</dd></div>
+        <div><dt>Pending</dt><dd>{{ engine.pending_matches }}</dd></div>
+        <div><dt>Total activity</dt><dd>{{ engine.total_activity }}</dd></div>
+        <div><dt>Recorded capital</dt><dd>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}Unavailable{% endif %}</dd></div>
+        <div><dt>Warnings / errors</dt><dd>{{ engine.warning_count }} / {{ engine.error_count }}</dd></div>
+      </dl>
+      <p>{{ engine.detail }}</p>
+    </a>
+  {% endfor %}
+</div></section>
+{% if simulation_enabled %}
+<section class="simulation-strip"><div><h2>Simulation</h2><p>Virtual-capital history remains separate from live activity.</p></div><a class="button-link" href="{% url 'simulation' %}">Open simulation</a></section>
+{% endif %}
+{% endblock %}

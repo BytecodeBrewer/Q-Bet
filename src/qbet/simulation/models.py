@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import TypeAlias
 
 from pydantic import Field, field_validator, model_validator
 
@@ -78,7 +77,7 @@ class SimulationRunConfig(DomainModel):
         return value
 
 
-SimulationCalculationResult: TypeAlias = (
+type SimulationCalculationResult = (
     QualifyingBetResult | FreeBetResult | TwoWayArbitrageResult | DutchingResult
 )
 

@@ -25,7 +25,7 @@ def test_validates_provider_state_and_result_consistency() -> None:
         ProviderState(provider_id="book", active_bets_count=-1)
     with pytest.raises(ValidationError):
         ProviderState(
-            provider_id="book", active_bets_count=0, last_bet_timestamp=datetime.now()
+            provider_id="book", active_bets_count=0, last_bet_timestamp=datetime.now()  # noqa: DTZ005  # noqa: DTZ005
         )
     with pytest.raises(ValidationError):
         VerificationResult(is_allowed=True, rejection_reason="nope")

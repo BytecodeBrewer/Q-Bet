@@ -1,0 +1,5 @@
+{% extends "qbet_web/base.html" %}
+{% block content %}
+<section class="page-heading"><h1>Presentation settings</h1><p>These choices are saved for this browser session only. Account-wide preference storage is not configured yet.</p></section>
+<form method="post" class="settings-form">{% csrf_token %}<fieldset><legend>Theme</legend>{{ form.theme }}</fieldset><fieldset><legend>Font size</legend>{{ form.font_size }}</fieldset><button class="primary" type="submit">Save settings</button></form>
+{% endblock %}

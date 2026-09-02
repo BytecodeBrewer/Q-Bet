@@ -49,9 +49,7 @@ def test_runner_exposes_running_context_and_completed_status() -> None:
     observed_contexts = []
     runner = DeterministicSimulationRunner()
 
-    result = runner.run(
-        config(), steps()[:1], on_step_completed=observed_contexts.append
-    )
+    runner.run(config(), steps()[:1], on_step_completed=observed_contexts.append)
 
     assert observed_contexts[0].status == SimulationStatus.RUNNING
     assert observed_contexts[0].completed_step_count == 1
