@@ -17,6 +17,8 @@ class SimulationReportRedirectTests(TestCase):
         self.directory = TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.report_db = Path(self.directory.name) / "simulation.sqlite3"
+        SimulationAvailability.objects.all().delete()
+        SimulationRunState.objects.all().delete()
 
     def test_successful_gui_start_redirects_to_persisted_report_detail(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
