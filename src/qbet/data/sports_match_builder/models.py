@@ -42,9 +42,7 @@ class QualifyingBetMatchMetadata(DomainModel):
     back_offer_id: Identifier
     lay_offer_id: Identifier
     back_stake: PositiveDecimal
-    exchange_commission: Decimal = Field(
-        ge=Decimal(0), lt=Decimal(1), allow_inf_nan=False
-    )
+    exchange_commission: Decimal = Field(ge=Decimal(0), lt=Decimal(1), allow_inf_nan=False)
     stake_precision: PositiveDecimal
     max_lay_liability: NonNegativeDecimal
     minimum_lay_available_stake: PositiveDecimal
@@ -54,9 +52,7 @@ class FreeBetMatchMetadata(DomainModel):
     back_offer_id: Identifier
     lay_offer_id: Identifier
     free_bet_amount: PositiveDecimal
-    exchange_commission: Decimal = Field(
-        ge=Decimal(0), lt=Decimal(1), allow_inf_nan=False
-    )
+    exchange_commission: Decimal = Field(ge=Decimal(0), lt=Decimal(1), allow_inf_nan=False)
     stake_precision: PositiveDecimal
     minimum_lay_available_stake: PositiveDecimal
     stake_return_rule: FreeBetStakeReturn
@@ -96,9 +92,7 @@ class DutchingMatchMetadata(DomainModel):
             rate < Decimal(0) or rate >= Decimal(1) or not rate.is_finite()
             for rate in self.fee_rates
         ):
-            raise ValueError(
-                "fee_rates must be finite values from 0 inclusive to 1 exclusive"
-            )
+            raise ValueError("fee_rates must be finite values from 0 inclusive to 1 exclusive")
         if self.target_mode is DutchingTargetMode.TOTAL_STAKE:
             if self.total_stake is None or self.target_return is not None:
                 raise ValueError("total_stake mode requires only total_stake")

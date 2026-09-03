@@ -126,9 +126,7 @@ class DeterministicSimulationRunner:
             for top_up in config.top_up_events:
                 if top_up.after_completed_steps == len(self._completed_steps):
                     self._current_capital += top_up.amount
-                    record(
-                        SimulationEventType.TOP_UP_APPLIED, top_up_amount=top_up.amount
-                    )
+                    record(SimulationEventType.TOP_UP_APPLIED, top_up_amount=top_up.amount)
 
         record(SimulationEventType.RUN_STARTED)
         initial_top_ups_applied = False
@@ -152,18 +150,14 @@ class DeterministicSimulationRunner:
 
             next_capital = self._current_capital + step.capital_change
             if next_capital < Decimal(0):
-                raise ValueError(
-                    "simulation step would make simulated capital negative"
-                )
+                raise ValueError("simulation step would make simulated capital negative")
 
             self._current_capital = next_capital
             self._elapsed_duration += step.simulated_duration
             self._completed_steps = (*self._completed_steps, step)
             if step.evaluation is not None:
                 evaluations.append(step.evaluation)
-            self._progress = Decimal(len(self._completed_steps)) / Decimal(
-                len(ordered_steps)
-            )
+            self._progress = Decimal(len(self._completed_steps)) / Decimal(len(ordered_steps))
             record(SimulationEventType.STEP_COMPLETED, step_id=step.id)
             if on_step_applied is not None:
                 on_step_applied(self._context(config))

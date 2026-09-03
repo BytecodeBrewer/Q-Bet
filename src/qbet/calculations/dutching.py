@@ -140,14 +140,11 @@ def calculate_dutching(inputs: DutchingInput) -> DutchingResult:
         )
 
     if not plans:
-        raise ValueError(
-            "no rounded dutching plan fits target, stake, and liquidity limits"
-        )
+        raise ValueError("no rounded dutching plan fits target, stake, and liquidity limits")
     best_plan = choose_best_plan(plans, unrounded_stakes)
     total_stake = sum(best_plan.stakes, Decimal(0))
     outcome_returns = tuple(
-        stake * odds
-        for stake, odds in zip(best_plan.stakes, effective_odds, strict=True)
+        stake * odds for stake, odds in zip(best_plan.stakes, effective_odds, strict=True)
     )
     if requested_total_stake is not None:
         rounding_impact = requested_total_stake - total_stake

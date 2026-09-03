@@ -42,9 +42,7 @@ def test_commission_is_applied_only_to_exchange_winning_return() -> None:
         )
     )
 
-    assert result.lay_win_profit_loss == result.lay_stake * Decimal("0.95") - Decimal(
-        10
-    )
+    assert result.lay_win_profit_loss == result.lay_stake * Decimal("0.95") - Decimal(10)
     assert result.back_win_profit_loss == Decimal(10) - result.lay_liability
 
 

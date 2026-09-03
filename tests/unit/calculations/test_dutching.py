@@ -87,13 +87,9 @@ def test_selects_risk_aware_whole_euro_rounding_under_total_stake_cap() -> None:
         DutchingInput(
             outcomes_are_exhaustive=True,
             offers=(
-                make_offer(
-                    outcome="one", odds=Decimal("2.5"), stake_precision=Decimal(1)
-                ),
+                make_offer(outcome="one", odds=Decimal("2.5"), stake_precision=Decimal(1)),
                 make_offer(outcome="two", odds=Decimal(3), stake_precision=Decimal(1)),
-                make_offer(
-                    outcome="three", odds=Decimal(5), stake_precision=Decimal(1)
-                ),
+                make_offer(outcome="three", odds=Decimal(5), stake_precision=Decimal(1)),
             ),
             target_mode=DutchingTargetMode.TOTAL_STAKE,
             total_stake=Decimal(100),

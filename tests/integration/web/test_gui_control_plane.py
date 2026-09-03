@@ -7,12 +7,6 @@ from decimal import Decimal
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
-
-import django
-
-django.setup()
-
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 
@@ -21,6 +15,13 @@ from qbet.reporting import SimulationReport
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
 from qbet.web.models import SimulationAvailability
 from qbet.web.monitoring import MonitoringService
+
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
+
+import django
+
+django.setup()
 
 
 class _ReportStore:
@@ -127,12 +128,8 @@ def _records(report: SimulationReport) -> tuple[SimulationLogRecord, ...]:
 class GuiControlPlaneTests(TestCase):
     def setUp(self) -> None:
         self.user = User.objects.create_user("member", password="Strong-pass-123")
-        self.staff = User.objects.create_user(
-            "staff", password="Strong-pass-123", is_staff=True
-        )
-        self.bonus_report = _report(
-            SimulationEngine.BONUS, status=SimulationStatus.RUNNING
-        )
+        self.staff = User.objects.create_user("staff", password="Strong-pass-123", is_staff=True)
+        self.bonus_report = _report(SimulationEngine.BONUS, status=SimulationStatus.RUNNING)
         self.sports_report = _report(SimulationEngine.SPORTS_CAPITAL)
         self.service = MonitoringService(
             _ReportStore(
@@ -205,7 +202,9 @@ class GuiControlPlaneTests(TestCase):
         self.client.force_login(self.staff)
         response = self.client.get("/admin-area/gui-settings/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Simulation availability is a persisted control-plane setting")
+        self.assertContains(
+            response, "Simulation availability is a persisted control-plane setting"
+        )
         self.assertEqual(self.client.post("/admin-area/gui-settings/").status_code, 405)
 
         SimulationAvailability.objects.filter(pk=1).update(enabled=True)
@@ -269,9 +268,7 @@ class GuiControlPlaneTests(TestCase):
                 "workflow_transitions",
             },
         )
-        self.assertEqual(
-            payload["details"]["raw_input_snapshots"][0]["market"], "fixture"
-        )
+        self.assertEqual(payload["details"]["raw_input_snapshots"][0]["market"], "fixture")
         self.assertEqual(
             payload["details"]["raw_input_snapshots"][0]["credential"],
             "raw-input-secret",
@@ -295,9 +292,7 @@ class GuiControlPlaneTests(TestCase):
         json_export = self.client.get(
             f"/reports/{self.bonus_report.run_id}/export/json/?{selection}"
         )
-        csv_export = self.client.get(
-            f"/reports/{self.bonus_report.run_id}/export/csv/?{selection}"
-        )
+        csv_export = self.client.get(f"/reports/{self.bonus_report.run_id}/export/csv/?{selection}")
 
         json_content = json_export.content.decode()
         csv_content = csv_export.content.decode()

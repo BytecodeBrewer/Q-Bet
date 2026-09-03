@@ -93,12 +93,8 @@ def test_applies_fees_and_reports_rounding_impact() -> None:
 def test_considers_the_ceilings_when_ideal_stake_is_below_one_increment() -> None:
     result = calculate_two_way_arbitrage(
         TwoWayArbitrageInput(
-            first_offer=make_offer(
-                outcome="home", odds=Decimal(100), stake_precision=Decimal(1)
-            ),
-            second_offer=make_offer(
-                outcome="away", odds=Decimal(2), stake_precision=Decimal(1)
-            ),
+            first_offer=make_offer(outcome="home", odds=Decimal(100), stake_precision=Decimal(1)),
+            second_offer=make_offer(outcome="away", odds=Decimal(2), stake_precision=Decimal(1)),
             requested_total_stake=Decimal(10),
         )
     )

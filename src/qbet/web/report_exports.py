@@ -37,9 +37,7 @@ _SENSITIVE_KEY_MARKERS: Final = (
     "iban",
 )
 _SENSITIVE_VALUE_PATTERNS: Final = (
-    re.compile(
-        r"(?i)\b(?:credential|password|secret|token|api[_ -]?key)\b\s*[:=]\s*\S+"
-    ),
+    re.compile(r"(?i)\b(?:credential|password|secret|token|api[_ -]?key)\b\s*[:=]\s*\S+"),
     re.compile(r"(?i)\bbearer\s+\S+"),
     re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b"),
     re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b"),
@@ -107,9 +105,7 @@ class SimulationReportExport:
             "profit_loss": _json_ready(self.profit_loss),
             "completed_steps": self.completed_steps,
             "generated_at": self.generated_at.isoformat(),
-            "details": {
-                detail.name: _detail_json_value(detail) for detail in self.details
-            },
+            "details": {detail.name: _detail_json_value(detail) for detail in self.details},
         }
         return document
 
@@ -169,9 +165,7 @@ def _redact_export_value(value: object) -> object:
 
 
 def _is_sensitive_key(key: object) -> bool:
-    return isinstance(key, str) and any(
-        marker in key.lower() for marker in _SENSITIVE_KEY_MARKERS
-    )
+    return isinstance(key, str) and any(marker in key.lower() for marker in _SENSITIVE_KEY_MARKERS)
 
 
 def _json_default(value: object) -> object:

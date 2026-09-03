@@ -160,13 +160,9 @@ class MonitoringService:
             ),
         )
 
-    def load_report(
-        self, run_id: UUID, selection: ReportDetailSelection
-    ) -> ReportDetailLookup:
+    def load_report(self, run_id: UUID, selection: ReportDetailSelection) -> ReportDetailLookup:
         if self._report_store is None:
-            return ReportDetailLookup(
-                report=None, message="Simulation history is not configured."
-            )
+            return ReportDetailLookup(report=None, message="Simulation history is not configured.")
         try:
             report = self._report_store.load_report(run_id)
         except KeyError:
@@ -210,9 +206,7 @@ class MonitoringService:
         records_by_run: dict[UUID, tuple[SimulationLogRecord, ...]] = {}
         for report in reports:
             try:
-                records_by_run[report.run_id] = self._report_store.load_records(
-                    report.run_id
-                )
+                records_by_run[report.run_id] = self._report_store.load_records(report.run_id)
             except (KeyError, OSError, ValueError):
                 continue
         return records_by_run
@@ -237,9 +231,7 @@ class MonitoringService:
     ) -> tuple[MonitoringEngineStatus, ...]:
         statuses: list[MonitoringEngineStatus] = []
         for name, engine_id in _V1_ENGINES:
-            engine_reports = tuple(
-                report for report in reports if str(report.engine) == engine_id
-            )
+            engine_reports = tuple(report for report in reports if str(report.engine) == engine_id)
             latest = engine_reports[0] if engine_reports else None
             engine_records = tuple(
                 record
@@ -247,12 +239,10 @@ class MonitoringService:
                 for record in records_by_run.get(report.run_id, ())
             )
             warning_count = sum(
-                record.record_type is SimulationLogRecordType.WARNING
-                for record in engine_records
+                record.record_type is SimulationLogRecordType.WARNING for record in engine_records
             )
             error_count = sum(
-                record.record_type is SimulationLogRecordType.ERROR
-                for record in engine_records
+                record.record_type is SimulationLogRecordType.ERROR for record in engine_records
             )
             status, detail = MonitoringService._status_for(
                 latest, history_available=history_available
@@ -267,17 +257,13 @@ class MonitoringService:
                     mode="simulation" if latest is not None else "unavailable",
                     live_state="unavailable",
                     running_matches=sum(
-                        report.status is SimulationStatus.RUNNING
-                        for report in engine_reports
+                        report.status is SimulationStatus.RUNNING for report in engine_reports
                     ),
                     pending_matches=sum(
-                        report.status is SimulationStatus.PENDING
-                        for report in engine_reports
+                        report.status is SimulationStatus.PENDING for report in engine_reports
                     ),
                     total_activity=len(engine_reports),
-                    involved_capital=(
-                        latest.current_capital if latest is not None else None
-                    ),
+                    involved_capital=(latest.current_capital if latest is not None else None),
                     warning_count=warning_count,
                     error_count=error_count,
                     latest_report_id=latest.run_id if latest is not None else None,
@@ -287,9 +273,7 @@ class MonitoringService:
         return tuple(statuses)
 
     @staticmethod
-    def _status_for(
-        report: SimulationReport | None, *, history_available: bool
-    ) -> tuple[str, str]:
+    def _status_for(report: SimulationReport | None, *, history_available: bool) -> tuple[str, str]:
         if not history_available:
             return "gray", "Simulation history is not configured."
         if report is None:
@@ -302,7 +286,7 @@ class MonitoringService:
 
     @staticmethod
     def _workflow_stages(
-        records: tuple[SimulationLogRecord, ...]
+        records: tuple[SimulationLogRecord, ...],
     ) -> tuple[MonitoringWorkflowStage, ...]:
         transitions = {
             str(record.payload.get("stage")): record

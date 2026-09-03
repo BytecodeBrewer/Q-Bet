@@ -43,9 +43,7 @@ def offer(identifier: str, selection: str = "home") -> NormalizedOffer:
     )
 
 
-def snapshot(
-    target: DataTarget = DataTarget.BONUS, **changes: object
-) -> NormalizedMarketSnapshot:
+def snapshot(target: DataTarget = DataTarget.BONUS, **changes: object) -> NormalizedMarketSnapshot:
     values: dict[str, object] = {
         "id": f"{target.value}-snapshot",
         "correlation_id": UUID("12345678-1234-5678-1234-567812345678"),
@@ -64,9 +62,7 @@ def snapshot(
 
 
 def request(target: DataTarget, correlation_id: UUID) -> DataCollectionRequest:
-    return DataCollectionRequest(
-        correlation_id=correlation_id, target=target, source=SOURCE
-    )
+    return DataCollectionRequest(correlation_id=correlation_id, target=target, source=SOURCE)
 
 
 def test_valid_snapshot_is_ready_for_engine_specific_preparation() -> None:
@@ -93,9 +89,7 @@ def test_invalid_or_incomplete_snapshot_fails_before_preparation() -> None:
 
     suspended = snapshot(
         offers=(
-            offer("suspended").model_copy(
-                update={"availability": OfferAvailability.SUSPENDED}
-            ),
+            offer("suspended").model_copy(update={"availability": OfferAvailability.SUSPENDED}),
         )
     )
     with pytest.raises(ValueError, match="unavailable"):
@@ -133,7 +127,5 @@ def test_fake_source_implements_both_transport_protocols_without_network() -> No
     assert isinstance(source, ApiAdapter)
     with pytest.raises(KeyError, match="no deterministic snapshot"):
         source.collect(
-            request(
-                DataTarget.SPORTS_CAPITAL, UUID("11111111-1111-1111-1111-111111111111")
-            )
+            request(DataTarget.SPORTS_CAPITAL, UUID("11111111-1111-1111-1111-111111111111"))
         )

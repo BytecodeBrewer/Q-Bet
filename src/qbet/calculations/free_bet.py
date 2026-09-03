@@ -50,13 +50,9 @@ def calculate_free_bet(inputs: FreeBetInput) -> FreeBetResult:
     """Calculate free-bet conversion using the strongest permitted rounded hedge."""
 
     back_win_return = _back_win_return(inputs)
-    unrounded_lay_stake = back_win_return / (
-        inputs.lay_odds - inputs.exchange_commission
-    )
+    unrounded_lay_stake = back_win_return / (inputs.lay_odds - inputs.exchange_commission)
     plans: list[tuple[RoundingPlan, Decimal]] = []
-    for lay_stake in surrounding_stake_candidates(
-        unrounded_lay_stake, inputs.stake_precision
-    ):
+    for lay_stake in surrounding_stake_candidates(unrounded_lay_stake, inputs.stake_precision):
         if lay_stake <= Decimal(0):
             continue
         lay_liability = lay_stake * (inputs.lay_odds - Decimal(1))

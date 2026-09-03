@@ -64,9 +64,7 @@ class OperationalRiskLayer:
                 {
                     "opportunity_id": request.opportunity_id,
                     "provider_id": (
-                        resolved_state.provider_id
-                        if resolved_state is not None
-                        else provider_id
+                        resolved_state.provider_id if resolved_state is not None else provider_id
                     ),
                     "status": result.status,
                     "decision_code": result.decision_code,
@@ -83,9 +81,7 @@ class OperationalRiskLayer:
         if provider_state is not None:
             return provider_state
         if provider_id is None:
-            raise ValueError(
-                "provider_id is required when provider_state is not supplied"
-            )
+            raise ValueError("provider_id is required when provider_state is not supplied")
         if self._provider_state_repository is None:
             raise ValueError(
                 "provider state repository is required when provider_state is not supplied"
@@ -93,10 +89,7 @@ class OperationalRiskLayer:
         return self._provider_state_repository.get(provider_id)
 
     def _evaluate(self, provider_state: ProviderState) -> VerificationResult:
-        if (
-            provider_state.active_bets_count
-            >= self._policy.active_bet_rejection_threshold
-        ):
+        if provider_state.active_bets_count >= self._policy.active_bet_rejection_threshold:
             return VerificationResult(
                 is_allowed=False,
                 status=DomainRiskStatus.REJECT,
@@ -110,10 +103,7 @@ class OperationalRiskLayer:
                 decision_code=DomainRiskDecisionCode.COOLDOWN_ACTIVE,
                 rejection_reason=COOLDOWN_ACTIVE_REASON,
             )
-        if (
-            provider_state.active_bets_count
-            >= self._policy.active_bet_warning_threshold
-        ):
+        if provider_state.active_bets_count >= self._policy.active_bet_warning_threshold:
             return VerificationResult(
                 is_allowed=True,
                 status=DomainRiskStatus.WARN,

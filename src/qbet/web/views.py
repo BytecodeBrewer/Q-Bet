@@ -131,11 +131,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
 def engine_detail(request: HttpRequest, engine_id: str) -> HttpResponse:
     snapshot = MONITORING_SERVICE.snapshot()
     engine = next(
-        (
-            candidate
-            for candidate in snapshot.engines
-            if candidate.engine_id == engine_id
-        ),
+        (candidate for candidate in snapshot.engines if candidate.engine_id == engine_id),
         None,
     )
     if engine is None:
@@ -193,9 +189,7 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
         run = SIMULATION_CONTROL.start(
             engine=SimulationEngine(form.cleaned_data["engine"]),
             starting_capital=form.cleaned_data["starting_capital"],
-            max_duration=timedelta(
-                minutes=form.cleaned_data["max_duration_minutes"]
-            ),
+            max_duration=timedelta(minutes=form.cleaned_data["max_duration_minutes"]),
         )
     except SimulationControlError as error:
         messages.error(request, str(error))
@@ -257,9 +251,7 @@ def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
         return render(
             request,
             "qbet_web/report_unavailable.html",
-            _context(
-                request, message=lookup.message or "This report is not available."
-            ),
+            _context(request, message=lookup.message or "This report is not available."),
             status=404,
         )
     return render(
@@ -275,9 +267,7 @@ def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
 
 
 @login_required
-def report_export(
-    request: HttpRequest, run_id: UUID, export_format: str
-) -> HttpResponse:
+def report_export(request: HttpRequest, run_id: UUID, export_format: str) -> HttpResponse:
     selection = _selection(request)
     lookup = MONITORING_SERVICE.load_report(run_id, selection)
     if lookup.report is None:
@@ -285,9 +275,7 @@ def report_export(
     export = SimulationReportExport.from_report(lookup.report, selection)
     if export_format == "json":
         response = JsonResponse(export.json_document(), json_dumps_params={"indent": 2})
-        response["Content-Disposition"] = (
-            f'attachment; filename="qbet-report-{run_id}.json"'
-        )
+        response["Content-Disposition"] = f'attachment; filename="qbet-report-{run_id}.json"'
         return response
     if export_format != "csv":
         raise Http404("Export format not found.")

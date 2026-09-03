@@ -175,9 +175,7 @@ class SQLiteProviderStateRepository:
         return ProviderState(
             provider_id=row[0],
             active_bets_count=row[1],
-            last_bet_timestamp=(
-                datetime.fromisoformat(row[2]) if row[2] is not None else None
-            ),
+            last_bet_timestamp=(datetime.fromisoformat(row[2]) if row[2] is not None else None),
             is_cooldown_active=bool(row[3]),
         )
 

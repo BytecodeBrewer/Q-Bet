@@ -122,15 +122,14 @@ class SimulationControlService:
     def set_enabled(self, enabled: bool) -> SimulationAvailabilitySnapshot:
         try:
             with transaction.atomic():
-                state, _ = (
-                    SimulationAvailability.objects.select_for_update().get_or_create(
-                        pk=1,
-                        defaults={"enabled": self._bootstrap_enabled()},
-                    )
+                state, _ = SimulationAvailability.objects.select_for_update().get_or_create(
+                    pk=1,
+                    defaults={"enabled": self._bootstrap_enabled()},
                 )
-                if not enabled and SimulationRunState.objects.filter(
-                    status__in=_ACTIVE_STATUSES
-                ).exists():
+                if (
+                    not enabled
+                    and SimulationRunState.objects.filter(status__in=_ACTIVE_STATUSES).exists()
+                ):
                     raise SimulationDisableBlockedError(
                         "Simulation cannot be disabled while a run is active."
                     )
@@ -164,16 +163,12 @@ class SimulationControlService:
 
         try:
             with transaction.atomic():
-                availability, _ = (
-                    SimulationAvailability.objects.select_for_update().get_or_create(
-                        pk=1,
-                        defaults={"enabled": self._bootstrap_enabled()},
-                    )
+                availability, _ = SimulationAvailability.objects.select_for_update().get_or_create(
+                    pk=1,
+                    defaults={"enabled": self._bootstrap_enabled()},
                 )
                 if not availability.enabled:
-                    raise SimulationDisabledError(
-                        "Simulation is disabled by the administrator."
-                    )
+                    raise SimulationDisabledError("Simulation is disabled by the administrator.")
                 if SimulationRunState.objects.filter(
                     engine=engine.value,
                     status__in=_ACTIVE_STATUSES,
@@ -234,9 +229,7 @@ class SimulationControlService:
 
     def has_active_runs(self) -> bool:
         try:
-            return SimulationRunState.objects.filter(
-                status__in=_ACTIVE_STATUSES
-            ).exists()
+            return SimulationRunState.objects.filter(status__in=_ACTIVE_STATUSES).exists()
         except (OperationalError, ProgrammingError):
             return False
 
@@ -332,6 +325,7 @@ class SimulationControlService:
                 for index in range(1, 3)
             )
         elif config.engine is SimulationEngine.SPORTS_CAPITAL:
+
             def offer(outcome: str) -> ArbitrageOffer:
                 return ArbitrageOffer(
                     outcome=outcome,
