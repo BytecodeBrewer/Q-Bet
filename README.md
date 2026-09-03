@@ -32,6 +32,7 @@ The same baseline checks used by GitHub Actions can be run locally with:
 
 ```powershell
 python -m pip install . -r requirements-dev.txt
+python manage.py migrate --noinput
 python -m pytest
 python manage.py check
 ```
