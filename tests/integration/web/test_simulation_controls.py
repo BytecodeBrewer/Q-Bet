@@ -22,7 +22,10 @@ from qbet.simulation import SimulationEngine
 from qbet.storage import SQLiteSimulationReportReader
 from qbet.web.models import SimulationAvailability, SimulationRunState
 from qbet.web.monitoring import MonitoringService
-from qbet.web.simulation_control import SimulationControlService
+from qbet.web.simulation_control import (
+    SimulationAlreadyRunningError,
+    SimulationControlService,
+)
 from qbet.workflow import WorkflowStage
 
 
@@ -148,6 +151,30 @@ class SimulationGuiControlTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(SimulationRunState.objects.exists())
+
+    def test_duplicate_start_for_same_active_engine_is_rejected(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        active_run = SimulationRunState.objects.create(
+            run_id=uuid4(),
+            engine=SimulationEngine.BONUS.value,
+            status=SimulationRunState.Status.RUNNING,
+            progress=Decimal("0.25"),
+            current_capital=Decimal("100"),
+        )
+        service = SimulationControlService()
+
+        with (
+            override_settings(QBET_SIMULATION_REPORT_DB=self.report_db),
+            self.assertRaises(SimulationAlreadyRunningError),
+        ):
+            service.start(
+                engine=SimulationEngine.BONUS,
+                starting_capital=Decimal("100"),
+                max_duration=timedelta(minutes=60),
+            )
+
+        self.assertEqual(SimulationRunState.objects.count(), 1)
+        self.assertTrue(SimulationRunState.objects.filter(pk=active_run.run_id).exists())
 
     def test_gui_start_runs_connected_pipeline_and_persists_report_and_records(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
