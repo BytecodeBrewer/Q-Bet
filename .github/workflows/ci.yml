@@ -6,7 +6,25 @@ on:
     branches:
       - develop
 
+permissions:
+  contents: read
+
 jobs:
+  quality:
+    name: Ruff and Pyright
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install . -r requirements-dev.txt
+      - name: Run Ruff
+        run: python -m ruff check .
+      - name: Run Pyright
+        run: python -m pyright
+
   test:
     name: Python and Django checks
     runs-on: ubuntu-latest
@@ -23,3 +41,27 @@ jobs:
         run: python -m pytest
       - name: Check Django configuration
         run: python manage.py check
+
+  build:
+    name: Package build
+    needs:
+      - quality
+      - test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: python -m pip install -r requirements-dev.txt
+      - name: Build distribution
+        run: python -m build
+      - name: Upload develop distribution
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: actions/upload-artifact@v4
+        with:
+          name: q-bet-dist-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
