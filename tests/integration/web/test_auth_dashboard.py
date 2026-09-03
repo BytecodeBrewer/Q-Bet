@@ -1,3 +1,6 @@
+from django.contrib.auth.models import User
+from django.test import Client, TestCase
+
 import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
@@ -5,9 +8,6 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 import django
 
 django.setup()
-
-from django.contrib.auth.models import User
-from django.test import Client, TestCase
 
 
 class AuthenticationAndDashboardTests(TestCase):
@@ -64,9 +64,7 @@ class AuthenticationAndDashboardTests(TestCase):
     def test_login_logout_and_dashboard_boundary(self) -> None:
         user = User.objects.create_user("member", password="Strong-pass-123")
 
-        self.assertRedirects(
-            self.client.get("/dashboard/"), "/accounts/login/?next=/dashboard/"
-        )
+        self.assertRedirects(self.client.get("/dashboard/"), "/accounts/login/?next=/dashboard/")
         response = self.client.post(
             "/accounts/login/",
             {"username": user.username, "password": "Strong-pass-123"},
@@ -92,7 +90,6 @@ class AuthenticationAndDashboardTests(TestCase):
         content = response.content.decode()
         self.assertEqual(response.status_code, 200)
         self.assertIn("Sign-in details were not accepted.", content)
-
 
     def test_logout_requires_a_valid_csrf_token(self) -> None:
         user = User.objects.create_user("member", password="Strong-pass-123")

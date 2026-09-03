@@ -12,8 +12,6 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 
 import django
 
-django.setup()
-
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 
@@ -27,6 +25,8 @@ from qbet.web.simulation_control import (
     SimulationControlService,
 )
 from qbet.workflow import WorkflowStage
+
+django.setup()
 
 
 class SimulationGuiControlTests(TestCase):
@@ -202,12 +202,8 @@ class SimulationGuiControlTests(TestCase):
             report = reader.load_report(run.report_id)
             records = reader.load_records(run.run_id)
             detail = self.client.get(f"/reports/{run.report_id}/")
-            json_export = self.client.get(
-                f"/reports/{run.report_id}/export/json/"
-            )
-            csv_export = self.client.get(
-                f"/reports/{run.report_id}/export/csv/"
-            )
+            json_export = self.client.get(f"/reports/{run.report_id}/export/json/")
+            csv_export = self.client.get(f"/reports/{run.report_id}/export/csv/")
 
         self.assertEqual(run.status, SimulationRunState.Status.COMPLETED)
         self.assertEqual(run.run_id, run.report_id)
@@ -228,10 +224,7 @@ class SimulationGuiControlTests(TestCase):
         self.assertIn(WorkflowStage.DOMAIN_RISK.value, workflow_stages)
         self.assertIn(WorkflowStage.LIQUIDITY_CHECK.value, workflow_stages)
         self.assertTrue(
-            any(
-                record.record_type is SimulationLogRecordType.RUN_FINISHED
-                for record in records
-            )
+            any(record.record_type is SimulationLogRecordType.RUN_FINISHED for record in records)
         )
 
     def test_control_service_supports_both_current_v1_engines(self) -> None:

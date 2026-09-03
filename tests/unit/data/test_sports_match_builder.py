@@ -107,10 +107,7 @@ def test_build_qualifying_bet_match_preserves_context_and_is_deterministic() -> 
     assert prepared.request.execution_offer_ids == ("back", "lay")
     assert prepared.context.correlation_id == value.correlation_id
     assert prepared.context.provider_id == "book-a"
-    assert (
-        build_qualifying_bet_match(value, metadata).request.inputs
-        == prepared.request.inputs
-    )
+    assert build_qualifying_bet_match(value, metadata).request.inputs == prepared.request.inputs
 
 
 def test_build_free_bet_match_requires_explicit_promotion_rule() -> None:
@@ -134,10 +131,7 @@ def test_build_free_bet_match_requires_explicit_promotion_rule() -> None:
     prepared = build_free_bet_match(value, metadata)
 
     assert isinstance(prepared.request.inputs, FreeBetInput)
-    assert (
-        prepared.request.inputs.stake_return_rule
-        is FreeBetStakeReturn.STAKE_NOT_RETURNED
-    )
+    assert prepared.request.inputs.stake_return_rule is FreeBetStakeReturn.STAKE_NOT_RETURNED
 
 
 def test_build_free_bet_match_rejects_mismatched_selection() -> None:
@@ -297,9 +291,7 @@ def test_sports_match_builder_rejects_unready_snapshots(
         build_qualifying_bet_match(value, metadata)
 
 
-def test_sports_match_builder_rejects_incompatible_selection_currency_and_liquidity() -> (
-    None
-):
+def test_sports_match_builder_rejects_incompatible_selection_currency_and_liquidity() -> None:
     bonus = snapshot(
         DataTarget.BONUS,
         (
@@ -362,9 +354,7 @@ def test_sports_match_builder_rejects_incompatible_selection_currency_and_liquid
 
 
 def test_sports_match_builder_rejects_wrong_engine_target() -> None:
-    value = snapshot(
-        DataTarget.BONUS, (offer("home", "home", "2.2"), offer("away", "away", "2.3"))
-    )
+    value = snapshot(DataTarget.BONUS, (offer("home", "home", "2.2"), offer("away", "away", "2.3")))
     metadata = TwoWayArbitrageMatchMetadata(
         first_offer_id="home",
         second_offer_id="away",

@@ -74,9 +74,7 @@ class BonusEngine(StrategyEngine[BonusEngineRequest, BonusEngineEvaluation]):
             else calculate_free_bet(request.inputs)
         )
         worst = min(result.back_win_profit_loss, result.lay_win_profit_loss)
-        strategy = (
-            "qualifying_bet" if isinstance(result, QualifyingBetResult) else "free_bet"
-        )
+        strategy = "qualifying_bet" if isinstance(result, QualifyingBetResult) else "free_bet"
         strategy_result = StrategyResult(
             strategy=strategy,
             opportunity_id=request.opportunity_id,

@@ -145,6 +145,4 @@ def test_execution_plan_requires_at_least_one_step() -> None:
     )
 
     with pytest.raises(ValidationError, match="at least 1 item"):
-        ExecutionPlan(
-            id=uuid4(), strategy_result=result, steps=(), created_at=TIMESTAMP
-        )
+        ExecutionPlan(id=uuid4(), strategy_result=result, steps=(), created_at=TIMESTAMP)

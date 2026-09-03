@@ -88,9 +88,7 @@ class VerificationResult(DomainModel):
                 or self.decision_code not in self.warning_codes
                 or self.rejection_reason is not None
             ):
-                raise ValueError(
-                    "warning results require an allowed stable warning decision"
-                )
+                raise ValueError("warning results require an allowed stable warning decision")
         elif self.status is DomainRiskStatus.RECHECK:
             if (
                 self.is_allowed

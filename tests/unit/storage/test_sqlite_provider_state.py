@@ -20,9 +20,7 @@ def test_sqlite_provider_state_repository_round_trips_and_upserts(tmp_path) -> N
 
     assert reopened_store.get("book") == initial
 
-    updated = initial.model_copy(
-        update={"active_bets_count": 2, "is_cooldown_active": True}
-    )
+    updated = initial.model_copy(update={"active_bets_count": 2, "is_cooldown_active": True})
     reopened_store.upsert(updated)
 
     assert SQLiteProviderStateRepository(database_path).get("book") == updated

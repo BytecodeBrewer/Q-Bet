@@ -62,9 +62,7 @@ def snapshot() -> CapitalSnapshot:
 
 
 def config() -> OrchestratorConfig:
-    return OrchestratorConfig(
-        max_risk_score=Decimal("0.5"), min_liquidity_score=Decimal("0.5")
-    )
+    return OrchestratorConfig(max_risk_score=Decimal("0.5"), min_liquidity_score=Decimal("0.5"))
 
 
 def provider_state(**changes: object) -> ProviderState:
@@ -148,9 +146,7 @@ def sports_adapter(
 
 def test_orchestrator_ranks_and_rejects_sandbox_candidates() -> None:
     adapters = (
-        SandboxEngineAdapter(
-            candidate("alpha", EngineId.ALPHA, "40", "6", sandbox=True)
-        ),
+        SandboxEngineAdapter(candidate("alpha", EngineId.ALPHA, "40", "6", sandbox=True)),
         SandboxEngineAdapter(
             candidate("risk", EngineId.YIELD, "10", "9", risk="0.9", sandbox=True)
         ),
@@ -163,9 +159,7 @@ def test_orchestrator_ranks_and_rejects_sandbox_candidates() -> None:
 
 
 def test_verified_bonus_and_sports_candidates_reach_the_existing_allocator() -> None:
-    result = LiquidityChecker().allocate(
-        snapshot(), config(), (bonus_adapter(), sports_adapter())
-    )
+    result = LiquidityChecker().allocate(snapshot(), config(), (bonus_adapter(), sports_adapter()))
 
     assert {allocation.candidate.engine for allocation in result.allocations} == {
         EngineId.BONUS,
@@ -197,9 +191,7 @@ def test_provider_cooldown_rejection_prevents_sports_allocation() -> None:
 
 
 def test_existing_allocator_limits_still_apply_after_verification() -> None:
-    result = LiquidityChecker().allocate(
-        snapshot(), config(), (bonus_adapter(risk="0.9"),)
-    )
+    result = LiquidityChecker().allocate(snapshot(), config(), (bonus_adapter(risk="0.9"),))
 
     assert result.allocations == ()
     assert result.rejections[0].reason is RejectionReason.RISK_LIMIT
@@ -237,9 +229,7 @@ def test_recheck_result_prevents_capital_allocation() -> None:
     )
 
     class RecheckAdapter:
-        def evaluate_candidates(
-            self, snapshot: CapitalSnapshot
-        ) -> tuple[EngineCandidate, ...]:
+        def evaluate_candidates(self, snapshot: CapitalSnapshot) -> tuple[EngineCandidate, ...]:
             return (candidate,)
 
     result = LiquidityChecker().allocate(snapshot(), config(), (RecheckAdapter(),))
@@ -251,11 +241,7 @@ def test_concrete_liquidity_checker_allows_eligible_workflow_candidate() -> None
     checker = LiquidityChecker(
         snapshot(),
         config(),
-        (
-            SandboxEngineAdapter(
-                candidate("eligible", EngineId.ALPHA, "40", "6", sandbox=True)
-            ),
-        ),
+        (SandboxEngineAdapter(candidate("eligible", EngineId.ALPHA, "40", "6", sandbox=True)),),
     )
 
     result = WorkflowOrchestrator(liquidity_checker=checker).process(
@@ -278,9 +264,7 @@ def test_concrete_liquidity_checker_rechecks_and_blocks_workflow() -> None:
         VerificationResult,
     )
 
-    recheck_candidate = candidate(
-        "recheck", EngineId.ALPHA, "40", "6", sandbox=True
-    ).model_copy(
+    recheck_candidate = candidate("recheck", EngineId.ALPHA, "40", "6", sandbox=True).model_copy(
         update={
             "verification_result": VerificationResult(
                 is_allowed=False,
@@ -289,9 +273,7 @@ def test_concrete_liquidity_checker_rechecks_and_blocks_workflow() -> None:
             )
         }
     )
-    checker = LiquidityChecker(
-        snapshot(), config(), (SandboxEngineAdapter(recheck_candidate),)
-    )
+    checker = LiquidityChecker(snapshot(), config(), (SandboxEngineAdapter(recheck_candidate),))
 
     result = WorkflowOrchestrator(liquidity_checker=checker).process(
         WorkflowRequest(
@@ -304,10 +286,7 @@ def test_concrete_liquidity_checker_rechecks_and_blocks_workflow() -> None:
     assert result.final_decision is WorkflowDecision.RECHECK
     assert checker.last_result is not None
     assert checker.last_result.allocations == ()
-    assert (
-        checker.last_result.rejections[0].reason
-        is RejectionReason.PROVIDER_RECHECK_REQUIRED
-    )
+    assert checker.last_result.rejections[0].reason is RejectionReason.PROVIDER_RECHECK_REQUIRED
 
 
 def test_liquidity_checker_rejects_currency_liquidity_and_capital_limits() -> None:
@@ -316,9 +295,7 @@ def test_liquidity_checker_rejects_currency_liquidity_and_capital_limits() -> No
         config(),
         (
             SandboxEngineAdapter(
-                candidate(
-                    "currency", EngineId.ALPHA, "10", "5", sandbox=True, currency="GBP"
-                )
+                candidate("currency", EngineId.ALPHA, "10", "5", sandbox=True, currency="GBP")
             ),
             SandboxEngineAdapter(
                 candidate(
@@ -330,9 +307,7 @@ def test_liquidity_checker_rejects_currency_liquidity_and_capital_limits() -> No
                     liquidity="0.1",
                 )
             ),
-            SandboxEngineAdapter(
-                candidate("capital", EngineId.ALPHA, "1001", "3", sandbox=True)
-            ),
+            SandboxEngineAdapter(candidate("capital", EngineId.ALPHA, "1001", "3", sandbox=True)),
         ),
     )
     assert result.allocations == ()
@@ -347,11 +322,7 @@ def test_execution_workflow_rejects_sandbox_before_dispatch() -> None:
     checker = LiquidityChecker(
         snapshot(),
         config(),
-        (
-            SandboxEngineAdapter(
-                candidate("sandbox", EngineId.ALPHA, "10", "5", sandbox=True)
-            ),
-        ),
+        (SandboxEngineAdapter(candidate("sandbox", EngineId.ALPHA, "10", "5", sandbox=True)),),
     )
     result = WorkflowOrchestrator(liquidity_checker=checker).process(
         WorkflowRequest(
@@ -365,10 +336,7 @@ def test_execution_workflow_rejects_sandbox_before_dispatch() -> None:
         WorkflowStage.LIQUIDITY_CHECK
     ]
     assert checker.last_result is not None
-    assert (
-        checker.last_result.rejections[0].reason
-        is RejectionReason.SANDBOX_EXECUTION_PROHIBITED
-    )
+    assert checker.last_result.rejections[0].reason is RejectionReason.SANDBOX_EXECUTION_PROHIBITED
 
 
 def test_liquidity_checker_uses_full_deterministic_tie_break_order() -> None:
@@ -414,12 +382,8 @@ def test_liquidity_checker_uses_full_deterministic_tie_break_order() -> None:
             SandboxEngineAdapter(
                 candidate("risk", EngineId.ALPHA, "20", "10", sandbox=True, risk="0.1")
             ),
-            SandboxEngineAdapter(
-                candidate("roi", EngineId.ALPHA, "10", "10", sandbox=True)
-            ),
-            SandboxEngineAdapter(
-                candidate("ev", EngineId.ALPHA, "10", "20", sandbox=True)
-            ),
+            SandboxEngineAdapter(candidate("roi", EngineId.ALPHA, "10", "10", sandbox=True)),
+            SandboxEngineAdapter(candidate("ev", EngineId.ALPHA, "10", "20", sandbox=True)),
             SandboxEngineAdapter(
                 candidate(
                     "id-a",
@@ -450,9 +414,7 @@ def test_execution_allocation_skips_sandbox_and_keeps_executable_candidate() -> 
         CapitalSnapshot(available_capital=Decimal(120), currency="EUR"),
         config(),
         (
-            SandboxEngineAdapter(
-                candidate("sandbox", EngineId.ALPHA, "100", "100", sandbox=True)
-            ),
+            SandboxEngineAdapter(candidate("sandbox", EngineId.ALPHA, "100", "100", sandbox=True)),
             sports_adapter(),
         ),
     )
@@ -469,10 +431,7 @@ def test_execution_allocation_skips_sandbox_and_keeps_executable_candidate() -> 
         WorkflowStage.DISPATCH,
     ]
     assert checker.last_result is not None
-    assert [
-        allocation.candidate.engine for allocation in checker.last_result.allocations
-    ] == [EngineId.SPORTS_CAPITAL]
-    assert (
-        checker.last_result.rejections[0].reason
-        is RejectionReason.SANDBOX_EXECUTION_PROHIBITED
-    )
+    assert [allocation.candidate.engine for allocation in checker.last_result.allocations] == [
+        EngineId.SPORTS_CAPITAL
+    ]
+    assert checker.last_result.rejections[0].reason is RejectionReason.SANDBOX_EXECUTION_PROHIBITED

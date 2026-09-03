@@ -112,10 +112,7 @@ class NormalizedMarketSnapshot(DomainModel):
             raise ValueError("market snapshot must be fresh for preparation")
         if self.completeness is not CompletenessStatus.COMPLETE:
             raise ValueError("market snapshot must be complete for preparation")
-        if any(
-            offer.availability is not OfferAvailability.AVAILABLE
-            for offer in self.offers
-        ):
+        if any(offer.availability is not OfferAvailability.AVAILABLE for offer in self.offers):
             raise ValueError("market snapshot contains unavailable offers")
         return self
 

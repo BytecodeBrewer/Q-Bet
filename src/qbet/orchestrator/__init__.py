@@ -111,9 +111,7 @@ class OrchestrationResult(DomainModel):
 class EngineAdapter(Protocol):
     """Produces proposal-only candidates for a shared capital snapshot."""
 
-    def evaluate_candidates(
-        self, snapshot: CapitalSnapshot
-    ) -> tuple[EngineCandidate, ...]: ...
+    def evaluate_candidates(self, snapshot: CapitalSnapshot) -> tuple[EngineCandidate, ...]: ...
 
 
 class _ExecutionSafeEngineAdapter:
@@ -123,9 +121,7 @@ class _ExecutionSafeEngineAdapter:
         self._adapter = adapter
         self.excluded_candidates: tuple[EngineCandidate, ...] = ()
 
-    def evaluate_candidates(
-        self, snapshot: CapitalSnapshot
-    ) -> tuple[EngineCandidate, ...]:
+    def evaluate_candidates(self, snapshot: CapitalSnapshot) -> tuple[EngineCandidate, ...]:
         candidates = self._adapter.evaluate_candidates(snapshot)
         self.excluded_candidates = tuple(
             candidate for candidate in candidates if candidate.is_sandbox
@@ -147,18 +143,14 @@ class VerifiedStrategyCandidateAdapter:
         capital_lock_up: timedelta,
         risk_layer: OperationalRiskLayer | None = None,
     ) -> None:
-        if isinstance(request, BonusEngineRequest) != isinstance(
-            evaluation, BonusEngineEvaluation
-        ):
+        if isinstance(request, BonusEngineRequest) != isinstance(evaluation, BonusEngineEvaluation):
             raise ValueError("request and evaluation must belong to the same engine")
         if isinstance(request, SportsCapitalEngineRequest) != isinstance(
             evaluation, SportsCapitalEngineEvaluation
         ):
             raise ValueError("request and evaluation must belong to the same engine")
         if request.opportunity_id != evaluation.strategy_result.opportunity_id:
-            raise ValueError(
-                "request and evaluation must identify the same opportunity"
-            )
+            raise ValueError("request and evaluation must identify the same opportunity")
         if request.currency != evaluation.strategy_result.currency:
             raise ValueError("request and evaluation must use the same currency")
         self._request = request
@@ -169,9 +161,7 @@ class VerifiedStrategyCandidateAdapter:
         self._capital_lock_up = capital_lock_up
         self._risk_layer = risk_layer or OperationalRiskLayer()
 
-    def evaluate_candidates(
-        self, snapshot: CapitalSnapshot
-    ) -> tuple[EngineCandidate, ...]:
+    def evaluate_candidates(self, snapshot: CapitalSnapshot) -> tuple[EngineCandidate, ...]:
         verification_result = self._risk_layer.verify_opportunity(
             self._request, self._provider_state
         )
@@ -201,9 +191,7 @@ class SandboxEngineAdapter:
             raise ValueError("sandbox adapters require sandbox candidates")
         self._candidate = candidate
 
-    def evaluate_candidates(
-        self, snapshot: CapitalSnapshot
-    ) -> tuple[EngineCandidate, ...]:
+    def evaluate_candidates(self, snapshot: CapitalSnapshot) -> tuple[EngineCandidate, ...]:
         return (self._candidate,)
 
 
@@ -220,9 +208,7 @@ class LiquidityChecker:
         if any(value is not None for value in configured_values) and any(
             value is None for value in configured_values
         ):
-            raise ValueError(
-                "snapshot, config, and adapters must be configured together"
-            )
+            raise ValueError("snapshot, config, and adapters must be configured together")
         self._snapshot = snapshot
         self._config = config
         self._adapters = adapters
@@ -231,20 +217,14 @@ class LiquidityChecker:
     def check(self, context: WorkflowContext) -> WorkflowStageDecision:
         """Run the configured proposal-only allocation at the workflow gate."""
         if context.stage is not WorkflowStage.LIQUIDITY_CHECK:
-            raise ValueError(
-                "liquidity checks require the liquidity_check workflow stage"
-            )
+            raise ValueError("liquidity checks require the liquidity_check workflow stage")
         if self._snapshot is None or self._config is None or self._adapters is None:
-            raise ValueError(
-                "workflow liquidity checks require configured capital inputs"
-            )
+            raise ValueError("workflow liquidity checks require configured capital inputs")
 
         adapters = self._adapters
         execution_adapters: tuple[_ExecutionSafeEngineAdapter, ...] = ()
         if context.request.mode is WorkflowMode.EXECUTION:
-            execution_adapters = tuple(
-                _ExecutionSafeEngineAdapter(adapter) for adapter in adapters
-            )
+            execution_adapters = tuple(_ExecutionSafeEngineAdapter(adapter) for adapter in adapters)
             adapters = execution_adapters
         result = self.allocate(self._snapshot, self._config, adapters)
         excluded_rejections = tuple(
@@ -283,9 +263,7 @@ class LiquidityChecker:
         adapters: tuple[EngineAdapter, ...],
     ) -> OrchestrationResult:
         candidates = tuple(
-            candidate
-            for adapter in adapters
-            for candidate in adapter.evaluate_candidates(snapshot)
+            candidate for adapter in adapters for candidate in adapter.evaluate_candidates(snapshot)
         )
         ordered = sorted(
             candidates,
@@ -304,14 +282,10 @@ class LiquidityChecker:
         for candidate in ordered:
             reason = _rejection_reason(candidate, snapshot, config, remaining)
             if reason is not None:
-                rejections.append(
-                    CandidateRejection(candidate=candidate, reason=reason)
-                )
+                rejections.append(CandidateRejection(candidate=candidate, reason=reason))
                 continue
             allocations.append(
-                Allocation(
-                    candidate=candidate, allocated_capital=candidate.required_capital
-                )
+                Allocation(candidate=candidate, allocated_capital=candidate.required_capital)
             )
             remaining -= candidate.required_capital
         return OrchestrationResult(

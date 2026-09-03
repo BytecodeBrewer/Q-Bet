@@ -34,9 +34,7 @@ class SportsCapitalEngineRequest(DomainModel):
 
     @model_validator(mode="after")
     def valid_request(self):
-        expected = (
-            len(self.inputs.offers) if isinstance(self.inputs, DutchingInput) else 2
-        )
+        expected = len(self.inputs.offers) if isinstance(self.inputs, DutchingInput) else 2
         if (
             len(self.execution_offer_ids) != expected
             or len(set(self.execution_offer_ids)) != expected
@@ -111,9 +109,7 @@ class SportsCapitalEngine(
                     stake=stake,
                     status=ExecutionStatus.REQUIRES_APPROVAL,
                 )
-                for offer, stake in zip(
-                    request.execution_offer_ids, stakes, strict=True
-                )
+                for offer, stake in zip(request.execution_offer_ids, stakes, strict=True)
             ),
             created_at=request.generated_at,
             requires_approval=True,

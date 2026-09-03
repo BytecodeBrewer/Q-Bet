@@ -28,13 +28,16 @@ python manage.py runserver
 
 ## Validation
 
-The same baseline checks used by GitHub Actions can be run locally with:
+The same gates used by GitHub Actions can be run locally with:
 
 ```powershell
 python -m pip install . -r requirements-dev.txt
+python -m ruff check .
+python -m pyright
 python manage.py migrate --noinput
 python -m pytest
 python manage.py check
+python -m build
 ```
 
 ## Version 1 Target

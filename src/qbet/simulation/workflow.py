@@ -50,12 +50,9 @@ class WorkflowSimulationRequest(DomainModel):
     @model_validator(mode="after")
     def opportunities_match_simulation_engine(self) -> "WorkflowSimulationRequest":
         if self.config.engine.value == "bonus" and not all(
-            isinstance(opportunity, BonusEngineRequest)
-            for opportunity in self.opportunities
+            isinstance(opportunity, BonusEngineRequest) for opportunity in self.opportunities
         ):
-            raise ValueError(
-                "bonus simulations require BonusEngineRequest opportunities"
-            )
+            raise ValueError("bonus simulations require BonusEngineRequest opportunities")
         if self.config.engine.value == "sports_capital" and not all(
             isinstance(opportunity, SportsCapitalEngineRequest)
             for opportunity in self.opportunities
@@ -136,16 +133,13 @@ class WorkflowSimulationRunner:
         log_context = self._runner.log_context(correlation_id)
         steps = self._adapter_for(request).build_steps(request.config)
         opportunities_by_id = {
-            opportunity.opportunity_id: opportunity
-            for opportunity in request.opportunities
+            opportunity.opportunity_id: opportunity for opportunity in request.opportunities
         }
         workflow_results: list[WorkflowResult] = []
 
         def route_step(step: SimulationStep) -> bool:
             assert step.evaluation is not None
-            opportunity = opportunities_by_id[
-                step.evaluation.strategy_result.opportunity_id
-            ]
+            opportunity = opportunities_by_id[step.evaluation.strategy_result.opportunity_id]
             orchestrator = WorkflowOrchestrator(
                 {
                     WorkflowStage.DOMAIN_RISK: _RiskStageHandler(
@@ -202,9 +196,7 @@ class WorkflowSimulationRunner:
                 if isinstance(opportunity, BonusEngineRequest)
             )
             if len(requests) != len(request.opportunities):
-                raise ValueError(
-                    "bonus simulations require BonusEngineRequest opportunities"
-                )
+                raise ValueError("bonus simulations require BonusEngineRequest opportunities")
             return BonusSimulationAdapter(requests)
         if request.config.engine.value == "sports_capital":
             requests = tuple(

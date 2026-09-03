@@ -72,9 +72,7 @@ class WorkflowOrchestrator:
         transitions: list[WorkflowTransition] = []
         final_decision = WorkflowDecision.ALLOW
         for stage in request.stages:
-            context = WorkflowContext(
-                request=request, correlation_id=correlation_id, stage=stage
-            )
+            context = WorkflowContext(request=request, correlation_id=correlation_id, stage=stage)
             request_handler = self._request_handler
             if request_handler is not None and stage in {
                 WorkflowStage.DOMAIN_RISK,

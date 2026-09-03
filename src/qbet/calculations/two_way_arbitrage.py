@@ -108,18 +108,14 @@ def calculate_two_way_arbitrage(inputs: TwoWayArbitrageInput) -> TwoWayArbitrage
         )
 
     if not plans:
-        raise ValueError(
-            "no rounded arbitrage plan fits total stake and liquidity limits"
-        )
+        raise ValueError("no rounded arbitrage plan fits total stake and liquidity limits")
     best_plan = choose_best_plan(plans, unrounded_stakes)
     first_stake, second_stake = best_plan.stakes
     total_stake = first_stake + second_stake
     first_outcome_profit_loss, second_outcome_profit_loss = best_plan.outcome_values
     first_outcome_return = first_outcome_profit_loss + total_stake
     second_outcome_return = second_outcome_profit_loss + total_stake
-    implied_probability = (
-        Decimal(1) / first_effective_odds + Decimal(1) / second_effective_odds
-    )
+    implied_probability = Decimal(1) / first_effective_odds + Decimal(1) / second_effective_odds
 
     return TwoWayArbitrageResult(
         currency=inputs.first_offer.currency,
