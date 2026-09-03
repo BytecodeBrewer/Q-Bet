@@ -195,11 +195,15 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
         messages.error(request, str(error))
         return redirect("simulation")
 
+    if run.report_id is None:
+        messages.error(request, "Simulation completed but its report is unavailable.")
+        return redirect("simulation")
+
     messages.success(
         request,
         f"Simulation {run.run_id} finished with status {run.status}.",
     )
-    return redirect("simulation")
+    return redirect("report-detail", run_id=run.report_id)
 
 
 @login_required

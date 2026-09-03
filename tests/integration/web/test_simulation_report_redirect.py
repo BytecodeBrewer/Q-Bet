@@ -1,0 +1,42 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from django.contrib.auth.models import User
+from django.test import TestCase, override_settings
+
+from qbet.simulation import SimulationEngine
+from qbet.web.models import SimulationAvailability, SimulationRunState
+
+
+class SimulationReportRedirectTests(TestCase):
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(
+            "member-78",
+            password="Strong-pass-123",
+        )
+        self.directory = TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.report_db = Path(self.directory.name) / "simulation.sqlite3"
+
+    def test_successful_gui_start_redirects_to_persisted_report_detail(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.user)
+
+        with override_settings(QBET_SIMULATION_REPORT_DB=self.report_db):
+            response = self.client.post(
+                "/simulation/start/",
+                {
+                    "engine": SimulationEngine.BONUS.value,
+                    "starting_capital": "100.00",
+                    "max_duration_minutes": "60",
+                },
+            )
+
+        run = SimulationRunState.objects.get()
+        self.assertIsNotNone(run.report_id)
+        assert run.report_id is not None
+        self.assertRedirects(
+            response,
+            f"/reports/{run.report_id}/",
+            fetch_redirect_response=False,
+        )
