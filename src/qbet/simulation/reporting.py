@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from uuid import UUID
 
 from qbet.layers.logging import (
     SimulationLogContext,
@@ -38,6 +39,11 @@ class ReportingSimulationRunner:
     def request_stop(self) -> None:
         self._runner.request_stop()
 
+    def log_context(self, run_id: UUID | None = None) -> SimulationLogContext:
+        """Create a shared context that preserves store-backed record persistence."""
+
+        return SimulationLogContext(run_id=run_id, on_record=self._append_record)
+
     def run(
         self,
         config: SimulationRunConfig,
@@ -48,7 +54,7 @@ class ReportingSimulationRunner:
         log_context: SimulationLogContext | None = None,
     ) -> SimulationResult:
         ordered_steps = tuple(steps)
-        context = log_context or SimulationLogContext(on_record=self._append_record)
+        context = log_context or self.log_context()
         context.record(
             SimulationLogRecordType.RAW_INPUT,
             "simulation.config",

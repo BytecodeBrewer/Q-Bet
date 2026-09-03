@@ -14,7 +14,7 @@ The pipeline is taking shape from intake to simulation. Normalized market-data c
 
 The strongest end-to-end path today is simulation: evaluated sports opportunities can move through workflow transitions, risk checks, liquidity decisions, virtual-capital updates, reporting, and SQLite-backed report history without touching real execution. Provider state also has a typed SQLite persistence path, which gives the local version a practical bridge toward Supabase/PostgreSQL later.
 
-The read-only GUI control and monitoring plane now provides a protected two-engine dashboard, engine detail and workflow views, deployment-configured simulation visibility, session-scoped presentation settings, report history/detail selection, and CSV/JSON export from persisted simulation data. It does not start simulations, enable engines, approve actions, or execute money-moving operations. The broader gaps against the expectation model remain real Playwright/API collectors, production bank connectivity, CI/CD, and controlled real execution adapters. The first bank-connector evaluation is complete; the bank layer remains mock-only until the account type and approved provider-onboarding route are chosen. `RequestHandler` refresh checks are now wired into the workflow at Domain Risk, Liquidity Check, and Dispatch, while concrete provider refresh clients remain future work. The math layer is solid, the preparation and simulation layers are becoming connected, and the remaining work is mostly about turning the pipeline from tested internal flow into usable product flow.
+The Django control and monitoring plane now provides a protected two-engine dashboard, engine detail and workflow views, persistent administrator-controlled simulation availability, a safe disable guard while simulation work is active, bounded GUI-started sandbox simulations for `BonusEngine` and `SportsCapitalEngine`, lifecycle status, session-scoped presentation settings, report history/detail selection, and CSV/JSON export from persisted simulation data. GUI-started simulations remain virtual-only and use the existing workflow-routed simulation path; they do not trigger live execution or real-money adapters. The broader gaps against the expectation model remain conformant external data/result adapters, bank sandbox/connectivity, Portfolio Ledger integration, and controlled live execution. The first bank-connector evaluation is complete; the bank layer remains mock-only until the account type and approved provider-onboarding route are chosen. `RequestHandler` refresh checks are now wired into the workflow at Domain Risk, Liquidity Check, and Dispatch, while concrete provider refresh clients remain future work. The math layer is solid, and Phase 2 is increasingly about making the connected local simulation path controllable, observable, and verifiable before external adapters are introduced.
 
 ## Local Web Setup
 
@@ -32,6 +32,7 @@ The same baseline checks used by GitHub Actions can be run locally with:
 
 ```powershell
 python -m pip install . -r requirements-dev.txt
+python manage.py migrate --noinput
 python -m pytest
 python manage.py check
 ```

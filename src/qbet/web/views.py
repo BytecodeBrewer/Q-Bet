@@ -1,8 +1,9 @@
-"""Server-rendered, read-only control and monitoring views for Q-Bet."""
+"""Server-rendered control and monitoring views for Q-Bet."""
 
 from __future__ import annotations
 
 import csv
+from datetime import timedelta
 from io import StringIO
 from uuid import UUID
 
@@ -12,18 +13,29 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 from qbet.reporting import ReportDetailSelection
+from qbet.simulation import SimulationEngine
 from qbet.storage import SQLiteSimulationReportReader
 from qbet.web.controls import (
     PresentationPreferences,
     presentation_preferences,
     save_presentation_preferences,
 )
-from qbet.web.forms import PresentationSettingsForm, RegistrationForm
+from qbet.web.forms import (
+    PresentationSettingsForm,
+    RegistrationForm,
+    SimulationAvailabilityForm,
+    SimulationStartForm,
+)
 from qbet.web.monitoring import MonitoringService
 from qbet.web.report_exports import SimulationReportExport
+from qbet.web.simulation_control import (
+    SimulationControlError,
+    SimulationControlService,
+    SimulationDisableBlockedError,
+)
 
 _DETAIL_FIELDS = (
     "include_events",
@@ -44,10 +56,11 @@ def _monitoring_service() -> MonitoringService:
 
 
 MONITORING_SERVICE = _monitoring_service()
+SIMULATION_CONTROL = SimulationControlService()
 
 
 def _simulation_enabled() -> bool:
-    return bool(getattr(settings, "QBET_SIMULATION_MODE_ENABLED", False))
+    return SIMULATION_CONTROL.availability().enabled
 
 
 def _is_staff(user: object) -> bool:
@@ -56,7 +69,12 @@ def _is_staff(user: object) -> bool:
 
 def _context(request: HttpRequest, **values: object) -> dict[str, object]:
     values.setdefault("preferences", presentation_preferences(request.session))
-    values.setdefault("simulation_enabled", _simulation_enabled())
+    if "simulation_enabled" not in values:
+        values["simulation_enabled"] = (
+            _simulation_enabled()
+            if request.user.is_authenticated
+            else bool(getattr(settings, "QBET_SIMULATION_MODE_ENABLED", False))
+        )
     return values
 
 
@@ -131,14 +149,63 @@ def engine_detail(request: HttpRequest, engine_id: str) -> HttpResponse:
 
 
 @login_required
+@require_GET
 def simulation(request: HttpRequest) -> HttpResponse:
-    if not _simulation_enabled():
+    control = SIMULATION_CONTROL.snapshot()
+    if not control.availability.enabled:
         raise Http404("Simulation visibility is disabled.")
     return render(
         request,
         "qbet_web/simulation.html",
-        _context(request, monitoring=MONITORING_SERVICE.snapshot()),
+        _context(
+            request,
+            monitoring=MONITORING_SERVICE.snapshot(),
+            simulation_control=control,
+            start_form=SimulationStartForm(),
+            simulation_enabled=True,
+        ),
     )
+
+
+@login_required
+@require_POST
+def simulation_start(request: HttpRequest) -> HttpResponse:
+    if not _simulation_enabled():
+        messages.error(request, "Simulation is disabled by the administrator.")
+        return redirect("dashboard")
+
+    form = SimulationStartForm(request.POST)
+    if not form.is_valid():
+        return render(
+            request,
+            "qbet_web/simulation.html",
+            _context(
+                request,
+                monitoring=MONITORING_SERVICE.snapshot(),
+                simulation_control=SIMULATION_CONTROL.snapshot(),
+                start_form=form,
+                simulation_enabled=True,
+            ),
+            status=400,
+        )
+
+    try:
+        run = SIMULATION_CONTROL.start(
+            engine=SimulationEngine(form.cleaned_data["engine"]),
+            starting_capital=form.cleaned_data["starting_capital"],
+            max_duration=timedelta(
+                minutes=form.cleaned_data["max_duration_minutes"]
+            ),
+        )
+    except SimulationControlError as error:
+        messages.error(request, str(error))
+        return redirect("simulation")
+
+    messages.success(
+        request,
+        f"Simulation {run.run_id} finished with status {run.status}.",
+    )
+    return redirect("simulation")
 
 
 @login_required
@@ -252,7 +319,40 @@ def admin_area(request: HttpRequest) -> HttpResponse:
 @user_passes_test(_is_staff, login_url="login")
 @require_GET
 def admin_gui_settings(request: HttpRequest) -> HttpResponse:
-    return render(request, "qbet_web/admin_gui_settings.html", _context(request))
+    control = SIMULATION_CONTROL.snapshot()
+    return render(
+        request,
+        "qbet_web/admin_gui_settings.html",
+        _context(
+            request,
+            simulation_control=control,
+            simulation_enabled=control.availability.enabled,
+            simulation_toggle_form=SimulationAvailabilityForm(
+                initial={"enabled": control.availability.enabled}
+            ),
+        ),
+    )
+
+
+@user_passes_test(_is_staff, login_url="login")
+@require_POST
+def admin_simulation_availability(request: HttpRequest) -> HttpResponse:
+    form = SimulationAvailabilityForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid simulation availability setting.")
+        return redirect("admin-gui-settings")
+
+    enabled = form.cleaned_data["enabled"]
+    try:
+        SIMULATION_CONTROL.set_enabled(enabled)
+    except SimulationDisableBlockedError as error:
+        messages.error(request, str(error))
+    except SimulationControlError as error:
+        messages.error(request, str(error))
+    else:
+        state = "enabled" if enabled else "disabled"
+        messages.success(request, f"Simulation availability {state}.")
+    return redirect("admin-gui-settings")
 
 
 @login_required
