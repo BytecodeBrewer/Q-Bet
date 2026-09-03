@@ -19,6 +19,7 @@ from django.test import TestCase, override_settings
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
 from qbet.reporting import SimulationReport
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
+from qbet.web.models import SimulationAvailability
 from qbet.web.monitoring import MonitoringService
 
 
@@ -192,7 +193,11 @@ class GuiControlPlaneTests(TestCase):
         self.assertContains(response, "BonusEngine")
 
     @override_settings(QBET_SIMULATION_MODE_ENABLED=False)
-    def test_simulation_visibility_is_deployment_configured(self) -> None:
+    def test_simulation_visibility_uses_persisted_runtime_control(self) -> None:
+        SimulationAvailability.objects.update_or_create(
+            pk=1,
+            defaults={"enabled": False},
+        )
         self.client.force_login(self.user)
         self.assertEqual(self.client.get("/simulation/").status_code, 404)
         self.assertEqual(self.client.get("/admin-area/gui-settings/").status_code, 302)
@@ -200,12 +205,12 @@ class GuiControlPlaneTests(TestCase):
         self.client.force_login(self.staff)
         response = self.client.get("/admin-area/gui-settings/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "QBET_SIMULATION_MODE_ENABLED")
+        self.assertContains(response, "Simulation availability is a persisted control-plane setting")
         self.assertEqual(self.client.post("/admin-area/gui-settings/").status_code, 405)
 
-        with override_settings(QBET_SIMULATION_MODE_ENABLED=True):
-            self.client.force_login(self.user)
-            response = self.client.get("/simulation/")
+        SimulationAvailability.objects.filter(pk=1).update(enabled=True)
+        self.client.force_login(self.user)
+        response = self.client.get("/simulation/")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content.decode().count("data-simulation-engine="), 2)
