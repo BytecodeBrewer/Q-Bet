@@ -1,5 +1,8 @@
+from .duckdb import DuckDBReplayStore
 from .protocol import (
     ProviderStateRepository,
+    ReplayRecord,
+    ReplayStore,
     SimulationReportReader,
     SimulationReportStore,
 )
@@ -10,7 +13,10 @@ from .sqlite import (
 )
 
 __all__ = [
+    "DuckDBReplayStore",
     "ProviderStateRepository",
+    "ReplayRecord",
+    "ReplayStore",
     "SQLiteProviderStateRepository",
     "SQLiteSimulationReportReader",
     "SQLiteSimulationReportStore",

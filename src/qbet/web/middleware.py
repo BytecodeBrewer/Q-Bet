@@ -1,4 +1,4 @@
-"""Request correlation and safe structured logging for the web shell."""
+"""Request correlation, logging, and hosted persistence boundaries."""
 
 from __future__ import annotations
 
@@ -13,10 +13,23 @@ from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger("qbet.web.request")
 _correlation_id_pattern = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,35}$")
-_HOSTED_PREVIEW_PUBLIC_PATHS = frozenset(("/", "/health/"))
-_HOSTED_PREVIEW_PUBLIC_PREFIXES = ("/static/",)
-_HOSTED_PREVIEW_UNAVAILABLE_MESSAGE = (
+_HOSTED_PUBLIC_PATHS = frozenset(("/", "/health/"))
+_HOSTED_PUBLIC_PREFIXES = ("/static/",)
+_HOSTED_OPERATIONAL_PATHS = frozenset(
+    (
+        "/register/",
+        "/dashboard/",
+        "/dashboard/layout/",
+        "/settings/presentation/",
+        "/account/",
+    )
+)
+_HOSTED_OPERATIONAL_PREFIXES = ("/accounts/", "/engines/")
+_HOSTED_NO_DATABASE_MESSAGE = (
     "Q-Bet hosted preview is read-only until persistent cloud storage is configured."
+)
+_HOSTED_UNMIGRATED_MESSAGE = (
+    "This Q-Bet route is unavailable until its persistence adapter is migrated to cloud storage."
 )
 
 
@@ -54,7 +67,7 @@ class RequestCorrelationMiddleware:
 
 
 class HostedPreviewBoundaryMiddleware:
-    """Fail closed before session/auth middleware can reach persistent state on Vercel."""
+    """Expose only persistence-safe routes in hosted deployments."""
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
@@ -64,13 +77,23 @@ class HostedPreviewBoundaryMiddleware:
             return self.get_response(request)
 
         path = request.path_info
-        if path in _HOSTED_PREVIEW_PUBLIC_PATHS or any(
-            path.startswith(prefix) for prefix in _HOSTED_PREVIEW_PUBLIC_PREFIXES
+        if path in _HOSTED_PUBLIC_PATHS or any(
+            path.startswith(prefix) for prefix in _HOSTED_PUBLIC_PREFIXES
         ):
             return self.get_response(request)
 
+        database_enabled = bool(getattr(settings, "QBET_HOSTED_DATABASE_ENABLED", False))
+        if database_enabled and (
+            path in _HOSTED_OPERATIONAL_PATHS
+            or any(path.startswith(prefix) for prefix in _HOSTED_OPERATIONAL_PREFIXES)
+        ):
+            return self.get_response(request)
+
+        message = (
+            _HOSTED_UNMIGRATED_MESSAGE if database_enabled else _HOSTED_NO_DATABASE_MESSAGE
+        )
         return HttpResponse(
-            _HOSTED_PREVIEW_UNAVAILABLE_MESSAGE,
+            message,
             status=503,
             content_type="text/plain; charset=utf-8",
         )
