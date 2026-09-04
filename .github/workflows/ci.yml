@@ -136,23 +136,20 @@ jobs:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
           health="$(
-            vercel curl /health/ \
+            vercel --token "$VERCEL_TOKEN" curl /health/ \
               --deployment "$DEPLOYMENT_URL" \
-              --token "$VERCEL_TOKEN" \
               --fail --silent
           )"
           printf '%s' "$health" | grep -q '"status": "ok"'
 
           home="$(
-            vercel curl / \
+            vercel --token "$VERCEL_TOKEN" curl / \
               --deployment "$DEPLOYMENT_URL" \
-              --token "$VERCEL_TOKEN" \
               --fail --silent
           )"
           printf '%s' "$home" | grep -q '/static/qbet_web/app.css'
 
-          vercel curl /static/qbet_web/app.css \
+          vercel --token "$VERCEL_TOKEN" curl /static/qbet_web/app.css \
             --deployment "$DEPLOYMENT_URL" \
-            --token "$VERCEL_TOKEN" \
             --fail --silent \
             --output /dev/null
