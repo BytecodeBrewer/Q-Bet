@@ -20,8 +20,10 @@
           return;
         }
         draggedCard.classList.add("is-dragging");
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", draggedCard.dataset.widgetId || "");
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", draggedCard.dataset.widgetId || "");
+        }
       });
 
       handle.addEventListener("dragend", () => {
@@ -31,6 +33,34 @@
         draggedCard.classList.remove("is-dragging");
         persistOrder(grid);
         draggedCard = null;
+      });
+
+      handle.addEventListener("keydown", (event) => {
+        const card = handle.closest("[data-widget-id]");
+        if (!card || card.parentElement !== grid) {
+          return;
+        }
+
+        const previousKeys = new Set(["ArrowLeft", "ArrowUp"]);
+        const nextKeys = new Set(["ArrowRight", "ArrowDown"]);
+        if (!previousKeys.has(event.key) && !nextKeys.has(event.key)) {
+          return;
+        }
+
+        event.preventDefault();
+        const sibling = previousKeys.has(event.key)
+          ? card.previousElementSibling
+          : card.nextElementSibling;
+        if (!sibling) {
+          return;
+        }
+
+        if (previousKeys.has(event.key)) {
+          grid.insertBefore(card, sibling);
+        } else {
+          grid.insertBefore(sibling, card);
+        }
+        persistOrder(grid);
       });
     });
 
@@ -43,8 +73,15 @@
       if (!target || target === draggedCard || target.parentElement !== grid) {
         return;
       }
-      const rect = target.getBoundingClientRect();
-      const insertAfter = event.clientY > rect.top + rect.height / 2;
+
+      const targetRect = target.getBoundingClientRect();
+      const draggedRect = draggedCard.getBoundingClientRect();
+      const isSameRow =
+        Math.abs(targetRect.top - draggedRect.top) <
+        Math.min(targetRect.height, draggedRect.height) / 2;
+      const insertAfter = isSameRow
+        ? event.clientX > targetRect.left + targetRect.width / 2
+        : event.clientY > targetRect.top + targetRect.height / 2;
       grid.insertBefore(draggedCard, insertAfter ? target.nextSibling : target);
     });
   });
