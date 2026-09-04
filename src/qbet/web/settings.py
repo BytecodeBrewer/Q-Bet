@@ -72,7 +72,7 @@ TEMPLATES = [
         },
     },
 ]
-WSGI_APPLICATION = "qbet.web.wsgi.application"
+WSGI_APPLICATION = "vercel_wsgi.application"
 
 if QBET_HOSTED_PREVIEW:
     QBET_SIMULATION_REPORT_DB = None
