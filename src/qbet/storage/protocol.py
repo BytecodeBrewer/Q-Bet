@@ -1,7 +1,8 @@
-"""Replaceable persistence contracts for reports and provider state."""
+"""Replaceable persistence contracts for reports, provider state, and analytics replay."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
@@ -9,6 +10,27 @@ from qbet.domain.models import Identifier
 from qbet.domain.verification import ProviderState
 from qbet.layers.logging import SimulationLogRecord
 from qbet.reporting import SimulationReport
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayRecord:
+    """Ordered analytical payload used by replay/backtesting storage."""
+
+    stream_id: str
+    sequence: int
+    payload: str
+
+    def __post_init__(self) -> None:
+        if not self.stream_id.strip():
+            raise ValueError("stream_id must not be empty")
+        if self.sequence < 0:
+            raise ValueError("sequence must be non-negative")
+
+
+class ReplayStore(Protocol):
+    def append(self, record: ReplayRecord) -> None: ...
+
+    def load_stream(self, stream_id: str) -> tuple[ReplayRecord, ...]: ...
 
 
 class SimulationReportReader(Protocol):

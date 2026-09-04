@@ -28,6 +28,8 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
+SQLite remains the default local operational database. Setting `QBET_DATABASE_URL` opts the Django web shell into PostgreSQL locally as well, providing the migration seam for eventually removing SQLite from operational development without using DuckDB as an application database.
+
 ## Validation
 
 The same gates used by GitHub Actions can be run locally with:
@@ -46,17 +48,30 @@ python -m build
 
 GitHub Actions creates a Vercel Preview deployment only after the Ruff, Pyright, Django/test, and package-build gates succeed. Pull requests from this repository and successful pushes to `develop` use the dedicated Vercel project named `q-bet`; the workflow never deploys with `--prod`.
 
-Configure these GitHub repository values before the first deployment run:
+Configure these GitHub repository values for the deployment workflow:
 
 - secret `VERCEL_TOKEN`: a Vercel token with access to the Q-Bet team
 - variable `VERCEL_ORG_ID`: the Vercel team/org identifier
-- secret `QBET_DJANGO_SECRET_KEY`: a non-development Django secret used only by the hosted preview
+- variable `VERCEL_PROJECT_ID`: the existing Q-Bet Vercel project identifier
+- secret `QBET_DJANGO_SECRET_KEY`: a non-development Django secret used by hosted deployments
 
-The first successful deployment job creates the dedicated `q-bet` Vercel project when it is missing and then links the CI workspace to it. The existing portfolio Vercel project is not used or modified.
+The existing `q-bet` Vercel project is targeted explicitly by its project/account identifiers. The existing portfolio Vercel project is not used or modified.
 
-The hosted preview is intentionally a read-only deployment proof, not production Q-Bet. Vercel Functions do not provide persistent local SQLite storage, so hosted mode disables the SQLite-backed simulation/report store, uses no writable Django SQLite database, and fails persistence-dependent auth/control/report/simulation routes closed with HTTP 503. The public `/` shell, `/health/`, templates, and static assets remain available for deployment smoke testing. Local development keeps the full SQLite-backed behavior.
+Hosted mode never uses writable SQLite as persistent Vercel storage. Without `QBET_DATABASE_URL`, the hosted shell remains read-only and only `/`, `/health/`, templates, and static assets are exposed. When a Supabase/PostgreSQL `QBET_DATABASE_URL` is configured and Django migrations have been applied, registration, login/logout, the basic authenticated dashboard, engine details, account boundary, and session-backed presentation/layout preferences may use persistent PostgreSQL state.
+
+Routes that still depend on Q-Bet-specific SQLite repositories, including simulation/report persistence and internal monitoring surfaces, remain fail-closed with HTTP 503 until those repositories receive dedicated cloud adapters. Simulation/live execution remains disabled in hosted deployments.
 
 The deployment job verifies the live preview with Vercel's authenticated curl command, including `/health/`, the public shell, and `/static/qbet_web/app.css`.
+
+## Persistence Architecture
+
+Q-Bet deliberately separates operational state from analytical workloads:
+
+- **Supabase/PostgreSQL** is the cloud target for Django authentication, sessions, permissions, and later operational/ledger state.
+- **SQLite** remains the transitional local default for operational repositories that have not yet migrated. Local Django can opt into PostgreSQL through `QBET_DATABASE_URL`.
+- **DuckDB** is the local analytics/replay/backtesting store and must not become the Django authentication, session, provider-state, or ledger database.
+
+`SUPABASE_QBET_TOKEN` is a Supabase Management API credential for automation/administration. It is not a PostgreSQL connection string. The hosted Django application requires `QBET_DATABASE_URL` from the Supabase project's Connect dialog, stored only in environment/secrets configuration. See [Django Web Shell](docs/django-web-shell.md) for bootstrap details.
 
 ## Version 1 Target
 

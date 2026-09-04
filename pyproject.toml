@@ -9,7 +9,13 @@ description = "A modular Python quant engine for matched betting and strategy si
 requires-python = ">=3.12"
 dependencies = [
     "Django>=5.2,<6",
+    "psycopg[binary]>=3.2,<4",
     "pydantic>=2.11,<3",
+]
+
+[project.optional-dependencies]
+analytics = [
+    "duckdb>=1.4,<2",
 ]
 
 [tool.vercel]
