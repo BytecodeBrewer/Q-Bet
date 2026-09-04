@@ -38,7 +38,7 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok", "service": "q-bet-web"})
 
-    def test_home_renders_monitoring_statuses_without_domain_calculations(
+    def test_home_renders_execution_statuses_without_internal_monitoring_link(
         self,
     ) -> None:
         response = self.client.get("/")
@@ -46,7 +46,8 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertContains(response, "Q-Bet")
         self.assertContains(response, "BonusEngine")
         self.assertContains(response, "SportsCapitalEngine")
-        self.assertContains(response, "Open monitoring")
+        self.assertContains(response, "Sign in")
+        self.assertNotContains(response, "Open monitoring")
         self.assertContains(response, "status-gray")
         self.assertNotContains(response, "Base")
         self.assertNotContains(response, "Yield")
