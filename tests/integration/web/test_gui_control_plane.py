@@ -140,8 +140,9 @@ class GuiControlPlaneTests(TestCase):
         self.monitoring_patch = patch("qbet.web.views.MONITORING_SERVICE", self.service)
         self.monitoring_patch.start()
         self.addCleanup(self.monitoring_patch.stop)
+        SimulationAvailability.objects.all().delete()
 
-    def test_dashboard_is_protected_and_has_exactly_two_v1_engine_widgets(self) -> None:
+    def test_dashboard_is_protected_and_normal_user_sees_execution_only(self) -> None:
         self.assertRedirects(
             self.client.get("/dashboard/"),
             "/accounts/login/?next=/dashboard/",
@@ -154,17 +155,33 @@ class GuiControlPlaneTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(content.count("data-engine-widget="), 2)
-        self.assertContains(response, "BonusEngine", count=1)
-        self.assertContains(response, "SportsCapitalEngine", count=1)
-        self.assertContains(response, "Recorded capital")
-        self.assertContains(response, "live capital coverage is unavailable")
+        self.assertNotIn("data-simulation-engine=", content)
+        self.assertEqual(content.count('data-engine-widget="bonus"'), 1)
+        self.assertEqual(content.count('data-engine-widget="sports_capital"'), 1)
+        self.assertContains(response, "Execution")
+        self.assertContains(response, "No live execution activity is connected yet.")
+        self.assertNotContains(response, "Simulation reports")
         self.assertNotContains(response, "BaseEngine")
         self.assertNotContains(response, "YieldEngine")
         self.assertNotContains(response, "AlphaEngine")
 
-    def test_engine_detail_uses_read_model_for_activity_and_workflow_state(
-        self,
-    ) -> None:
+    def test_staff_dashboard_keeps_execution_and_simulation_summaries_separate(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.staff)
+
+        response = self.client.get("/dashboard/")
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(content.count("data-engine-widget="), 2)
+        self.assertEqual(content.count("data-simulation-engine="), 2)
+        self.assertIn("<span>Recorded activity</span><strong>0</strong>", content)
+        self.assertIn("<span>Recorded runs</span><strong>2</strong>", content)
+        self.assertContains(response, "Customer plane")
+        self.assertContains(response, "Admin only")
+        self.assertContains(response, "Start deterministic sandbox run")
+
+    def test_engine_detail_is_execution_only(self) -> None:
         self.client.force_login(self.user)
 
         response = self.client.get("/engines/bonus/")
@@ -173,7 +190,8 @@ class GuiControlPlaneTests(TestCase):
         self.assertContains(response, "Data aggregation")
         self.assertContains(response, "LiquidityChecker")
         self.assertContains(response, "Execution Layer state")
-        self.assertContains(response, "All BonusEngine reports")
+        self.assertContains(response, "No live execution history source is connected yet")
+        self.assertNotContains(response, "All BonusEngine reports")
 
     def test_monitoring_requires_staff_access(self) -> None:
         self.assertRedirects(
@@ -190,35 +208,39 @@ class GuiControlPlaneTests(TestCase):
         self.assertContains(response, "BonusEngine")
 
     @override_settings(QBET_SIMULATION_MODE_ENABLED=False)
-    def test_simulation_visibility_uses_persisted_runtime_control(self) -> None:
-        SimulationAvailability.objects.update_or_create(
-            pk=1,
-            defaults={"enabled": False},
-        )
+    def test_simulation_visibility_is_admin_only_and_uses_persisted_control(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.user)
         self.assertEqual(self.client.get("/simulation/").status_code, 404)
-        self.assertEqual(self.client.get("/admin-area/gui-settings/").status_code, 302)
+        self.assertNotContains(self.client.get("/dashboard/"), "Start deterministic sandbox run")
 
         self.client.force_login(self.staff)
-        response = self.client.get("/admin-area/gui-settings/")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response, "Simulation availability is a persisted control-plane setting"
-        )
-        self.assertEqual(self.client.post("/admin-area/gui-settings/").status_code, 405)
+        simulation = self.client.get("/simulation/")
+        dashboard = self.client.get("/dashboard/")
+        self.assertEqual(simulation.status_code, 200)
+        self.assertEqual(simulation.content.decode().count("data-simulation-engine="), 2)
+        self.assertContains(dashboard, "Start deterministic sandbox run")
 
-        SimulationAvailability.objects.filter(pk=1).update(enabled=True)
+        SimulationAvailability.objects.filter(pk=1).update(enabled=False)
+        self.assertEqual(self.client.get("/simulation/").status_code, 404)
+        self.assertNotContains(self.client.get("/dashboard/"), "Start deterministic sandbox run")
+
+    def test_settings_show_admin_area_only_to_staff(self) -> None:
         self.client.force_login(self.user)
-        response = self.client.get("/simulation/")
+        user_settings = self.client.get("/settings/presentation/")
+        self.assertContains(user_settings, "browser session only")
+        self.assertNotContains(user_settings, "Admin Area")
+        self.assertNotContains(user_settings, "Enable Simulation plane")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content.decode().count("data-simulation-engine="), 2)
+        self.client.force_login(self.staff)
+        staff_settings = self.client.get("/settings/presentation/")
+        self.assertContains(staff_settings, "Admin Area")
+        self.assertContains(staff_settings, "Enable Simulation plane")
+        self.assertContains(staff_settings, "Admin only")
 
     def test_presentation_preferences_are_session_scoped_and_disclosed(self) -> None:
         self.client.force_login(self.user)
 
-        settings_response = self.client.get("/settings/presentation/")
-        self.assertContains(settings_response, "browser session only")
         response = self.client.post(
             "/settings/presentation/", {"theme": "dark", "font_size": "large"}
         )
@@ -228,8 +250,56 @@ class GuiControlPlaneTests(TestCase):
         self.assertContains(dashboard, 'data-theme="dark"')
         self.assertContains(dashboard, 'data-font-size="large"')
 
-    def test_report_exports_share_required_metadata_and_selected_sections(self) -> None:
+    def test_dashboard_drag_order_is_session_scoped_and_planes_are_separate(self) -> None:
         self.client.force_login(self.user)
+        response = self.client.post(
+            "/dashboard/layout/",
+            {"plane": "execution", "order": ["sports_capital", "bonus"]},
+        )
+        self.assertEqual(response.status_code, 200)
+        dashboard = self.client.get("/dashboard/")
+        content = dashboard.content.decode()
+        self.assertLess(
+            content.index('data-engine-widget="sports_capital"'),
+            content.index('data-engine-widget="bonus"'),
+        )
+
+        forbidden = self.client.post(
+            "/dashboard/layout/",
+            {"plane": "simulation", "order": ["sports_capital", "bonus"]},
+        )
+        self.assertEqual(forbidden.status_code, 404)
+
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.staff)
+        allowed = self.client.post(
+            "/dashboard/layout/",
+            {"plane": "simulation", "order": ["sports_capital", "bonus"]},
+        )
+        self.assertEqual(allowed.status_code, 200)
+        staff_dashboard = self.client.get("/dashboard/").content.decode()
+        self.assertLess(
+            staff_dashboard.index('data-simulation-engine="sports_capital"'),
+            staff_dashboard.index('data-simulation-engine="bonus"'),
+        )
+
+    def test_current_simulation_reports_are_admin_only(self) -> None:
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get("/reports/").status_code, 404)
+        self.assertEqual(self.client.get(f"/reports/{self.bonus_report.run_id}/").status_code, 404)
+        self.assertEqual(
+            self.client.get(f"/reports/{self.bonus_report.run_id}/export/json/").status_code,
+            404,
+        )
+
+        self.client.force_login(self.staff)
+        history = self.client.get("/reports/")
+        self.assertEqual(history.status_code, 200)
+        self.assertContains(history, "bonus")
+        self.assertContains(history, "sports_capital")
+
+    def test_report_exports_share_required_metadata_and_selected_sections(self) -> None:
+        self.client.force_login(self.staff)
         detail_url = f"/reports/{self.bonus_report.run_id}/"
         all_sections = (
             "include_events=1&include_intermediate_results=1&include_raw_inputs=1&"
@@ -284,7 +354,7 @@ class GuiControlPlaneTests(TestCase):
             self.assertIn(f"detail.{field}", content)
 
     def test_report_exports_redact_non_raw_sensitive_log_payloads(self) -> None:
-        self.client.force_login(self.user)
+        self.client.force_login(self.staff)
         selection = (
             "include_warnings=1&include_errors=1&include_risk_decisions=1&"
             "include_workflow_transitions=1"
@@ -325,14 +395,10 @@ class GuiControlPlaneTests(TestCase):
             {"stage": "data_aggregation", "decision": "allow"},
         )
 
-    def test_report_history_and_missing_report_have_safe_states(self) -> None:
-        self.client.force_login(self.user)
+    def test_missing_simulation_report_has_safe_admin_state(self) -> None:
+        self.client.force_login(self.staff)
 
-        history = self.client.get("/reports/")
         missing = self.client.get(f"/reports/{uuid4()}/")
 
-        self.assertEqual(history.status_code, 200)
-        self.assertContains(history, "bonus")
-        self.assertContains(history, "sports_capital")
         self.assertEqual(missing.status_code, 404)
         self.assertContains(missing, "This report is not available.", status_code=404)

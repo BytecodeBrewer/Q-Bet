@@ -1,34 +1,109 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-<section class="page-heading"><h1>Dashboard</h1><p>Operational activity is read from persisted workflow and simulation records.</p></section>
-<section class="summary-grid" aria-label="Overall activity summary">
-  <article class="summary-item"><span>Active matches</span><strong>{{ monitoring.summary.active_matches }}</strong></article>
-  <article class="summary-item"><span>Pending matches</span><strong>{{ monitoring.summary.pending_matches }}</strong></article>
-  <article class="summary-item"><span>Recorded activity</span><strong>{{ monitoring.summary.recorded_activity }}</strong></article>
-  <article class="summary-item"><span>Recorded capital</span><strong>{% if monitoring.summary.involved_capital is not None %}{{ monitoring.summary.involved_capital }}{% else %}Unavailable{% endif %}</strong></article>
-  <article class="summary-item"><span>Warnings</span><strong>{{ monitoring.summary.warning_count }}</strong></article>
-  <article class="summary-item"><span>Errors</span><strong>{{ monitoring.summary.error_count }}</strong></article>
+<section class="page-heading">
+  <h1>Dashboard</h1>
+  <p>Execution and Simulation are separate state planes. Normal users see Execution only.</p>
 </section>
-<section class="capital-coverage" aria-label="Capital coverage"><h2>Capital coverage</h2><p><span class="status status-{{ monitoring.capital_coverage.status }}"></span>{{ monitoring.capital_coverage.detail }}</p></section>
-<section><div class="section-heading"><h2>V1 engines</h2><a href="{% url 'report-history' %}">View report history</a></div><div class="engine-grid">
-  {% for engine in monitoring.engines %}
-    <a class="engine-card engine-link" href="{% url 'engine-detail' engine.engine_id %}" data-engine-widget="{{ engine.engine_id }}">
-      <div class="card-heading"><h3>{{ engine.name }}</h3><span class="status status-{{ engine.status }}" aria-label="{{ engine.status }}"></span></div>
-      <dl class="metric-list">
-        <div><dt>Engine</dt><dd>{% if engine.active %}Active{% else %}Inactive{% endif %}</dd></div>
-        <div><dt>Current mode</dt><dd>{{ engine.mode }}</dd></div>
-        <div><dt>Live state</dt><dd>{{ engine.live_state }}</dd></div>
-        <div><dt>Running</dt><dd>{{ engine.running_matches }}</dd></div>
-        <div><dt>Pending</dt><dd>{{ engine.pending_matches }}</dd></div>
-        <div><dt>Total activity</dt><dd>{{ engine.total_activity }}</dd></div>
-        <div><dt>Recorded capital</dt><dd>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}Unavailable{% endif %}</dd></div>
-        <div><dt>Warnings / errors</dt><dd>{{ engine.warning_count }} / {{ engine.error_count }}</dd></div>
-      </dl>
-      <p>{{ engine.detail }}</p>
-    </a>
-  {% endfor %}
-</div></section>
-{% if simulation_enabled %}
-<section class="simulation-strip"><div><h2>Simulation</h2><p>Virtual-capital history remains separate from live activity.</p></div><a class="button-link" href="{% url 'simulation' %}">Open simulation</a></section>
-{% endif %}
+<form id="dashboard-layout-state" data-layout-url="{% url 'dashboard-layout' %}" hidden>{% csrf_token %}</form>
+<div class="dashboard-planes{% if simulation_enabled %} dashboard-planes-split{% endif %}">
+  <section class="dashboard-plane execution-plane" aria-labelledby="execution-heading">
+    <div class="plane-heading">
+      <div><span class="plane-kicker">Customer plane</span><h2 id="execution-heading">Execution</h2></div>
+      <span class="tag neutral-tag">Live</span>
+    </div>
+    <p class="muted">Only live/execution state belongs here. Simulation activity never contributes to these totals.</p>
+    <section class="summary-grid" aria-label="Execution activity summary">
+      <article class="summary-item"><span>Active matches</span><strong>{{ execution_monitoring.summary.active_matches }}</strong></article>
+      <article class="summary-item"><span>Pending matches</span><strong>{{ execution_monitoring.summary.pending_matches }}</strong></article>
+      <article class="summary-item"><span>Recorded activity</span><strong>{{ execution_monitoring.summary.recorded_activity }}</strong></article>
+      <article class="summary-item"><span>Recorded capital</span><strong>{% if execution_monitoring.summary.involved_capital is not None %}{{ execution_monitoring.summary.involved_capital }}{% else %}Unavailable{% endif %}</strong></article>
+      <article class="summary-item"><span>Warnings</span><strong>{{ execution_monitoring.summary.warning_count }}</strong></article>
+      <article class="summary-item"><span>Errors</span><strong>{{ execution_monitoring.summary.error_count }}</strong></article>
+    </section>
+    <section class="capital-coverage" aria-label="Execution capital coverage">
+      <h3>Capital coverage</h3>
+      <p><span class="status status-{{ execution_monitoring.capital_coverage.status }}"></span>{{ execution_monitoring.capital_coverage.detail }}</p>
+    </section>
+    <div class="section-heading"><h3>V1 engines</h3><span class="muted">Drag the handles or use arrow keys to reorder.</span></div>
+    <div class="engine-grid" data-widget-grid data-plane="execution">
+      {% for engine in execution_engines %}
+        <article class="engine-card draggable-card" data-engine-widget="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
+          <div class="drag-row"><span class="drag-handle" draggable="true" data-drag-handle tabindex="0" role="button" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move {{ engine.name }}">⋮⋮</span></div>
+          <a class="engine-link" href="{% url 'engine-detail' engine.engine_id %}">
+            <div class="card-heading"><h3>{{ engine.name }}</h3><span class="status status-{{ engine.status }}" aria-label="{{ engine.status }}"></span></div>
+            <dl class="metric-list">
+              <div><dt>Engine</dt><dd>{% if engine.active %}Active{% else %}Inactive{% endif %}</dd></div>
+              <div><dt>Current mode</dt><dd>{{ engine.mode }}</dd></div>
+              <div><dt>Live state</dt><dd>{{ engine.live_state }}</dd></div>
+              <div><dt>Running</dt><dd>{{ engine.running_matches }}</dd></div>
+              <div><dt>Pending</dt><dd>{{ engine.pending_matches }}</dd></div>
+              <div><dt>Total activity</dt><dd>{{ engine.total_activity }}</dd></div>
+              <div><dt>Recorded capital</dt><dd>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}Unavailable{% endif %}</dd></div>
+              <div><dt>Warnings / errors</dt><dd>{{ engine.warning_count }} / {{ engine.error_count }}</dd></div>
+            </dl>
+            <p>{{ engine.detail }}</p>
+          </a>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if simulation_enabled and user.is_staff %}
+    <section class="dashboard-plane simulation-plane" aria-labelledby="simulation-heading">
+      <div class="plane-heading">
+        <div><span class="plane-kicker">Admin only</span><h2 id="simulation-heading">Simulation</h2></div>
+        <span class="tag simulation-tag">Simulation</span>
+      </div>
+      <p class="muted">Virtual capital only. This plane is isolated from live execution and hidden from normal users.</p>
+      <section class="summary-grid" aria-label="Simulation activity summary">
+        <article class="summary-item"><span>Active matches</span><strong>{{ simulation_monitoring.summary.active_matches }}</strong></article>
+        <article class="summary-item"><span>Pending matches</span><strong>{{ simulation_monitoring.summary.pending_matches }}</strong></article>
+        <article class="summary-item"><span>Recorded runs</span><strong>{{ simulation_monitoring.summary.recorded_activity }}</strong></article>
+        <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{{ simulation_monitoring.summary.involved_capital }}{% else %}Unavailable{% endif %}</strong></article>
+        <article class="summary-item"><span>Warnings</span><strong>{{ simulation_monitoring.summary.warning_count }}</strong></article>
+        <article class="summary-item"><span>Errors</span><strong>{{ simulation_monitoring.summary.error_count }}</strong></article>
+      </section>
+
+      <section class="simulation-control-panel">
+        <h3>Start deterministic sandbox run</h3>
+        <form method="post" action="{% url 'simulation-start' %}">
+          {% csrf_token %}
+          {{ start_form.non_field_errors }}
+          <div class="simulation-form-grid">
+            <label>Engine {{ start_form.engine }} {{ start_form.engine.errors }}</label>
+            <label>Virtual capital {{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</label>
+            <label>Max duration {{ start_form.max_duration_minutes }} {{ start_form.max_duration_minutes.errors }}</label>
+          </div>
+          <button class="primary" type="submit">Start simulation</button>
+        </form>
+      </section>
+
+      <div class="section-heading"><h3>Simulation engines</h3><a href="{% url 'report-history' %}">Simulation reports</a></div>
+      <p class="muted">Drag the handles or use arrow keys to reorder.</p>
+      <div class="engine-grid" data-widget-grid data-plane="simulation">
+        {% for engine in simulation_engines %}
+          <article class="engine-card simulation-card draggable-card" data-simulation-engine="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
+            <div class="drag-row"><span class="drag-handle" draggable="true" data-drag-handle tabindex="0" role="button" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move simulated {{ engine.name }}">⋮⋮</span></div>
+            <div class="card-heading"><h3>{{ engine.name }}</h3><span class="tag simulation-tag">Simulation</span></div>
+            <dl class="metric-list">
+              <div><dt>Status</dt><dd>{{ engine.detail }}</dd></div>
+              <div><dt>Mode</dt><dd>{{ engine.mode }}</dd></div>
+              <div><dt>Progress</dt><dd>{% if engine.latest_report_id %}{% for report in simulation_monitoring.reports %}{% if report.run_id == engine.latest_report_id %}{{ report.progress }}{% endif %}{% endfor %}{% else %}Unavailable{% endif %}</dd></div>
+              <div><dt>Running / pending</dt><dd>{{ engine.running_matches }} / {{ engine.pending_matches }}</dd></div>
+              <div><dt>Virtual capital</dt><dd>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}Unavailable{% endif %}</dd></div>
+              <div><dt>Warnings / errors</dt><dd>{{ engine.warning_count }} / {{ engine.error_count }}</dd></div>
+            </dl>
+            {% if engine.latest_report_id %}<p><a href="{% url 'report-detail' engine.latest_report_id %}">Open latest report</a></p>{% else %}<p class="muted">No simulation report available.</p>{% endif %}
+          </article>
+        {% endfor %}
+      </div>
+
+      {% if simulation_control.runs %}
+        <section class="recent-runs"><h3>Recent simulation runs</h3><ul>
+          {% for run in simulation_control.runs %}<li><strong>{{ run.engine }}</strong> · {{ run.status }} · {{ run.progress }} · virtual capital {{ run.current_capital }}{% if run.report_id %} · <a href="{% url 'report-detail' run.report_id %}">report</a>{% endif %}</li>{% endfor %}
+        </ul></section>
+      {% endif %}
+    </section>
+  {% endif %}
+</div>
 {% endblock %}

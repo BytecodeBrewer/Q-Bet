@@ -56,9 +56,11 @@ class SimulationGuiControlTests(TestCase):
 
         self.assertTrue(state.enabled)
         self.assertContains(enabled, "Simulation availability enabled.")
+        self.assertContains(enabled, "Admin Area")
+        self.assertEqual(self.client.get("/simulation/").status_code, 200)
 
         self.client.force_login(self.user)
-        self.assertEqual(self.client.get("/simulation/").status_code, 200)
+        self.assertEqual(self.client.get("/simulation/").status_code, 404)
 
         self.client.force_login(self.staff)
         disabled = self.client.post(
@@ -70,8 +72,6 @@ class SimulationGuiControlTests(TestCase):
         state.refresh_from_db()
         self.assertFalse(state.enabled)
         self.assertContains(disabled, "Simulation availability disabled.")
-
-        self.client.force_login(self.user)
         self.assertEqual(self.client.get("/simulation/").status_code, 404)
 
     def test_disable_is_blocked_while_any_simulation_run_is_active(self) -> None:
@@ -120,9 +120,25 @@ class SimulationGuiControlTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(SimulationAvailability.objects.get(pk=1).enabled)
 
-    @override_settings(QBET_SIMULATION_MODE_ENABLED=False)
-    def test_disabled_simulation_rejects_start_without_creating_run(self) -> None:
+    def test_normal_user_cannot_start_simulation_even_when_enabled(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.user)
+
+        response = self.client.post(
+            "/simulation/start/",
+            {
+                "engine": SimulationEngine.BONUS.value,
+                "starting_capital": "100.00",
+                "max_duration_minutes": "60",
+            },
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(SimulationRunState.objects.exists())
+
+    @override_settings(QBET_SIMULATION_MODE_ENABLED=False)
+    def test_disabled_simulation_rejects_staff_start_without_creating_run(self) -> None:
+        self.client.force_login(self.staff)
 
         response = self.client.post(
             "/simulation/start/",
@@ -138,7 +154,7 @@ class SimulationGuiControlTests(TestCase):
 
     def test_invalid_start_configuration_does_not_create_partial_state(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
-        self.client.force_login(self.user)
+        self.client.force_login(self.staff)
 
         response = self.client.post(
             "/simulation/start/",
@@ -180,7 +196,7 @@ class SimulationGuiControlTests(TestCase):
         SimulationAvailability.objects.create(pk=1, enabled=True)
         reader = SQLiteSimulationReportReader(self.report_db)
         monitoring = MonitoringService(reader)
-        self.client.force_login(self.user)
+        self.client.force_login(self.staff)
 
         with (
             override_settings(QBET_SIMULATION_REPORT_DB=self.report_db),

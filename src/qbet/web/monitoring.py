@@ -1,4 +1,4 @@
-"""Read-only GUI monitoring models built from persisted simulation reports."""
+"""Read-only GUI monitoring models for execution and simulation planes."""
 
 from __future__ import annotations
 
@@ -115,8 +115,45 @@ class ReportDetailLookup:
     message: str | None = None
 
 
+def execution_snapshot() -> MonitoringSnapshot:
+    """Return the honest live/execution view until a live state source is connected."""
+
+    workflow_stages = tuple(
+        MonitoringWorkflowStage(
+            name=name,
+            status="gray",
+            detail="No live execution state is connected.",
+        )
+        for _, name in _WORKFLOW_STAGES
+    )
+    engines = tuple(
+        MonitoringEngineStatus(
+            name=name,
+            engine_id=engine_id,
+            status="gray",
+            detail="No live execution activity is connected yet.",
+            mode="live",
+            live_state="unavailable",
+            workflow_stages=workflow_stages,
+        )
+        for name, engine_id in _V1_ENGINES
+    )
+    return MonitoringSnapshot(
+        engines=engines,
+        reports=(),
+        latest_alert=None,
+        history_available=False,
+        summary=MonitoringSummary(),
+        capital_coverage=MonitoringCapitalCoverage(
+            status="gray",
+            amount=None,
+            detail="Live capital coverage is unavailable.",
+        ),
+    )
+
+
 class MonitoringService:
-    """Build safe GUI read models from an optional, read-only report store."""
+    """Build simulation read models from an optional, read-only report store."""
 
     def __init__(self, report_store: SimulationReportReader | None = None) -> None:
         self._report_store = report_store
@@ -153,9 +190,9 @@ class MonitoringService:
                 status="gray",
                 amount=None,
                 detail=(
-                    "Recorded simulation capital is shown separately; live capital coverage is unavailable."
+                    "Recorded simulation capital is shown in the Simulation plane; live capital coverage is unavailable."
                     if history_available
-                    else "Live capital coverage is unavailable because simulation history is not configured."
+                    else "Simulation history is not configured."
                 ),
             ),
         )
@@ -254,7 +291,7 @@ class MonitoringService:
                     detail=detail,
                     engine_id=engine_id,
                     active=latest is not None and latest.status is SimulationStatus.RUNNING,
-                    mode="simulation" if latest is not None else "unavailable",
+                    mode="simulation" if latest is not None else "simulation",
                     live_state="unavailable",
                     running_matches=sum(
                         report.status is SimulationStatus.RUNNING for report in engine_reports
