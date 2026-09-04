@@ -1,4 +1,4 @@
-"""Django settings for Q-Bet's local and hosted web shell."""
+"""Django settings for Q-Bet's PostgreSQL-backed local and hosted web shell."""
 
 from __future__ import annotations
 
@@ -20,6 +20,17 @@ def parse_allowed_hosts(value: str) -> list[str]:
 
 def _environment_flag(name: str, default: str = "false") -> bool:
     return os.environ.get(name, default).lower() == "true"
+
+
+def require_database_url(value: str) -> str:
+    """Require the shared PostgreSQL source of truth instead of falling back locally."""
+
+    normalized = value.strip()
+    if not normalized:
+        raise ImproperlyConfigured(
+            "QBET_DATABASE_URL is required; Q-Bet no longer falls back to SQLite"
+        )
+    return normalized
 
 
 def database_config_from_url(value: str, *, require_ssl: bool = False) -> dict[str, object]:
@@ -64,8 +75,7 @@ def database_config_from_url(value: str, *, require_ssl: bool = False) -> dict[s
 
 
 QBET_HOSTED_PREVIEW = _environment_flag("QBET_HOSTED_PREVIEW")
-QBET_DATABASE_URL = os.environ.get("QBET_DATABASE_URL", "").strip()
-QBET_HOSTED_DATABASE_ENABLED = QBET_HOSTED_PREVIEW and bool(QBET_DATABASE_URL)
+QBET_DATABASE_URL = require_database_url(os.environ.get("QBET_DATABASE_URL", ""))
 SECRET_KEY = os.environ.get("QBET_DJANGO_SECRET_KEY", _LOCAL_SECRET_KEY)
 DEBUG = _environment_flag("QBET_DJANGO_DEBUG", "true")
 ALLOWED_HOSTS = parse_allowed_hosts(
@@ -86,13 +96,13 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "qbet.storage.apps.QBetStorageConfig",
     "qbet.web.apps.QBetWebConfig",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "qbet.web.middleware.RequestCorrelationMiddleware",
-    "qbet.web.middleware.HostedPreviewBoundaryMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -104,7 +114,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = "qbet.web.urls"
 TEMPLATES = [
     {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "BACKEND": "django.db.backends.django.DjangoTemplates",
         "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
@@ -118,33 +128,15 @@ TEMPLATES = [
 ]
 WSGI_APPLICATION = "vercel_wsgi.application"
 
-if QBET_HOSTED_PREVIEW:
-    QBET_SIMULATION_REPORT_DB = None
-    QBET_SIMULATION_MODE_ENABLED = False
-    if QBET_DATABASE_URL:
-        DATABASES = {
-            "default": database_config_from_url(QBET_DATABASE_URL, require_ssl=True)
-        }
-    else:
-        DATABASES = {"default": {"ENGINE": "django.db.backends.dummy"}}
-        SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
-else:
-    QBET_SIMULATION_REPORT_DB = Path(
-        os.environ.get(
-            "QBET_SIMULATION_REPORT_DB",
-            str(BASE_DIR / "qbet-simulation.sqlite3"),
-        )
+DATABASES = {
+    "default": database_config_from_url(
+        QBET_DATABASE_URL,
+        require_ssl=QBET_HOSTED_PREVIEW,
     )
-    QBET_SIMULATION_MODE_ENABLED = _environment_flag("QBET_SIMULATION_MODE_ENABLED")
-    if QBET_DATABASE_URL:
-        DATABASES = {"default": database_config_from_url(QBET_DATABASE_URL)}
-    else:
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": BASE_DIR / "qbet-web.sqlite3",
-            }
-        }
+}
+QBET_SIMULATION_MODE_ENABLED = (
+    False if QBET_HOSTED_PREVIEW else _environment_flag("QBET_SIMULATION_MODE_ENABLED")
+)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

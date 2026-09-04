@@ -3,8 +3,6 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 from decimal import Decimal
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -17,7 +15,7 @@ from django.test import TestCase, override_settings
 
 from qbet.layers import SimulationLogRecordType
 from qbet.simulation import SimulationEngine
-from qbet.storage import SQLiteSimulationReportReader
+from qbet.storage.postgres import PostgresSimulationReportReader
 from qbet.web.models import SimulationAvailability, SimulationRunState
 from qbet.web.monitoring import MonitoringService
 from qbet.web.simulation_control import (
@@ -37,9 +35,6 @@ class SimulationGuiControlTests(TestCase):
             password="Strong-pass-123",
             is_staff=True,
         )
-        self.directory = TemporaryDirectory()
-        self.addCleanup(self.directory.cleanup)
-        self.report_db = Path(self.directory.name) / "simulation.sqlite3"
         SimulationAvailability.objects.all().delete()
         SimulationRunState.objects.all().delete()
 
@@ -179,10 +174,7 @@ class SimulationGuiControlTests(TestCase):
         )
         service = SimulationControlService()
 
-        with (
-            override_settings(QBET_SIMULATION_REPORT_DB=self.report_db),
-            self.assertRaises(SimulationAlreadyRunningError),
-        ):
+        with self.assertRaises(SimulationAlreadyRunningError):
             service.start(
                 engine=SimulationEngine.BONUS,
                 starting_capital=Decimal("100"),
@@ -194,14 +186,11 @@ class SimulationGuiControlTests(TestCase):
 
     def test_gui_start_runs_connected_pipeline_and_persists_report_and_records(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
-        reader = SQLiteSimulationReportReader(self.report_db)
+        reader = PostgresSimulationReportReader()
         monitoring = MonitoringService(reader)
         self.client.force_login(self.staff)
 
-        with (
-            override_settings(QBET_SIMULATION_REPORT_DB=self.report_db),
-            patch("qbet.web.views.MONITORING_SERVICE", monitoring),
-        ):
+        with patch("qbet.web.views.MONITORING_SERVICE", monitoring):
             response = self.client.post(
                 "/simulation/start/",
                 {
@@ -247,17 +236,16 @@ class SimulationGuiControlTests(TestCase):
         SimulationAvailability.objects.create(pk=1, enabled=True)
         service = SimulationControlService()
 
-        with override_settings(QBET_SIMULATION_REPORT_DB=self.report_db):
-            bonus = service.start(
-                engine=SimulationEngine.BONUS,
-                starting_capital=Decimal("100"),
-                max_duration=timedelta(minutes=60),
-            )
-            sports = service.start(
-                engine=SimulationEngine.SPORTS_CAPITAL,
-                starting_capital=Decimal("100"),
-                max_duration=timedelta(minutes=60),
-            )
+        bonus = service.start(
+            engine=SimulationEngine.BONUS,
+            starting_capital=Decimal("100"),
+            max_duration=timedelta(minutes=60),
+        )
+        sports = service.start(
+            engine=SimulationEngine.SPORTS_CAPITAL,
+            starting_capital=Decimal("100"),
+            max_duration=timedelta(minutes=60),
+        )
 
         self.assertEqual(bonus.status, SimulationRunState.Status.COMPLETED)
         self.assertEqual(sports.status, SimulationRunState.Status.COMPLETED)

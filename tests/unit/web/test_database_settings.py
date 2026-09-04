@@ -1,7 +1,7 @@
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 
-from qbet.web.settings import database_config_from_url
+from qbet.web.settings import database_config_from_url, require_database_url
 
 
 def test_database_config_from_url_parses_supabase_pooler_connection() -> None:
@@ -24,4 +24,9 @@ def test_database_config_from_url_parses_supabase_pooler_connection() -> None:
 
 def test_database_config_from_url_rejects_non_postgres_scheme() -> None:
     with pytest.raises(ImproperlyConfigured, match="postgres"):
-        database_config_from_url("sqlite:///qbet.sqlite3")
+        database_config_from_url("mysql://user:pass@example.test/qbet")
+
+
+def test_database_url_is_required_without_local_fallback() -> None:
+    with pytest.raises(ImproperlyConfigured, match="required"):
+        require_database_url("   ")

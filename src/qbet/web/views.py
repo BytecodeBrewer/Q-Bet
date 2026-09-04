@@ -7,7 +7,6 @@ from datetime import timedelta
 from io import StringIO
 from uuid import UUID
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -17,7 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from qbet.reporting import ReportDetailSelection
 from qbet.simulation import SimulationEngine
-from qbet.storage import SQLiteSimulationReportReader
+from qbet.storage.postgres import PostgresSimulationReportReader
 from qbet.web.controls import (
     DashboardLayout,
     PresentationPreferences,
@@ -52,10 +51,7 @@ _DETAIL_FIELDS = (
 
 
 def _monitoring_service() -> MonitoringService:
-    database_path = settings.QBET_SIMULATION_REPORT_DB
-    if database_path is None:
-        return MonitoringService()
-    return MonitoringService(SQLiteSimulationReportReader(database_path))
+    return MonitoringService(PostgresSimulationReportReader())
 
 
 MONITORING_SERVICE = _monitoring_service()
