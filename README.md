@@ -40,6 +40,22 @@ python manage.py check
 python -m build
 ```
 
+## Vercel Preview / Staging CD
+
+GitHub Actions creates a Vercel Preview deployment only after the Ruff, Pyright, Django/test, and package-build gates succeed. Pull requests from this repository and successful pushes to `develop` use the dedicated Vercel project named `q-bet`; the workflow never deploys with `--prod`.
+
+Configure these GitHub repository values before the first deployment run:
+
+- secret `VERCEL_TOKEN`: a Vercel token with access to the Q-Bet team
+- variable `VERCEL_ORG_ID`: the Vercel team/org identifier
+- secret `QBET_DJANGO_SECRET_KEY`: a non-development Django secret used only by the hosted preview
+
+The first successful deployment job creates the dedicated `q-bet` Vercel project when it is missing and then links the CI workspace to it. The existing portfolio Vercel project is not used or modified.
+
+The hosted preview is intentionally a read-only deployment proof, not production Q-Bet. Vercel Functions do not provide persistent local SQLite storage, so hosted mode disables the SQLite-backed simulation/report store, uses no writable Django SQLite database, and fails persistence-dependent auth/control/report/simulation routes closed with HTTP 503. The public `/` shell, `/health/`, templates, and static assets remain available for deployment smoke testing. Local development keeps the full SQLite-backed behavior.
+
+The deployment job verifies the live preview with Vercel's authenticated curl command, including `/health/`, the public shell, and `/static/qbet_web/app.css`.
+
 ## Version 1 Target
 
 Version 1 should include:
