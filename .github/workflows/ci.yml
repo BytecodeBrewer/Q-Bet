@@ -79,7 +79,7 @@ jobs:
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_NAME: q-bet
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       QBET_DJANGO_SECRET_KEY: ${{ secrets.QBET_DJANGO_SECRET_KEY }}
     steps:
       - uses: actions/checkout@v4
@@ -92,6 +92,7 @@ jobs:
         run: |
           test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
           test -n "$VERCEL_ORG_ID" || { echo "Missing VERCEL_ORG_ID repository variable"; exit 1; }
+          test -n "$VERCEL_PROJECT_ID" || { echo "Missing VERCEL_PROJECT_ID repository variable"; exit 1; }
           test -n "$QBET_DJANGO_SECRET_KEY" || {
             echo "Missing QBET_DJANGO_SECRET_KEY secret"
             exit 1
@@ -100,17 +101,9 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@59
 
-      - name: Ensure dedicated Q-Bet Vercel project
+      - name: Pull Vercel preview configuration
         shell: bash
-        run: |
-          if ! vercel project inspect "$VERCEL_PROJECT_NAME" \
-            --token "$VERCEL_TOKEN" >/dev/null 2>&1; then
-            vercel project add "$VERCEL_PROJECT_NAME" \
-              --token "$VERCEL_TOKEN"
-          fi
-          vercel link --yes \
-            --project "$VERCEL_PROJECT_NAME" \
-            --token "$VERCEL_TOKEN"
+        run: vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
 
       - name: Build hosted preview
         shell: bash
