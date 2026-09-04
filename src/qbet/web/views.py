@@ -71,7 +71,7 @@ def _is_staff(user: object) -> bool:
 
 
 def _require_staff(request: HttpRequest) -> None:
-    if not request.user.is_staff:
+    if not _is_staff(request.user):
         raise Http404("This admin-only resource is not available.")
 
 
@@ -79,7 +79,7 @@ def _context(request: HttpRequest, **values: object) -> dict[str, object]:
     values.setdefault("preferences", presentation_preferences(request.session))
     if "simulation_enabled" not in values:
         values["simulation_enabled"] = bool(
-            request.user.is_authenticated and request.user.is_staff and _simulation_enabled()
+            request.user.is_authenticated and _is_staff(request.user) and _simulation_enabled()
         )
     return values
 
@@ -111,7 +111,7 @@ def _dashboard_context(
         "dashboard_layout": layout,
         "simulation_enabled": False,
     }
-    if request.user.is_staff and _simulation_enabled():
+    if _is_staff(request.user) and _simulation_enabled():
         simulation_monitoring = MONITORING_SERVICE.snapshot()
         values.update(
             simulation_enabled=True,
@@ -173,7 +173,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
 @require_POST
 def dashboard_layout_update(request: HttpRequest) -> JsonResponse:
     plane = request.POST.get("plane", "")
-    if plane == "simulation" and (not request.user.is_staff or not _simulation_enabled()):
+    if plane == "simulation" and (not _is_staff(request.user) or not _simulation_enabled()):
         raise Http404("Simulation dashboard is not available.")
     order = tuple(request.POST.getlist("order"))
     try:
@@ -281,7 +281,7 @@ def presentation_settings(request: HttpRequest) -> HttpResponse:
         return redirect("presentation-settings")
 
     values: dict[str, object] = {"form": form}
-    if request.user.is_staff:
+    if _is_staff(request.user):
         control = SIMULATION_CONTROL.snapshot()
         values.update(
             simulation_control=control,
