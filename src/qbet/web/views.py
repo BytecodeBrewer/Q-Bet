@@ -79,9 +79,7 @@ def _context(request: HttpRequest, **values: object) -> dict[str, object]:
     values.setdefault("preferences", presentation_preferences(request.session))
     if "simulation_enabled" not in values:
         values["simulation_enabled"] = bool(
-            request.user.is_authenticated
-            and request.user.is_staff
-            and _simulation_enabled()
+            request.user.is_authenticated and request.user.is_staff and _simulation_enabled()
         )
     return values
 
