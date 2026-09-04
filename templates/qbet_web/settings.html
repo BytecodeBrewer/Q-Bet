@@ -1,5 +1,18 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-<section class="page-heading"><h1>Presentation settings</h1><p>These choices are saved for this browser session only. Account-wide preference storage is not configured yet.</p></section>
+<section class="page-heading"><h1>Settings</h1><p>Presentation choices are saved for this browser session only. Account-wide preference storage is not configured yet.</p></section>
 <form method="post" class="settings-form">{% csrf_token %}<fieldset><legend>Theme</legend>{{ form.theme }}</fieldset><fieldset><legend>Font size</legend>{{ form.font_size }}</fieldset><button class="primary" type="submit">Save settings</button></form>
+{% if user.is_staff %}
+<section class="admin-zone" aria-labelledby="admin-settings-heading">
+  <div class="admin-zone-heading"><div><span class="plane-kicker">Privileged settings</span><h2 id="admin-settings-heading">Admin Area</h2></div><span class="admin-badge">Admin only</span></div>
+  <p>Simulation is an internal control plane. Enabling it exposes the Simulation dashboard only to staff users; it never changes the normal user Execution dashboard.</p>
+  <form method="post" action="{% url 'admin-simulation-availability' %}" class="admin-settings-form">
+    {% csrf_token %}
+    <label class="toggle-row">{{ simulation_toggle_form.enabled }} <span>Enable Simulation plane</span></label>
+    <p class="muted">Disabling is blocked while a simulation run is active.</p>
+    <button class="warning-button" type="submit">Save simulation availability</button>
+  </form>
+  {% if simulation_control.active_runs %}<p class="admin-warning">{{ simulation_control.active_runs|length }} active simulation run{{ simulation_control.active_runs|length|pluralize }} must finish before disabling.</p>{% endif %}
+</section>
+{% endif %}
 {% endblock %}
