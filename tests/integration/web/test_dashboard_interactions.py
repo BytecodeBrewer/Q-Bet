@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 from django.contrib.auth.models import User
 from django.test import TestCase
 
+from qbet.layers import SimulationLogRecord
 from qbet.reporting import SimulationReport
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
 from qbet.web.models import SimulationAvailability
@@ -25,7 +27,7 @@ class _ReportStore:
             raise KeyError(run_id)
         return self.report
 
-    def load_records(self, run_id: UUID) -> tuple[()]:
+    def load_records(self, run_id: UUID) -> tuple[SimulationLogRecord, ...]:
         raise KeyError(run_id)
 
 
@@ -60,8 +62,6 @@ class DashboardInteractionTests(TestCase):
         service = MonitoringService(_ReportStore(report))
         SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.staff)
-
-        from unittest.mock import patch
 
         with patch("qbet.web.views.MONITORING_SERVICE", service):
             response = self.client.get("/dashboard/")
