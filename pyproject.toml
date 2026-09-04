@@ -12,6 +12,9 @@ dependencies = [
     "pydantic>=2.11,<3",
 ]
 
+[tool.vercel]
+entrypoint = "vercel_wsgi:application"
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
