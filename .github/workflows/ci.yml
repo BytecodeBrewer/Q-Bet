@@ -79,6 +79,7 @@ jobs:
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_SCOPE: bytecodebrewers-projects
       VERCEL_PROJECT_NAME: q-bet
       QBET_DJANGO_SECRET_KEY: ${{ secrets.QBET_DJANGO_SECRET_KEY }}
     steps:
@@ -104,15 +105,15 @@ jobs:
         shell: bash
         run: |
           if ! vercel project inspect "$VERCEL_PROJECT_NAME" \
-            --scope "$VERCEL_ORG_ID" \
+            --scope "$VERCEL_SCOPE" \
             --token "$VERCEL_TOKEN" >/dev/null 2>&1; then
             vercel project add "$VERCEL_PROJECT_NAME" \
-              --scope "$VERCEL_ORG_ID" \
+              --scope "$VERCEL_SCOPE" \
               --token "$VERCEL_TOKEN"
           fi
           vercel link --yes \
             --project "$VERCEL_PROJECT_NAME" \
-            --scope "$VERCEL_ORG_ID" \
+            --scope "$VERCEL_SCOPE" \
             --token "$VERCEL_TOKEN"
 
       - name: Build hosted preview
