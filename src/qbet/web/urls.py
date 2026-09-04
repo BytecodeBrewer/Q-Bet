@@ -9,6 +9,7 @@ urlpatterns = [
     path("health/", views.health, name="health"),
     path("register/", views.register, name="register"),
     path("dashboard/", views.dashboard, name="dashboard"),
+    path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
     path("engines/<str:engine_id>/", views.engine_detail, name="engine-detail"),
     path("simulation/", views.simulation, name="simulation"),
     path("simulation/start/", views.simulation_start, name="simulation-start"),
