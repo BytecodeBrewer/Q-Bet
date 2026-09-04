@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  deployments: write
 
 jobs:
   quality:
@@ -76,6 +77,9 @@ jobs:
       github.event_name == 'push' ||
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event_name == 'push' && 'staging' || 'preview' }}
+      url: ${{ steps.deploy.outputs.url }}
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
