@@ -114,7 +114,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = "qbet.web.urls"
 TEMPLATES = [
     {
-        "BACKEND": "django.db.backends.django.DjangoTemplates",
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
@@ -134,9 +134,7 @@ DATABASES = {
         require_ssl=QBET_HOSTED_PREVIEW,
     )
 }
-QBET_SIMULATION_MODE_ENABLED = (
-    False if QBET_HOSTED_PREVIEW else _environment_flag("QBET_SIMULATION_MODE_ENABLED")
-)
+QBET_SIMULATION_MODE_ENABLED = _environment_flag("QBET_SIMULATION_MODE_ENABLED")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
