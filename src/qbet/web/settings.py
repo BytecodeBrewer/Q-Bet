@@ -1,9 +1,10 @@
-"""Minimal Django settings for the local Q-Bet web shell."""
+"""Django settings for Q-Bet's local and hosted web shell."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -21,7 +22,50 @@ def _environment_flag(name: str, default: str = "false") -> bool:
     return os.environ.get(name, default).lower() == "true"
 
 
+def database_config_from_url(value: str, *, require_ssl: bool = False) -> dict[str, object]:
+    """Build a Django PostgreSQL configuration from the namespaced database URL."""
+
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"postgres", "postgresql"}:
+        raise ImproperlyConfigured(
+            "QBET_DATABASE_URL must use the postgres:// or postgresql:// scheme"
+        )
+    try:
+        port = parsed.port or 5432
+    except ValueError as error:
+        raise ImproperlyConfigured("QBET_DATABASE_URL contains an invalid port") from error
+
+    database_name = unquote(parsed.path.lstrip("/"))
+    username = unquote(parsed.username or "")
+    password = unquote(parsed.password or "")
+    if not parsed.hostname or not database_name or not username:
+        raise ImproperlyConfigured(
+            "QBET_DATABASE_URL must include a host, database name, and username"
+        )
+
+    query = parse_qs(parsed.query)
+    options: dict[str, object] = {"prepare_threshold": None}
+    sslmode = query.get("sslmode", [None])[-1]
+    if require_ssl:
+        sslmode = "require"
+    if sslmode:
+        options["sslmode"] = sslmode
+
+    return {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": database_name,
+        "USER": username,
+        "PASSWORD": password,
+        "HOST": parsed.hostname,
+        "PORT": port,
+        "CONN_MAX_AGE": 0,
+        "OPTIONS": options,
+    }
+
+
 QBET_HOSTED_PREVIEW = _environment_flag("QBET_HOSTED_PREVIEW")
+QBET_DATABASE_URL = os.environ.get("QBET_DATABASE_URL", "").strip()
+QBET_HOSTED_DATABASE_ENABLED = QBET_HOSTED_PREVIEW and bool(QBET_DATABASE_URL)
 SECRET_KEY = os.environ.get("QBET_DJANGO_SECRET_KEY", _LOCAL_SECRET_KEY)
 DEBUG = _environment_flag("QBET_DJANGO_DEBUG", "true")
 ALLOWED_HOSTS = parse_allowed_hosts(
@@ -77,8 +121,13 @@ WSGI_APPLICATION = "vercel_wsgi.application"
 if QBET_HOSTED_PREVIEW:
     QBET_SIMULATION_REPORT_DB = None
     QBET_SIMULATION_MODE_ENABLED = False
-    DATABASES = {"default": {"ENGINE": "django.db.backends.dummy"}}
-    SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+    if QBET_DATABASE_URL:
+        DATABASES = {
+            "default": database_config_from_url(QBET_DATABASE_URL, require_ssl=True)
+        }
+    else:
+        DATABASES = {"default": {"ENGINE": "django.db.backends.dummy"}}
+        SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 else:
     QBET_SIMULATION_REPORT_DB = Path(
         os.environ.get(
@@ -87,12 +136,15 @@ else:
         )
     )
     QBET_SIMULATION_MODE_ENABLED = _environment_flag("QBET_SIMULATION_MODE_ENABLED")
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "qbet-web.sqlite3",
+    if QBET_DATABASE_URL:
+        DATABASES = {"default": database_config_from_url(QBET_DATABASE_URL)}
+    else:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": BASE_DIR / "qbet-web.sqlite3",
+            }
         }
-    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
