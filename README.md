@@ -14,7 +14,9 @@ The pipeline is taking shape from intake to simulation. Normalized market-data c
 
 The strongest end-to-end path today is simulation: evaluated sports opportunities can move through workflow transitions, risk checks, liquidity decisions, virtual-capital updates, reporting, and SQLite-backed report history without touching real execution. Provider state also has a typed SQLite persistence path, which gives the local version a practical bridge toward Supabase/PostgreSQL later.
 
-The Django control and monitoring plane now provides a protected two-engine dashboard, engine detail and workflow views, persistent administrator-controlled simulation availability, a safe disable guard while simulation work is active, bounded GUI-started sandbox simulations for `BonusEngine` and `SportsCapitalEngine`, lifecycle status, session-scoped presentation settings, report history/detail selection, and CSV/JSON export from persisted simulation data. GUI-started simulations remain virtual-only and use the existing workflow-routed simulation path; they do not trigger live execution or real-money adapters. The broader gaps against the expectation model remain conformant external data/result adapters, bank sandbox/connectivity, Portfolio Ledger integration, and controlled live execution. The first bank-connector evaluation is complete; the bank layer remains mock-only until the account type and approved provider-onboarding route are chosen. `RequestHandler` refresh checks are now wired into the workflow at Domain Risk, Liquidity Check, and Dispatch, while concrete provider refresh clients remain future work. The math layer is solid, and Phase 2 is increasingly about making the connected local simulation path controllable, observable, and verifiable before external adapters are introduced.
+The Django GUI now keeps the user-facing Execution plane and the internal Simulation plane explicitly separate. Normal authenticated users see only the two-engine Execution dashboard; simulation history no longer feeds or alters its totals. Staff users can enable an additional, clearly labelled Simulation dashboard from the privileged Admin Area inside Settings. That admin-only plane reuses the existing deterministic `BonusEngine` and `SportsCapitalEngine` simulation path, virtual capital, lifecycle state, persisted reports, and CSV/JSON exports without touching live execution or real-money adapters. Current simulation reports and internal monitoring remain staff-only. Dashboard engine widgets can be reordered independently inside the Execution and Simulation planes, with session-scoped layout persistence so widgets cannot be dragged across the two state domains. Presentation theme and font-size preferences remain session-scoped as well.
+
+The broader gaps against the expectation model remain conformant external data/result adapters, bank sandbox/connectivity, Portfolio Ledger integration, customer-facing reporting separated from internal monitoring, and controlled live execution. The first bank-connector evaluation is complete; the bank layer remains mock-only until the account type and approved provider-onboarding route are chosen. `RequestHandler` refresh checks are now wired into the workflow at Domain Risk, Liquidity Check, and Dispatch, while concrete provider refresh clients remain future work. The math layer is solid, and Phase 2 is increasingly about making the connected local simulation path controllable, observable, and verifiable before external adapters are introduced.
 
 ## Local Web Setup
 
@@ -52,9 +54,9 @@ Version 1 should include:
 - API adapter structure for crypto delta-neutral and prediction-market engines
 - bank connectivity for balances and approved funding flows
 - tests for calculations, strategy logic, mock integrations, and safety-critical workflows
-- a compact web UI with main dashboard, engine views, simulation controls, and performance reports
+- a compact web UI with a customer-facing Execution dashboard, administrator-only Simulation and Monitoring controls, engine views, and performance reports
 
-The first UI does not need theme switching, drag-and-drop, or a polished bank cockpit. Useful beats decorative.
+The current UI already supports theme/font preferences and session-scoped dashboard widget ordering. Future visual polish should stay secondary to workflow safety, clear data boundaries, and useful operational behavior.
 
 ## Engine Portfolio
 
