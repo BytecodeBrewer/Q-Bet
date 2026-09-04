@@ -21,6 +21,7 @@ Core principles:
 - **Conformant data access:** Quotation and market ingestion uses permitted, structured REST/WebSocket APIs. Browser automation is not a quotation-scraping channel.
 - **Controlled execution:** Money movement and irreversible live actions require explicit user approval.
 - **Observable workflows:** Every material transition emits structured, correlatable events.
+- **Shared operational source of truth:** Normal local and hosted Q-Bet runtimes use Supabase/PostgreSQL for durable operational state. Runtime-local analytics storage never becomes authoritative application state.
 - **Small implementation tickets:** Work remains independently testable and reviewable.
 
 ## Architecture Contract
@@ -248,16 +249,22 @@ Before selecting a real bank connector, a research ticket must verify official A
 
 ## Storage, Logging, And GUI
 
-| Concern | Current/local target | Later target |
+| Concern | Current target | Later target |
 | --- | --- | --- |
 | Pure calculation | Stateless in memory | Same |
-| Operational state and ledger | SQLite with ACID transactions | Supabase/Postgres |
-| Analytics, replay, backtesting | DuckDB and export files | Cloud/lakehouse placement as justified |
-| Reports and exports | SQLite plus CSV/JSON | Postgres/object storage as justified |
+| Operational state and ledger | Supabase/PostgreSQL as shared durable source of truth | Scale/HA and object placement as justified |
+| Analytics, replay, backtesting | DuckDB per runtime plus export files | Durable remote/lakehouse placement as justified |
+| Reports and exports | PostgreSQL plus CSV/JSON | Object storage as justified for larger artifacts |
+
+Normal local and hosted Q-Bet runtimes require `QBET_DATABASE_URL` and use PostgreSQL for durable application state. Local and deployed web applications may intentionally reference the same Supabase database, so no SQLite/PostgreSQL synchronization layer exists. Automated tests must instead use an isolated disposable PostgreSQL target and must never mutate the shared production Supabase database.
+
+DuckDB is runtime-local analytical infrastructure. A local process and a Vercel runtime have separate DuckDB contexts, and neither is authoritative. Any simulation, workflow, report, provider, user, session, monitoring, or future ledger state that must survive runtime termination or be visible across environments is persisted to PostgreSQL. SQLite is legacy-only and may appear only in explicit one-time import tooling or archived documentation.
 
 Structured JSON logging is the machine-readable contract for pipeline diagnostics and agentic tickets. Material events include correlation id, stage, engine, status, reason/decision code, timestamp, and safe references to inputs/outputs. Secrets, credentials, session tokens, and raw sensitive payloads are never logged.
 
-The Django GUI is the Admin Control and Monitoring Plane. Admin users can inspect every pipeline stage, queues, warnings, capital state, approvals, reports, and exports. Normal users see their engine views, approvals, reports, and assigned capital/subaccount state. Compact engine widgets show traffic-light status and warning/error symbols. Drag-and-drop layout is optional, not a current completion requirement.
+The Django GUI is the Admin Control and Monitoring Plane. Django Admin is the central user/permission administration surface for authorized administrators, while Q-Bet-specific admin views expose simulation controls and monitoring. Admin users can inspect every pipeline stage, queues, warnings, capital state, approvals, reports, and exports. Normal users see their engine views, approvals, reports, and assigned capital/subaccount state. Compact engine widgets show traffic-light status and warning/error symbols. Drag-and-drop layout is optional, not a current completion requirement.
+
+The system must retain at least one active staff superuser. The final active staff superuser cannot be deleted, deactivated, or stripped of `is_staff`/`is_superuser`; this guard must be enforced server-side and covered by tests.
 
 ## Delivery Roadmap
 
@@ -271,7 +278,7 @@ In scope:
 - separate `BonusEngine` and `SportsCapitalEngine`
 - dynamic rounding and core operational-risk contracts
 - sports data contracts and `Sports Match Builder`
-- simulation contracts, workflow transitions, provider-state persistence, and SQLite-backed report history
+- simulation contracts, workflow transitions, provider-state persistence, and report history
 - legacy proposal allocation through `CapitalOrchestrator` as a bridge to `LiquidityChecker`
 
 Out of scope for completion:
@@ -284,15 +291,15 @@ In scope:
 
 - `WorkflowOrchestrator` boundary and correlation ids across the connected sports simulation path
 - structured logging for every material stage and decision
-- persistent pipeline, simulation, provider, and report state
-- usable Django admin/control GUI with stage visibility, queues, warnings, logs, reports, exports, and simulation controls
+- persistent pipeline, simulation, provider, and report state in shared PostgreSQL
+- usable Django admin/control GUI with stage visibility, queues, warnings, logs, reports, exports, simulation controls, and user/permission administration
 - admin-wide visibility plus a bounded normal-user engine/report/subaccount view
 - `LiquidityChecker` naming/boundary plan without introducing real bank movement
 - end-to-end tests for the current connected simulation path
 
 Out of scope for completion:
 
-- real bank transfers, production browser execution, multi-user cloud tenancy, later engine production logic
+- real bank transfers, production browser execution, broad multi-user tenancy, later engine production logic
 
 ### Phase 3 - Adapters, Sandbox, And Full E2E Verification
 
@@ -309,7 +316,7 @@ In scope:
 
 Out of scope for completion:
 
-- unattended production-scale live operation, broad multi-user rollout, cloud migration
+- unattended production-scale live operation and broad multi-user rollout
 
 ### Phase 4 - Live-Execution Readiness And Stabilization
 
@@ -325,15 +332,15 @@ In scope:
 
 Out of scope for completion:
 
-- mandatory full cloud migration or open public multi-tenant service
+- open public multi-tenant service
 
 ### Phase 5 - Cloud And Scaling
 
 In scope:
 
-- cloud deployment and infrastructure as code such as Terraform
-- Supabase/Postgres or another justified operational database target
-- deliberate placement of DuckDB/lakehouse analytics workloads
+- production cloud infrastructure and infrastructure as code such as Terraform
+- hardening/scaling of the existing Supabase/PostgreSQL operational source of truth
+- deliberate durable placement of larger DuckDB/lakehouse analytics workloads
 - isolated multi-user bankrolls, credentials, roles, and permissions
 - 24/7-capable operation with alerts and human approval notifications
 - expanded engines and supported markets after current-product stability
@@ -344,9 +351,9 @@ Out of scope:
 
 ## Current Implementation Alignment
 
-The current code already provides significant Phase 1 foundations: typed models, pure calculators, deterministic rounding, separate sports engines, simulation contracts, a Django shell, provider-state persistence, typed sports preparation, and a proposal-only legacy `CapitalOrchestrator`.
+The current code provides the Phase 1 foundations plus a substantial Phase 2 operational baseline: typed models, pure calculators, deterministic rounding, separate sports engines, simulation contracts, a Django shell, typed sports preparation, workflow correlation/logging, PostgreSQL-backed provider state and simulation/report persistence, Supabase-backed auth/sessions, Django Admin user/permission administration, and runtime-local DuckDB replay infrastructure. SQLite is no longer a normal runtime technology and remains only behind an explicit legacy importer.
 
-The current priority is Phase 2: connect orchestration, correlation, structured logging, persistent monitoring, GUI visibility, reports/exports, and the existing sports simulation path. Phase 3 then introduces real adapter seams, sandbox capital flows, the `LiquidityChecker`/ledger implementation, and specification-driven full E2E verification.
+The current priority remains Phase 2 completion: strengthen persistent monitoring, GUI visibility, reports/exports, and the connected sports simulation path on top of the shared PostgreSQL source of truth. Phase 3 then introduces real adapter seams, sandbox capital flows, the `LiquidityChecker`/ledger implementation, and specification-driven full E2E verification.
 
 ## Agent And Ticket Rules
 
