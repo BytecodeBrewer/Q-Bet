@@ -139,9 +139,7 @@ def test_top_up_records_distinct_reconcilable_capital_movements() -> None:
     simulation_config = SimulationRunConfig(
         engine=SimulationEngine.BONUS,
         starting_capital=Decimal(100),
-        top_up_events=(
-            SimulationTopUpEvent(after_completed_steps=1, amount=Decimal(10)),
-        ),
+        top_up_events=(SimulationTopUpEvent(after_completed_steps=1, amount=Decimal(10)),),
     )
 
     result = runner.run(

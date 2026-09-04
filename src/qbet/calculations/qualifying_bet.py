@@ -42,22 +42,16 @@ def calculate_qualifying_bet(inputs: QualifyingBetInput) -> QualifyingBetResult:
     """Calculate a qualifying bet using the strongest permitted rounded hedge."""
 
     unrounded_lay_stake = (
-        inputs.back_stake
-        * inputs.back_odds
-        / (inputs.lay_odds - inputs.exchange_commission)
+        inputs.back_stake * inputs.back_odds / (inputs.lay_odds - inputs.exchange_commission)
     )
     plans: list[tuple[RoundingPlan, Decimal]] = []
-    for lay_stake in surrounding_stake_candidates(
-        unrounded_lay_stake, inputs.stake_precision
-    ):
+    for lay_stake in surrounding_stake_candidates(unrounded_lay_stake, inputs.stake_precision):
         if lay_stake <= Decimal(0):
             continue
         lay_liability = lay_stake * (inputs.lay_odds - Decimal(1))
         if lay_liability > inputs.max_lay_liability:
             continue
-        back_win_profit_loss = (
-            inputs.back_stake * (inputs.back_odds - Decimal(1)) - lay_liability
-        )
+        back_win_profit_loss = inputs.back_stake * (inputs.back_odds - Decimal(1)) - lay_liability
         lay_win_profit_loss = (
             lay_stake * (Decimal(1) - inputs.exchange_commission) - inputs.back_stake
         )

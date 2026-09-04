@@ -131,14 +131,10 @@ class SimulationReportBuilder:
         generated_at: datetime | None = None,
     ) -> SimulationReport:
         warnings = tuple(
-            record
-            for record in records
-            if record.record_type is SimulationLogRecordType.WARNING
+            record for record in records if record.record_type is SimulationLogRecordType.WARNING
         )
         errors = tuple(
-            record
-            for record in records
-            if record.record_type is SimulationLogRecordType.ERROR
+            record for record in records if record.record_type is SimulationLogRecordType.ERROR
         )
         risk_decisions = tuple(
             record
@@ -190,9 +186,7 @@ class SimulationReportBuilder:
             progress=progress,
             generated_at=generated_at or datetime.now(UTC),
             events=events if selection.include_events else (),
-            intermediate_results=(
-                evaluations if selection.include_intermediate_results else ()
-            ),
+            intermediate_results=(evaluations if selection.include_intermediate_results else ()),
             raw_input_snapshots=raw_inputs if selection.include_raw_inputs else (),
             warnings=warnings if selection.include_warnings else (),
             errors=errors if selection.include_errors else (),

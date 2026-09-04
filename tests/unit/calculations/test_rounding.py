@@ -39,9 +39,7 @@ def test_whole_euro_increment_removes_fractional_stakes() -> None:
     assert result.lay_stake == Decimal(6)
 
 
-def test_precision_larger_than_the_ideal_stake_keeps_the_smallest_positive_candidate() -> (
-    None
-):
+def test_precision_larger_than_the_ideal_stake_keeps_the_smallest_positive_candidate() -> None:
     assert surrounding_stake_candidates(Decimal("6.28"), Decimal(100)) == (
         Decimal(0),
         Decimal(100),

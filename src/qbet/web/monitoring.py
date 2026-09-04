@@ -1,4 +1,4 @@
-"""Read-only GUI monitoring models built from persisted simulation reports."""
+"""Read-only GUI monitoring models for execution and simulation planes."""
 
 from __future__ import annotations
 
@@ -115,8 +115,45 @@ class ReportDetailLookup:
     message: str | None = None
 
 
+def execution_snapshot() -> MonitoringSnapshot:
+    """Return the honest live/execution view until a live state source is connected."""
+
+    workflow_stages = tuple(
+        MonitoringWorkflowStage(
+            name=name,
+            status="gray",
+            detail="No live execution state is connected.",
+        )
+        for _, name in _WORKFLOW_STAGES
+    )
+    engines = tuple(
+        MonitoringEngineStatus(
+            name=name,
+            engine_id=engine_id,
+            status="gray",
+            detail="No live execution activity is connected yet.",
+            mode="live",
+            live_state="unavailable",
+            workflow_stages=workflow_stages,
+        )
+        for name, engine_id in _V1_ENGINES
+    )
+    return MonitoringSnapshot(
+        engines=engines,
+        reports=(),
+        latest_alert=None,
+        history_available=False,
+        summary=MonitoringSummary(),
+        capital_coverage=MonitoringCapitalCoverage(
+            status="gray",
+            amount=None,
+            detail="Live capital coverage is unavailable.",
+        ),
+    )
+
+
 class MonitoringService:
-    """Build safe GUI read models from an optional, read-only report store."""
+    """Build simulation read models from an optional, read-only report store."""
 
     def __init__(self, report_store: SimulationReportReader | None = None) -> None:
         self._report_store = report_store
@@ -153,20 +190,16 @@ class MonitoringService:
                 status="gray",
                 amount=None,
                 detail=(
-                    "Recorded simulation capital is shown separately; live capital coverage is unavailable."
+                    "Recorded simulation capital is shown in the Simulation plane; live capital coverage is unavailable."
                     if history_available
-                    else "Live capital coverage is unavailable because simulation history is not configured."
+                    else "Simulation history is not configured."
                 ),
             ),
         )
 
-    def load_report(
-        self, run_id: UUID, selection: ReportDetailSelection
-    ) -> ReportDetailLookup:
+    def load_report(self, run_id: UUID, selection: ReportDetailSelection) -> ReportDetailLookup:
         if self._report_store is None:
-            return ReportDetailLookup(
-                report=None, message="Simulation history is not configured."
-            )
+            return ReportDetailLookup(report=None, message="Simulation history is not configured.")
         try:
             report = self._report_store.load_report(run_id)
         except KeyError:
@@ -210,9 +243,7 @@ class MonitoringService:
         records_by_run: dict[UUID, tuple[SimulationLogRecord, ...]] = {}
         for report in reports:
             try:
-                records_by_run[report.run_id] = self._report_store.load_records(
-                    report.run_id
-                )
+                records_by_run[report.run_id] = self._report_store.load_records(report.run_id)
             except (KeyError, OSError, ValueError):
                 continue
         return records_by_run
@@ -237,9 +268,7 @@ class MonitoringService:
     ) -> tuple[MonitoringEngineStatus, ...]:
         statuses: list[MonitoringEngineStatus] = []
         for name, engine_id in _V1_ENGINES:
-            engine_reports = tuple(
-                report for report in reports if str(report.engine) == engine_id
-            )
+            engine_reports = tuple(report for report in reports if str(report.engine) == engine_id)
             latest = engine_reports[0] if engine_reports else None
             engine_records = tuple(
                 record
@@ -247,12 +276,10 @@ class MonitoringService:
                 for record in records_by_run.get(report.run_id, ())
             )
             warning_count = sum(
-                record.record_type is SimulationLogRecordType.WARNING
-                for record in engine_records
+                record.record_type is SimulationLogRecordType.WARNING for record in engine_records
             )
             error_count = sum(
-                record.record_type is SimulationLogRecordType.ERROR
-                for record in engine_records
+                record.record_type is SimulationLogRecordType.ERROR for record in engine_records
             )
             status, detail = MonitoringService._status_for(
                 latest, history_available=history_available
@@ -264,20 +291,16 @@ class MonitoringService:
                     detail=detail,
                     engine_id=engine_id,
                     active=latest is not None and latest.status is SimulationStatus.RUNNING,
-                    mode="simulation" if latest is not None else "unavailable",
+                    mode="simulation" if latest is not None else "simulation",
                     live_state="unavailable",
                     running_matches=sum(
-                        report.status is SimulationStatus.RUNNING
-                        for report in engine_reports
+                        report.status is SimulationStatus.RUNNING for report in engine_reports
                     ),
                     pending_matches=sum(
-                        report.status is SimulationStatus.PENDING
-                        for report in engine_reports
+                        report.status is SimulationStatus.PENDING for report in engine_reports
                     ),
                     total_activity=len(engine_reports),
-                    involved_capital=(
-                        latest.current_capital if latest is not None else None
-                    ),
+                    involved_capital=(latest.current_capital if latest is not None else None),
                     warning_count=warning_count,
                     error_count=error_count,
                     latest_report_id=latest.run_id if latest is not None else None,
@@ -287,9 +310,7 @@ class MonitoringService:
         return tuple(statuses)
 
     @staticmethod
-    def _status_for(
-        report: SimulationReport | None, *, history_available: bool
-    ) -> tuple[str, str]:
+    def _status_for(report: SimulationReport | None, *, history_available: bool) -> tuple[str, str]:
         if not history_available:
             return "gray", "Simulation history is not configured."
         if report is None:
@@ -302,7 +323,7 @@ class MonitoringService:
 
     @staticmethod
     def _workflow_stages(
-        records: tuple[SimulationLogRecord, ...]
+        records: tuple[SimulationLogRecord, ...],
     ) -> tuple[MonitoringWorkflowStage, ...]:
         transitions = {
             str(record.payload.get("stage")): record

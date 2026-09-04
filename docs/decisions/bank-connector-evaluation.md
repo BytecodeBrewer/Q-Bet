@@ -97,6 +97,7 @@ class BankConnector(Protocol):
     def get_balances(self) -> tuple[BankBalance, ...]: ...
     def list_transactions(self, query: TransactionQuery) -> tuple[BankTransaction, ...]: ...
 
+
 class FundingConnector(BankConnector, Protocol):
     def create_funding_request(
         self, request: FundingRequest, approval: UserApproval

@@ -23,6 +23,7 @@ from qbet.simulation.adapters import (
 from qbet.simulation.models import SimulationResult, SimulationRunConfig, SimulationStep
 from qbet.simulation.reporting import ReportingSimulationRunner
 from qbet.simulation.runner import SimulationStepObserver
+from qbet.storage import SimulationReportStore
 from qbet.workflow import (
     LiquidityChecker,
     StaticLiquidityChecker,
@@ -47,14 +48,11 @@ class WorkflowSimulationRequest(DomainModel):
     correlation_id: UUID | None = None
 
     @model_validator(mode="after")
-    def opportunities_match_simulation_engine(self) -> WorkflowSimulationRequest:
+    def opportunities_match_simulation_engine(self) -> "WorkflowSimulationRequest":
         if self.config.engine.value == "bonus" and not all(
-            isinstance(opportunity, BonusEngineRequest)
-            for opportunity in self.opportunities
+            isinstance(opportunity, BonusEngineRequest) for opportunity in self.opportunities
         ):
-            raise ValueError(
-                "bonus simulations require BonusEngineRequest opportunities"
-            )
+            raise ValueError("bonus simulations require BonusEngineRequest opportunities")
         if self.config.engine.value == "sports_capital" and not all(
             isinstance(opportunity, SportsCapitalEngineRequest)
             for opportunity in self.opportunities
@@ -112,12 +110,13 @@ class WorkflowSimulationRunner:
         *,
         liquidity_checker: LiquidityChecker | None = None,
         risk_layer: OperationalRiskLayer | None = None,
+        report_store: SimulationReportStore | None = None,
     ) -> None:
         self._liquidity_checker = liquidity_checker or StaticLiquidityChecker(
             WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
         )
         self._risk_layer = risk_layer or OperationalRiskLayer()
-        self._runner = ReportingSimulationRunner()
+        self._runner = ReportingSimulationRunner(report_store)
         self.last_report: SimulationReport | None = None
         self.last_records = ()
 
@@ -131,19 +130,16 @@ class WorkflowSimulationRunner:
         on_step_completed: SimulationStepObserver | None = None,
     ) -> WorkflowSimulationResult:
         correlation_id = request.correlation_id or uuid4()
-        log_context = SimulationLogContext(run_id=correlation_id)
+        log_context = self._runner.log_context(correlation_id)
         steps = self._adapter_for(request).build_steps(request.config)
         opportunities_by_id = {
-            opportunity.opportunity_id: opportunity
-            for opportunity in request.opportunities
+            opportunity.opportunity_id: opportunity for opportunity in request.opportunities
         }
         workflow_results: list[WorkflowResult] = []
 
         def route_step(step: SimulationStep) -> bool:
             assert step.evaluation is not None
-            opportunity = opportunities_by_id[
-                step.evaluation.strategy_result.opportunity_id
-            ]
+            opportunity = opportunities_by_id[step.evaluation.strategy_result.opportunity_id]
             orchestrator = WorkflowOrchestrator(
                 {
                     WorkflowStage.DOMAIN_RISK: _RiskStageHandler(
@@ -200,9 +196,7 @@ class WorkflowSimulationRunner:
                 if isinstance(opportunity, BonusEngineRequest)
             )
             if len(requests) != len(request.opportunities):
-                raise ValueError(
-                    "bonus simulations require BonusEngineRequest opportunities"
-                )
+                raise ValueError("bonus simulations require BonusEngineRequest opportunities")
             return BonusSimulationAdapter(requests)
         if request.config.engine.value == "sports_capital":
             requests = tuple(

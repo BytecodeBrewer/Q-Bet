@@ -21,7 +21,5 @@ class SafeRequestJSONFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {"event": record.getMessage()}
-        payload.update(
-            {field: getattr(record, field, None) for field in self.request_fields}
-        )
+        payload.update({field: getattr(record, field, None) for field in self.request_fields})
         return json.dumps(payload, default=str, separators=(",", ":"))

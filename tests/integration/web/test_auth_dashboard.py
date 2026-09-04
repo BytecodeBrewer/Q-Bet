@@ -1,3 +1,6 @@
+from django.contrib.auth.models import User
+from django.test import Client, TestCase
+
 import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
@@ -5,9 +8,6 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 import django
 
 django.setup()
-
-from django.contrib.auth.models import User
-from django.test import Client, TestCase
 
 
 class AuthenticationAndDashboardTests(TestCase):
@@ -64,18 +64,17 @@ class AuthenticationAndDashboardTests(TestCase):
     def test_login_logout_and_dashboard_boundary(self) -> None:
         user = User.objects.create_user("member", password="Strong-pass-123")
 
-        self.assertRedirects(
-            self.client.get("/dashboard/"), "/accounts/login/?next=/dashboard/"
-        )
+        self.assertRedirects(self.client.get("/dashboard/"), "/accounts/login/?next=/dashboard/")
         response = self.client.post(
             "/accounts/login/",
             {"username": user.username, "password": "Strong-pass-123"},
         )
         self.assertRedirects(response, "/dashboard/")
         dashboard = self.client.get("/dashboard/")
+        content = dashboard.content.decode()
         self.assertEqual(dashboard.wsgi_request.user, user)
-        self.assertContains(dashboard, "BonusEngine", count=1)
-        self.assertContains(dashboard, "SportsCapitalEngine", count=1)
+        self.assertEqual(content.count('data-engine-widget="bonus"'), 1)
+        self.assertEqual(content.count('data-engine-widget="sports_capital"'), 1)
         self.assertNotContains(dashboard, "BaseEngine")
         self.assertNotContains(dashboard, "YieldEngine")
         self.assertNotContains(dashboard, "AlphaEngine")
@@ -92,7 +91,6 @@ class AuthenticationAndDashboardTests(TestCase):
         content = response.content.decode()
         self.assertEqual(response.status_code, 200)
         self.assertIn("Sign-in details were not accepted.", content)
-
 
     def test_logout_requires_a_valid_csrf_token(self) -> None:
         user = User.objects.create_user("member", password="Strong-pass-123")

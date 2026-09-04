@@ -3,11 +3,31 @@
 <section class="page-heading">
   <p><a href="{% url 'admin-area' %}">Admin</a></p>
   <h1>GUI availability</h1>
-  <p>Simulation visibility is deployment configuration. This page does not change engine, workflow, or execution state.</p>
+  <p>Simulation availability is a persisted control-plane setting. <code>QBET_SIMULATION_MODE_ENABLED</code> remains only the deployment bootstrap default until an administrator saves a runtime choice.</p>
 </section>
+
 <section class="detail-panel">
   <h2>Simulation area</h2>
-  <dl class="metric-list"><div><dt>Configured state</dt><dd>{% if simulation_enabled %}Enabled{% else %}Disabled{% endif %}</dd></div></dl>
-  <p class="muted">Set <code>QBET_SIMULATION_MODE_ENABLED</code> in deployment configuration, then restart the application to change this value globally.</p>
+  <dl class="metric-list">
+    <div><dt>Runtime state</dt><dd>{% if simulation_enabled %}Enabled{% else %}Disabled{% endif %}</dd></div>
+    <div><dt>Persisted override</dt><dd>{% if simulation_control.availability.persisted %}Yes{% else %}No — deployment bootstrap is active{% endif %}</dd></div>
+    <div><dt>Active runs</dt><dd>{{ simulation_control.active_runs|length }}</dd></div>
+  </dl>
+
+  {% if simulation_control.active_runs %}
+    <p class="status-warning">Simulation cannot be disabled while an engine run is active.</p>
+    <ul>
+      {% for run in simulation_control.active_runs %}
+        <li>{{ run.engine }} · {{ run.run_id }} · {{ run.status }} · progress {{ run.progress }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <form method="post" action="{% url 'admin-simulation-availability' %}">
+    {% csrf_token %}
+    {{ simulation_toggle_form.enabled }}
+    {{ simulation_toggle_form.enabled.label_tag }}
+    <button type="submit">Save simulation availability</button>
+  </form>
 </section>
 {% endblock %}

@@ -113,9 +113,7 @@ class SimulationStep(DomainModel):
             self.evaluation is not None
             and self.capital_change != self.evaluation.worst_case_profit_loss
         ):
-            raise ValueError(
-                "evaluated simulation steps must use the evaluated capital change"
-            )
+            raise ValueError("evaluated simulation steps must use the evaluated capital change")
         return self
 
 

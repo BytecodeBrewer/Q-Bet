@@ -48,8 +48,7 @@ class BonusSimulationAdapter:
         return tuple(
             _step_from_evaluation(self.engine, self._engine.evaluate(request))
             for request in self._requests
-            if config.strategy_id is None
-            or config.strategy_id == _bonus_strategy_id(request)
+            if config.strategy_id is None or config.strategy_id == _bonus_strategy_id(request)
         )
 
 
@@ -106,19 +105,11 @@ def _ensure_engine(config: SimulationRunConfig, engine: SimulationEngine) -> Non
 
 
 def _bonus_strategy_id(request: BonusEngineRequest) -> str:
-    return (
-        "qualifying_bet"
-        if isinstance(request.inputs, QualifyingBetInput)
-        else "free_bet"
-    )
+    return "qualifying_bet" if isinstance(request.inputs, QualifyingBetInput) else "free_bet"
 
 
 def _sports_capital_strategy_id(request: SportsCapitalEngineRequest) -> str:
-    return (
-        "two_way_arbitrage"
-        if isinstance(request.inputs, TwoWayArbitrageInput)
-        else "dutching"
-    )
+    return "two_way_arbitrage" if isinstance(request.inputs, TwoWayArbitrageInput) else "dutching"
 
 
 def _step_from_evaluation(

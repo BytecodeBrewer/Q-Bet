@@ -91,24 +91,18 @@ def request(
 
 def test_bonus_simulation_routes_allowed_step_through_required_liquidity_gate() -> None:
     correlation_id = UUID("12345678-1234-5678-1234-567812345678")
-    checker = RecordingLiquidityChecker(
-        WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
-    )
+    checker = RecordingLiquidityChecker(WorkflowStageDecision(decision=WorkflowDecision.ALLOW))
     runner = WorkflowSimulationRunner(liquidity_checker=checker)
 
     result = runner.run(
-        request(
-            SimulationEngine.BONUS, (bonus_request(),), correlation_id=correlation_id
-        )
+        request(SimulationEngine.BONUS, (bonus_request(),), correlation_id=correlation_id)
     )
 
     assert result.correlation_id == correlation_id
     assert len(checker.contexts) == 1
     assert len(result.simulation_result.completed_steps) == 1
     assert result.simulation_result.current_capital != Decimal(100)
-    assert [
-        transition.stage for transition in result.workflow_results[0].transitions
-    ] == [
+    assert [transition.stage for transition in result.workflow_results[0].transitions] == [
         WorkflowStage.DATA_AGGREGATION,
         WorkflowStage.ENGINE_PREPARATION,
         WorkflowStage.CALCULATION,
@@ -136,10 +130,7 @@ def test_sports_capital_simulation_uses_concrete_engine() -> None:
         request(SimulationEngine.SPORTS_CAPITAL, (sports_request(),))
     )
 
-    assert (
-        result.simulation_result.evaluations[0].strategy_result.strategy
-        == "two_way_arbitrage"
-    )
+    assert result.simulation_result.evaluations[0].strategy_result.strategy == "two_way_arbitrage"
     assert result.workflow_results[0].mode.value == "simulation"
 
 
@@ -152,9 +143,7 @@ def test_risk_rejection_stops_before_initial_top_up_or_virtual_capital_change() 
             config=SimulationRunConfig(
                 engine=SimulationEngine.BONUS,
                 starting_capital=Decimal(100),
-                top_up_events=(
-                    SimulationTopUpEvent(after_completed_steps=0, amount=Decimal(10)),
-                ),
+                top_up_events=(SimulationTopUpEvent(after_completed_steps=0, amount=Decimal(10)),),
             ),
             provider_state=ProviderState(provider_id="book", active_bets_count=2),
         )
@@ -164,8 +153,7 @@ def test_risk_rejection_stops_before_initial_top_up_or_virtual_capital_change() 
     assert result.simulation_result.current_capital == Decimal(100)
     assert result.workflow_results[0].final_decision is WorkflowDecision.REJECT
     assert all(
-        event.event_type.value != "top_up_applied"
-        for event in result.simulation_result.events
+        event.event_type.value != "top_up_applied" for event in result.simulation_result.events
     )
     assert runner.last_report is not None
     detailed = SimulationReportBuilder().rebuild(
@@ -192,9 +180,7 @@ def test_liquidity_recheck_stops_before_initial_top_up_and_is_reportable() -> No
             config=SimulationRunConfig(
                 engine=SimulationEngine.BONUS,
                 starting_capital=Decimal(100),
-                top_up_events=(
-                    SimulationTopUpEvent(after_completed_steps=0, amount=Decimal(10)),
-                ),
+                top_up_events=(SimulationTopUpEvent(after_completed_steps=0, amount=Decimal(10)),),
             ),
         )
     )

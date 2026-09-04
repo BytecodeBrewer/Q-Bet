@@ -36,13 +36,15 @@ def bonus_request() -> BonusEngineRequest:
 
 
 def sports_request() -> SportsCapitalEngineRequest:
-    offer = lambda outcome: ArbitrageOffer(
-        outcome=outcome,
-        odds=Decimal("2.2"),
-        available_liquidity=Decimal(100),
-        stake_precision=Decimal("0.01"),
-        currency="EUR",
-    )
+    def offer(outcome):
+        return ArbitrageOffer(
+            outcome=outcome,
+            odds=Decimal("2.2"),
+            available_liquidity=Decimal(100),
+            stake_precision=Decimal("0.01"),
+            currency="EUR",
+        )
+
     return SportsCapitalEngineRequest(
         opportunity_id="sports-opportunity",
         inputs=TwoWayArbitrageInput(
@@ -67,31 +69,22 @@ def state(**changes: object) -> ProviderState:
 
 def test_default_policy_allows_warns_and_rejects_both_engine_request_types() -> None:
     layer = OperationalRiskLayer()
-    assert (
-        layer.verify_opportunity(bonus_request(), state()).status
-        is DomainRiskStatus.ALLOW
-    )
+    assert layer.verify_opportunity(bonus_request(), state()).status is DomainRiskStatus.ALLOW
     warning = layer.verify_opportunity(sports_request(), state(active_bets_count=1))
     assert warning.status is DomainRiskStatus.WARN
-    assert warning.warning_codes == (
-        DomainRiskDecisionCode.ACTIVE_BET_LIMIT_APPROACHING,
-    )
+    assert warning.warning_codes == (DomainRiskDecisionCode.ACTIVE_BET_LIMIT_APPROACHING,)
     rejected = layer.verify_opportunity(bonus_request(), state(active_bets_count=2))
     assert rejected.status is DomainRiskStatus.REJECT
     assert rejected.decision_code is DomainRiskDecisionCode.FREQUENCY_LIMIT
     assert rejected.rejection_reason == FREQUENCY_LIMIT_REASON
-    cooldown = layer.verify_opportunity(
-        sports_request(), state(is_cooldown_active=True)
-    )
+    cooldown = layer.verify_opportunity(sports_request(), state(is_cooldown_active=True))
     assert cooldown.decision_code is DomainRiskDecisionCode.COOLDOWN_ACTIVE
     assert cooldown.rejection_reason == COOLDOWN_ACTIVE_REASON
 
 
 def test_custom_thresholds_are_deterministic() -> None:
     layer = OperationalRiskLayer(
-        DomainRiskPolicy(
-            active_bet_warning_threshold=2, active_bet_rejection_threshold=3
-        )
+        DomainRiskPolicy(active_bet_warning_threshold=2, active_bet_rejection_threshold=3)
     )
     assert (
         layer.verify_opportunity(bonus_request(), state(active_bets_count=1)).status
@@ -120,10 +113,7 @@ def test_structured_decision_logs_with_the_workflow_correlation_id() -> None:
     record = log_context.records[0]
     assert record.run_id == correlation_id
     assert record.record_type is SimulationLogRecordType.RISK_DECISION
-    assert (
-        record.payload["decision_code"]
-        == DomainRiskDecisionCode.ACTIVE_BET_LIMIT_APPROACHING
-    )
+    assert record.payload["decision_code"] == DomainRiskDecisionCode.ACTIVE_BET_LIMIT_APPROACHING
 
 
 def test_repository_injection_reloads_provider_state_and_rechecks_unknown_provider(
@@ -159,8 +149,6 @@ def test_repository_injection_reloads_provider_state_and_rechecks_unknown_provid
     repository.upsert(state(active_bets_count=2, is_cooldown_active=True))
 
     assert (
-        reloaded_layer.verify_opportunity(
-            bonus_request(), provider_id="book"
-        ).decision_code
+        reloaded_layer.verify_opportunity(bonus_request(), provider_id="book").decision_code
         is DomainRiskDecisionCode.FREQUENCY_LIMIT
     )

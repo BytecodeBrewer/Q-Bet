@@ -10,15 +10,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
-
-import django
-
-django.setup()
-
-from django.conf import settings
-from django.test import Client, SimpleTestCase, override_settings
-
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
 from qbet.reporting import SimulationReport
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
@@ -26,6 +17,15 @@ from qbet.web.logging import SafeRequestJSONFormatter
 from qbet.web.monitoring import MonitoringService
 from qbet.web.settings import parse_allowed_hosts
 from qbet.web.views import _monitoring_service
+
+from django.conf import settings
+from django.test import Client, SimpleTestCase, override_settings
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
+
+import django
+
+django.setup()
 
 
 class WebShellSmokeTests(SimpleTestCase):
@@ -38,7 +38,7 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok", "service": "q-bet-web"})
 
-    def test_home_renders_monitoring_statuses_without_domain_calculations(
+    def test_home_renders_execution_statuses_without_internal_monitoring_link(
         self,
     ) -> None:
         response = self.client.get("/")
@@ -46,7 +46,8 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertContains(response, "Q-Bet")
         self.assertContains(response, "BonusEngine")
         self.assertContains(response, "SportsCapitalEngine")
-        self.assertContains(response, "Open monitoring")
+        self.assertContains(response, "Sign in")
+        self.assertNotContains(response, "Open monitoring")
         self.assertContains(response, "status-gray")
         self.assertNotContains(response, "Base")
         self.assertNotContains(response, "Yield")
@@ -60,9 +61,7 @@ class WebShellSmokeTests(SimpleTestCase):
         )
 
     def test_security_and_csrf_middleware_are_enabled(self) -> None:
-        self.assertIn(
-            "django.middleware.security.SecurityMiddleware", settings.MIDDLEWARE
-        )
+        self.assertIn("django.middleware.security.SecurityMiddleware", settings.MIDDLEWARE)
         self.assertIn("django.middleware.csrf.CsrfViewMiddleware", settings.MIDDLEWARE)
 
         response = self.client.get("/accounts/login/")
@@ -242,8 +241,6 @@ def test_monitoring_uses_newest_report_for_engine_status() -> None:
 
     snapshot = MonitoringService(_ReportStore((newer_report, older_report))).snapshot()
 
-    bonus_engine = next(
-        engine for engine in snapshot.engines if engine.name == "BonusEngine"
-    )
+    bonus_engine = next(engine for engine in snapshot.engines if engine.name == "BonusEngine")
     assert bonus_engine.status == "green"
     assert bonus_engine.detail == "Simulation running."

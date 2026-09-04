@@ -5,7 +5,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parents[3]
+_LOCAL_SECRET_KEY = "qbet-local-development-only-secret"
 
 
 def parse_allowed_hosts(value: str) -> list[str]:
@@ -14,13 +17,23 @@ def parse_allowed_hosts(value: str) -> list[str]:
     return [host.strip() for host in value.split(",") if host.strip()]
 
 
-SECRET_KEY = os.environ.get(
-    "QBET_DJANGO_SECRET_KEY", "qbet-local-development-only-secret"
-)
-DEBUG = os.environ.get("QBET_DJANGO_DEBUG", "true").lower() == "true"
+def _environment_flag(name: str, default: str = "false") -> bool:
+    return os.environ.get(name, default).lower() == "true"
+
+
+QBET_HOSTED_PREVIEW = _environment_flag("QBET_HOSTED_PREVIEW")
+SECRET_KEY = os.environ.get("QBET_DJANGO_SECRET_KEY", _LOCAL_SECRET_KEY)
+DEBUG = _environment_flag("QBET_DJANGO_DEBUG", "true")
 ALLOWED_HOSTS = parse_allowed_hosts(
     os.environ.get("QBET_DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")
 )
+
+if QBET_HOSTED_PREVIEW and SECRET_KEY == _LOCAL_SECRET_KEY:
+    raise ImproperlyConfigured(
+        "QBET_DJANGO_SECRET_KEY must be configured for hosted preview deployments"
+    )
+if QBET_HOSTED_PREVIEW and DEBUG:
+    raise ImproperlyConfigured("QBET_DJANGO_DEBUG must be false for hosted preview deployments")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -35,6 +48,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "qbet.web.middleware.RequestCorrelationMiddleware",
+    "qbet.web.middleware.HostedPreviewBoundaryMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -58,21 +72,27 @@ TEMPLATES = [
         },
     },
 ]
-WSGI_APPLICATION = "qbet.web.wsgi.application"
+WSGI_APPLICATION = "vercel_wsgi.application"
 
-QBET_SIMULATION_REPORT_DB = (
-    Path(value) if (value := os.environ.get("QBET_SIMULATION_REPORT_DB")) else None
-)
-QBET_SIMULATION_MODE_ENABLED = (
-    os.environ.get("QBET_SIMULATION_MODE_ENABLED", "false").lower() == "true"
-)
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "qbet-web.sqlite3",
+if QBET_HOSTED_PREVIEW:
+    QBET_SIMULATION_REPORT_DB = None
+    QBET_SIMULATION_MODE_ENABLED = False
+    DATABASES = {"default": {"ENGINE": "django.db.backends.dummy"}}
+    SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+else:
+    QBET_SIMULATION_REPORT_DB = Path(
+        os.environ.get(
+            "QBET_SIMULATION_REPORT_DB",
+            str(BASE_DIR / "qbet-simulation.sqlite3"),
+        )
+    )
+    QBET_SIMULATION_MODE_ENABLED = _environment_flag("QBET_SIMULATION_MODE_ENABLED")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "qbet-web.sqlite3",
+        }
     }
-}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -85,8 +105,9 @@ TIME_ZONE = "Europe/Berlin"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "home"

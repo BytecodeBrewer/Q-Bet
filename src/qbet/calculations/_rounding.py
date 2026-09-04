@@ -20,9 +20,7 @@ class RoundingPlan:
         return min(self.outcome_values)
 
 
-def surrounding_stake_candidates(
-    value: Decimal, increment: Decimal
-) -> tuple[Decimal, ...]:
+def surrounding_stake_candidates(value: Decimal, increment: Decimal) -> tuple[Decimal, ...]:
     """Return the permitted stake increments immediately below and above value.
 
     A zero floor is preserved so callers can reject it while still considering

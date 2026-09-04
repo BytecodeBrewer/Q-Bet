@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Q-Bet{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'qbet_web/app.css' %}">
+  <script src="{% static 'qbet_web/dashboard.js' %}" defer></script>
 </head>
 <body data-theme="{{ preferences.theme|default:'light' }}" data-font-size="{{ preferences.font_size|default:'medium' }}">
   <header class="site-header">
@@ -13,10 +14,9 @@
     <nav aria-label="Main navigation">
       {% if user.is_authenticated %}
         <a href="{% url 'dashboard' %}">Dashboard</a>
-        <a href="{% url 'report-history' %}">Reports</a>
-        {% if simulation_enabled %}<a href="{% url 'simulation' %}">Simulation</a>{% endif %}
+        {% if user.is_staff %}<a href="{% url 'report-history' %}">Reports</a>{% endif %}
+        {% if user.is_staff %}<a href="{% url 'monitoring' %}">Monitoring</a>{% endif %}
         <a href="{% url 'presentation-settings' %}">Settings</a>
-        {% if user.is_staff %}<a href="{% url 'admin-area' %}">Admin</a>{% endif %}
         <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button" type="submit">Sign out</button></form>
       {% else %}
         <a href="{% url 'login' %}">Sign in</a>

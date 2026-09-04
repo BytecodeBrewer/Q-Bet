@@ -90,9 +90,7 @@ def test_sqlite_store_rebuilds_selected_detail_after_reopening(tmp_path) -> None
     assert [record.sequence for record in records] == list(range(1, len(records) + 1))
     assert detailed_report.events[0].sequence == 1
     assert detailed_report.intermediate_results == result.evaluations
-    assert (
-        detailed_report.raw_input_snapshots[0]["config"]["starting_capital"] == "100.10"
-    )
+    assert detailed_report.raw_input_snapshots[0]["config"]["starting_capital"] == "100.10"
     assert reopened_store.list_recent_reports() == (compact_report,)
 
 
@@ -115,9 +113,7 @@ def test_sqlite_round_trip_preserves_top_up_timeline_and_net_profit(tmp_path) ->
         SimulationRunConfig(
             engine=SimulationEngine.BONUS,
             starting_capital=Decimal(100),
-            top_up_events=(
-                SimulationTopUpEvent(after_completed_steps=1, amount=Decimal(10)),
-            ),
+            top_up_events=(SimulationTopUpEvent(after_completed_steps=1, amount=Decimal(10)),),
         ),
         (SimulationStep(id="flat", capital_change=Decimal(0)),),
     )
@@ -155,9 +151,7 @@ def test_sqlite_rebuild_restores_selected_risk_decisions(tmp_path) -> None:
     store = SQLiteSimulationReportStore(database_path)
     runner = ReportingSimulationRunner(store)
     runner.run(
-        SimulationRunConfig(
-            engine=SimulationEngine.BONUS, starting_capital=Decimal(100)
-        ),
+        SimulationRunConfig(engine=SimulationEngine.BONUS, starting_capital=Decimal(100)),
         (SimulationStep(id="flat", capital_change=Decimal(0)),),
     )
 

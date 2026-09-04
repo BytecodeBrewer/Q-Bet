@@ -63,11 +63,7 @@ def test_stop_request_keeps_the_completed_step_and_its_scheduled_top_up() -> Non
     runner = DeterministicSimulationRunner()
 
     result = runner.run(
-        config(
-            top_up_events=(
-                SimulationTopUpEvent(after_completed_steps=1, amount=Decimal(20)),
-            )
-        ),
+        config(top_up_events=(SimulationTopUpEvent(after_completed_steps=1, amount=Decimal(20)),)),
         steps(),
         on_step_completed=lambda _: runner.request_stop(),
     )
@@ -87,11 +83,7 @@ def test_stop_request_keeps_the_completed_step_and_its_scheduled_top_up() -> Non
 
 def test_top_ups_are_simulation_only_events() -> None:
     result = DeterministicSimulationRunner().run(
-        config(
-            top_up_events=(
-                SimulationTopUpEvent(after_completed_steps=0, amount=Decimal(25)),
-            )
-        ),
+        config(top_up_events=(SimulationTopUpEvent(after_completed_steps=0, amount=Decimal(25)),)),
         (),
     )
 

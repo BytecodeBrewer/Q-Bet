@@ -49,9 +49,7 @@ def test_normal_workflow_records_ordered_correlated_transitions() -> None:
         request(correlation_id=UUID("12345678-1234-5678-1234-567812345678"))
     )
     assert result.final_decision is WorkflowDecision.ALLOW
-    assert [transition.stage for transition in result.transitions] == list(
-        request().stages
-    )
+    assert [transition.stage for transition in result.transitions] == list(request().stages)
     assert [transition.sequence for transition in result.transitions] == [1, 2, 3]
     assert {record.run_id for record in result.log_records} == {result.correlation_id}
     assert all(
@@ -86,9 +84,7 @@ def test_request_handler_refreshes_controlled_stages_in_order() -> None:
         WorkflowStage.DISPATCH,
     ]
     assert {context.correlation_id for context in handler.contexts} == {correlation_id}
-    assert [
-        (transition.kind, transition.stage) for transition in result.transitions
-    ] == [
+    assert [(transition.kind, transition.stage) for transition in result.transitions] == [
         (WorkflowTransitionKind.STAGE, WorkflowStage.DATA_AGGREGATION),
         (WorkflowTransitionKind.STAGE, WorkflowStage.ENGINE_PREPARATION),
         (WorkflowTransitionKind.STAGE, WorkflowStage.CALCULATION),
@@ -105,9 +101,7 @@ def test_request_handler_refreshes_controlled_stages_in_order() -> None:
         if record.payload["kind"] == WorkflowTransitionKind.REFRESH.value
     ]
     assert len(refresh_records) == 3
-    assert {record.payload["correlation_id"] for record in refresh_records} == {
-        str(correlation_id)
-    }
+    assert {record.payload["correlation_id"] for record in refresh_records} == {str(correlation_id)}
 
 
 def test_request_handler_refreshes_execution_workflow_without_side_effects() -> None:
@@ -132,9 +126,7 @@ def test_request_handler_refreshes_execution_workflow_without_side_effects() -> 
         (WorkflowMode.EXECUTION, WorkflowStage.DISPATCH),
     ]
     assert {context.correlation_id for context in handler.contexts} == {correlation_id}
-    assert [
-        (transition.kind, transition.stage) for transition in result.transitions
-    ] == [
+    assert [(transition.kind, transition.stage) for transition in result.transitions] == [
         (WorkflowTransitionKind.REFRESH, WorkflowStage.DOMAIN_RISK),
         (WorkflowTransitionKind.STAGE, WorkflowStage.DOMAIN_RISK),
         (WorkflowTransitionKind.REFRESH, WorkflowStage.LIQUIDITY_CHECK),
@@ -155,11 +147,7 @@ def test_request_handler_stop_decision_prevents_affected_and_later_stages(
     decision: WorkflowDecision, reason: str
 ) -> None:
     handler = RecordingRequestHandler(
-        {
-            WorkflowStage.LIQUIDITY_CHECK: WorkflowStageDecision(
-                decision=decision, reason=reason
-            )
-        }
+        {WorkflowStage.LIQUIDITY_CHECK: WorkflowStageDecision(decision=decision, reason=reason)}
     )
     result = WorkflowOrchestrator(request_handler=handler).process(
         request(
@@ -199,9 +187,7 @@ def test_rejection_prevents_later_stages() -> None:
     result = WorkflowOrchestrator(
         {
             WorkflowStage.ENGINE_PREPARATION: StaticStageHandler(
-                WorkflowStageDecision(
-                    decision=WorkflowDecision.REJECT, reason="invalid input"
-                )
+                WorkflowStageDecision(decision=WorkflowDecision.REJECT, reason="invalid input")
             )
         }
     ).process(
@@ -224,9 +210,7 @@ def test_rejection_prevents_later_stages() -> None:
 def test_liquidity_recheck_prevents_dispatch() -> None:
     result = WorkflowOrchestrator(
         liquidity_checker=StaticLiquidityChecker(
-            WorkflowStageDecision(
-                decision=WorkflowDecision.RECHECK, reason="refresh balance"
-            )
+            WorkflowStageDecision(decision=WorkflowDecision.RECHECK, reason="refresh balance")
         )
     ).process(request())
     assert result.final_decision is WorkflowDecision.RECHECK

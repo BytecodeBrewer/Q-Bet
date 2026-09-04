@@ -111,9 +111,7 @@ def build_dutching_match(
     metadata: DutchingMatchMetadata,
 ) -> BuiltSportsCapitalMatch:
     _require_target(snapshot, DataTarget.SPORTS_CAPITAL)
-    offers = tuple(
-        _offer_by_id(snapshot, identifier) for identifier in metadata.offer_ids
-    )
+    offers = tuple(_offer_by_id(snapshot, identifier) for identifier in metadata.offer_ids)
     _require_distinct_outcomes(offers)
     _require_selected_offers_cover_snapshot(snapshot, offers)
     _require_consistent_currency(offers)
@@ -189,18 +187,14 @@ def _selected_back_lay_pair(
     if back_offer.selection != lay_offer.selection:
         raise ValueError("selected offers must represent the same outcome")
     if back_offer.side is not OfferSide.BACK or lay_offer.side is not OfferSide.LAY:
-        raise ValueError(
-            "selected offers must be a bookmaker back and exchange lay pair"
-        )
+        raise ValueError("selected offers must be a bookmaker back and exchange lay pair")
     if back_offer.provider == lay_offer.provider:
         raise ValueError("back and lay offers must use distinct providers")
     _require_consistent_currency((back_offer, lay_offer))
     return back_offer, lay_offer
 
 
-def _offer_by_id(
-    snapshot: NormalizedMarketSnapshot, identifier: str
-) -> NormalizedOffer:
+def _offer_by_id(snapshot: NormalizedMarketSnapshot, identifier: str) -> NormalizedOffer:
     try:
         return next(offer for offer in snapshot.offers if offer.id == identifier)
     except StopIteration as error:

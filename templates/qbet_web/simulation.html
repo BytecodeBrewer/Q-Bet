@@ -1,4 +1,79 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-<section class="page-heading"><h1>Simulation</h1><p>Simulation records use virtual capital only and never trigger real-money adapters.</p></section><section class="engine-grid">{% for engine in monitoring.engines %}<article class="engine-card" data-simulation-engine="{{ engine.engine_id }}"><div class="card-heading"><h2>{{ engine.name }}</h2><span class="tag">Simulation</span></div><dl class="metric-list"><div><dt>Status</dt><dd>{{ engine.detail }}</dd></div><div><dt>Progress</dt><dd>{% if engine.latest_report_id %}Available in latest report{% else %}Unavailable{% endif %}</dd></div><div><dt>Active / pending</dt><dd>{{ engine.running_matches }} / {{ engine.pending_matches }}</dd></div><div><dt>Virtual capital</dt><dd>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}Unavailable{% endif %}</dd></div><div><dt>Warnings / errors</dt><dd>{{ engine.warning_count }} / {{ engine.error_count }}</dd></div></dl>{% if engine.latest_report_id %}<a href="{% url 'report-detail' engine.latest_report_id %}">Open latest report</a>{% else %}<span class="muted">No simulation report available.</span>{% endif %}</article>{% endfor %}</section>
+<section class="page-heading">
+  <h1>Simulation</h1>
+  <p>Simulation uses virtual capital only, follows the existing workflow path, and never calls live-money adapters.</p>
+</section>
+
+<section class="detail-panel">
+  <h2>Start simulation</h2>
+  <p class="muted">Phase 2 uses deterministic local sandbox opportunities. External provider data arrives in Phase 3 through adapters.</p>
+  <form method="post" action="{% url 'simulation-start' %}">
+    {% csrf_token %}
+    {{ start_form.non_field_errors }}
+    <div class="metric-list">
+      <div><dt>{{ start_form.engine.label_tag }}</dt><dd>{{ start_form.engine }} {{ start_form.engine.errors }}</dd></div>
+      <div><dt>{{ start_form.starting_capital.label_tag }}</dt><dd>{{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</dd></div>
+      <div><dt>{{ start_form.max_duration_minutes.label_tag }}</dt><dd>{{ start_form.max_duration_minutes }} {{ start_form.max_duration_minutes.errors }}</dd></div>
+    </div>
+    <button type="submit">Start simulation</button>
+  </form>
+</section>
+
+<section class="detail-panel">
+  <h2>Recent lifecycle state</h2>
+  {% if simulation_control.runs %}
+    <div class="engine-grid">
+      {% for run in simulation_control.runs %}
+        <article class="engine-card" data-simulation-run="{{ run.run_id }}">
+          <div class="card-heading">
+            <h3>{{ run.engine }}</h3>
+            <span class="tag">{{ run.status }}</span>
+          </div>
+          <dl class="metric-list">
+            <div><dt>Run / correlation id</dt><dd>{{ run.run_id }}</dd></div>
+            <div><dt>Progress</dt><dd>{{ run.progress }}</dd></div>
+            <div><dt>Virtual capital</dt><dd>{{ run.current_capital }}</dd></div>
+          </dl>
+          {% if run.error_message %}<p class="status-error">{{ run.error_message }}</p>{% endif %}
+          {% if run.report_id %}
+            <p>
+              <a href="{% url 'report-detail' run.report_id %}">Open report</a>
+              · <a href="{% url 'report-export' run.report_id 'json' %}">JSON export</a>
+              · <a href="{% url 'report-export' run.report_id 'csv' %}">CSV export</a>
+            </p>
+          {% elif run.is_active %}
+            <p class="muted">Run is active. Reload this page to read the latest persisted lifecycle state.</p>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No GUI-started simulation runs recorded yet.</p>
+  {% endif %}
+</section>
+
+<section class="engine-grid">
+  {% for engine in monitoring.engines %}
+    <article class="engine-card" data-simulation-engine="{{ engine.engine_id }}">
+      <div class="card-heading"><h2>{{ engine.name }}</h2><span class="tag">Simulation</span></div>
+      <dl class="metric-list">
+        <div><dt>Status</dt><dd>{{ engine.detail }}</dd></div>
+        <div><dt>Progress</dt><dd>{% if engine.latest_report_id %}Available in latest report{% else %}Unavailable{% endif %}</dd></div>
+        <div><dt>Active / pending</dt><dd>{{ engine.running_matches }} / {{ engine.pending_matches }}</dd></div>
+        <div><dt>Virtual capital</dt><dd>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}Unavailable{% endif %}</dd></div>
+        <div><dt>Warnings / errors</dt><dd>{{ engine.warning_count }} / {{ engine.error_count }}</dd></div>
+      </dl>
+      {% if engine.latest_report_id %}
+        <p>
+          <a href="{% url 'report-detail' engine.latest_report_id %}">Open latest report</a>
+          · <a href="{% url 'report-export' engine.latest_report_id 'json' %}">JSON</a>
+          · <a href="{% url 'report-export' engine.latest_report_id 'csv' %}">CSV</a>
+        </p>
+      {% else %}
+        <span class="muted">No simulation report available.</span>
+      {% endif %}
+    </article>
+  {% endfor %}
+</section>
 {% endblock %}

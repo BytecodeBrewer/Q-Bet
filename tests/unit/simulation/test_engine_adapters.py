@@ -126,15 +126,11 @@ def test_bonus_adapter_evaluates_qualifying_and_free_bet_requests() -> None:
 
     result = DeterministicSimulationRunner().run(simulation_config, steps)
 
-    assert [
-        evaluation.strategy_result.strategy for evaluation in result.evaluations
-    ] == [
+    assert [evaluation.strategy_result.strategy for evaluation in result.evaluations] == [
         "qualifying_bet",
         "free_bet",
     ]
-    assert [
-        type(evaluation.calculation_result) for evaluation in result.evaluations
-    ] == [
+    assert [type(evaluation.calculation_result) for evaluation in result.evaluations] == [
         QualifyingBetResult,
         FreeBetResult,
     ]
@@ -146,21 +142,15 @@ def test_bonus_adapter_evaluates_qualifying_and_free_bet_requests() -> None:
 
 def test_sports_adapter_evaluates_arbitrage_and_dutching_requests() -> None:
     simulation_config = config(SimulationEngine.SPORTS_CAPITAL)
-    steps = SportsCapitalSimulationAdapter(sports_requests()).build_steps(
-        simulation_config
-    )
+    steps = SportsCapitalSimulationAdapter(sports_requests()).build_steps(simulation_config)
 
     result = DeterministicSimulationRunner().run(simulation_config, steps)
 
-    assert [
-        evaluation.strategy_result.strategy for evaluation in result.evaluations
-    ] == [
+    assert [evaluation.strategy_result.strategy for evaluation in result.evaluations] == [
         "two_way_arbitrage",
         "dutching",
     ]
-    assert [
-        type(evaluation.calculation_result) for evaluation in result.evaluations
-    ] == [
+    assert [type(evaluation.calculation_result) for evaluation in result.evaluations] == [
         TwoWayArbitrageResult,
         DutchingResult,
     ]
@@ -186,20 +176,15 @@ def test_engine_simulation_is_reproducible_for_identical_requests() -> None:
 
 def test_stop_at_safe_boundary_preserves_completed_engine_evaluation() -> None:
     simulation_config = config(SimulationEngine.SPORTS_CAPITAL)
-    steps = SportsCapitalSimulationAdapter(sports_requests()).build_steps(
-        simulation_config
-    )
+    steps = SportsCapitalSimulationAdapter(sports_requests()).build_steps(simulation_config)
     runner = DeterministicSimulationRunner()
 
-    result = runner.run(
-        simulation_config, steps, on_step_completed=lambda _: runner.request_stop()
-    )
+    result = runner.run(simulation_config, steps, on_step_completed=lambda _: runner.request_stop())
 
     assert result.status is SimulationStatus.STOPPED
     assert len(result.completed_steps) == 1
     assert len(result.evaluations) == 1
     assert (
         result.current_capital
-        == simulation_config.starting_capital
-        + result.evaluations[0].worst_case_profit_loss
+        == simulation_config.starting_capital + result.evaluations[0].worst_case_profit_loss
     )
