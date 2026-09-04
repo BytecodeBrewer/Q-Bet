@@ -24,11 +24,11 @@
       <h3>Capital coverage</h3>
       <p><span class="status status-{{ execution_monitoring.capital_coverage.status }}"></span>{{ execution_monitoring.capital_coverage.detail }}</p>
     </section>
-    <div class="section-heading"><h3>V1 engines</h3><span class="muted">Drag the handles to reorder.</span></div>
+    <div class="section-heading"><h3>V1 engines</h3><span class="muted">Drag the handles or use arrow keys to reorder.</span></div>
     <div class="engine-grid" data-widget-grid data-plane="execution">
       {% for engine in execution_engines %}
         <article class="engine-card draggable-card" data-engine-widget="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
-          <div class="drag-row"><span class="drag-handle" draggable="true" data-drag-handle tabindex="0" role="button" aria-label="Move {{ engine.name }}">⋮⋮</span></div>
+          <div class="drag-row"><span class="drag-handle" draggable="true" data-drag-handle tabindex="0" role="button" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move {{ engine.name }}">⋮⋮</span></div>
           <a class="engine-link" href="{% url 'engine-detail' engine.engine_id %}">
             <div class="card-heading"><h3>{{ engine.name }}</h3><span class="status status-{{ engine.status }}" aria-label="{{ engine.status }}"></span></div>
             <dl class="metric-list">
@@ -79,14 +79,16 @@
       </section>
 
       <div class="section-heading"><h3>Simulation engines</h3><a href="{% url 'report-history' %}">Simulation reports</a></div>
+      <p class="muted">Drag the handles or use arrow keys to reorder.</p>
       <div class="engine-grid" data-widget-grid data-plane="simulation">
         {% for engine in simulation_engines %}
           <article class="engine-card simulation-card draggable-card" data-simulation-engine="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
-            <div class="drag-row"><span class="drag-handle" draggable="true" data-drag-handle tabindex="0" role="button" aria-label="Move simulated {{ engine.name }}">⋮⋮</span></div>
+            <div class="drag-row"><span class="drag-handle" draggable="true" data-drag-handle tabindex="0" role="button" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move simulated {{ engine.name }}">⋮⋮</span></div>
             <div class="card-heading"><h3>{{ engine.name }}</h3><span class="tag simulation-tag">Simulation</span></div>
             <dl class="metric-list">
               <div><dt>Status</dt><dd>{{ engine.detail }}</dd></div>
               <div><dt>Mode</dt><dd>{{ engine.mode }}</dd></div>
+              <div><dt>Progress</dt><dd>{% if engine.latest_report_id %}{% for report in simulation_monitoring.reports %}{% if report.run_id == engine.latest_report_id %}{{ report.progress }}{% endif %}{% endfor %}{% else %}Unavailable{% endif %}</dd></div>
               <div><dt>Running / pending</dt><dd>{{ engine.running_matches }} / {{ engine.pending_matches }}</dd></div>
               <div><dt>Virtual capital</dt><dd>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}Unavailable{% endif %}</dd></div>
               <div><dt>Warnings / errors</dt><dd>{{ engine.warning_count }} / {{ engine.error_count }}</dd></div>
