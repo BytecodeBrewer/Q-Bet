@@ -101,25 +101,12 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@59
 
-      - name: Pull Vercel preview configuration
-        shell: bash
-        run: vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
-
-      - name: Build hosted preview
-        shell: bash
-        env:
-          QBET_HOSTED_PREVIEW: "true"
-          QBET_DJANGO_DEBUG: "false"
-          QBET_DJANGO_ALLOWED_HOSTS: ".vercel.app"
-          QBET_SIMULATION_MODE_ENABLED: "false"
-        run: vercel build --token "$VERCEL_TOKEN"
-
       - name: Deploy hosted preview
         id: deploy
         shell: bash
         run: |
           deployment_url="$(
-            vercel deploy --prebuilt --yes \
+            vercel deploy --yes \
               --token "$VERCEL_TOKEN" \
               --env QBET_HOSTED_PREVIEW=true \
               --env QBET_DJANGO_DEBUG=false \
