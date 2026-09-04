@@ -10,9 +10,10 @@ from qbet.web.models import SimulationAvailability, SimulationRunState
 
 class SimulationReportRedirectTests(TestCase):
     def setUp(self) -> None:
-        self.user = User.objects.create_user(
-            "member-78",
+        self.staff = User.objects.create_user(
+            "staff-78",
             password="Strong-pass-123",
+            is_staff=True,
         )
         self.directory = TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
@@ -22,7 +23,7 @@ class SimulationReportRedirectTests(TestCase):
 
     def test_successful_gui_start_redirects_to_persisted_report_detail(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
-        self.client.force_login(self.user)
+        self.client.force_login(self.staff)
 
         with override_settings(QBET_SIMULATION_REPORT_DB=self.report_db):
             response = self.client.post(
