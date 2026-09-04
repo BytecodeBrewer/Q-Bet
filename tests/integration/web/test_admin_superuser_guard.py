@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import DatabaseError, transaction
 from django.test import TestCase
 
-from qbet.web.admin import ProtectedUserAdmin
+from qbet.web.admin import ProtectedUserAdmin, ProtectedUserChangeForm
 from qbet.web.admin_guard import last_superuser_message
 
 
@@ -46,6 +46,22 @@ class LastActiveSuperuserGuardTests(TestCase):
         self.admin_user.refresh_from_db()
         self.assertTrue(self.admin_user.is_superuser)
 
+    def test_admin_change_form_rejects_demoting_last_active_superuser(self) -> None:
+        form = ProtectedUserChangeForm(
+            data={
+                "username": self.admin_user.username,
+                "first_name": "",
+                "last_name": "",
+                "email": self.admin_user.email,
+                "is_active": "on",
+                "is_staff": "on",
+            },
+            instance=self.admin_user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn(last_superuser_message(), form.non_field_errors())
+
     def test_second_active_superuser_allows_first_to_be_demoted_or_deleted(self) -> None:
         second = User.objects.create_superuser(
             "secondary-admin",
@@ -72,3 +88,7 @@ class LastActiveSuperuserGuardTests(TestCase):
         self.assertEqual(self.client.get("/admin/").status_code, 200)
         self.assertEqual(self.client.get("/admin/auth/user/").status_code, 200)
         self.assertEqual(self.client.get("/admin/auth/group/").status_code, 200)
+
+        qbet_admin_area = self.client.get("/admin-area/")
+        self.assertEqual(qbet_admin_area.status_code, 200)
+        self.assertContains(qbet_admin_area, 'href="/admin/"')
