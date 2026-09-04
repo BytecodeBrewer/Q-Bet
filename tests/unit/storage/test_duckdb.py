@@ -1,4 +1,5 @@
-from qbet.storage import DuckDBReplayStore, ReplayRecord
+from qbet.storage import ReplayRecord
+from qbet.storage.duckdb import DuckDBReplayStore
 
 
 def test_duckdb_replay_store_persists_records_in_sequence_order(tmp_path) -> None:
