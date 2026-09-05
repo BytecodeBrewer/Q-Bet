@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django import forms
 from django.contrib import admin
+from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.forms import UserChangeForm
 from django.contrib.auth.models import User
@@ -18,7 +19,7 @@ class ProtectedUserChangeForm(UserChangeForm):
     """Give administrators a friendly validation error before the DB guard fires."""
 
     def clean(self):
-        cleaned_data = super().clean()
+        cleaned_data = super().clean() or {}
         if not self.instance.pk:
             return cleaned_data
 
@@ -60,6 +61,6 @@ class ProtectedUserAdmin(UserAdmin):
 
 try:
     admin.site.unregister(User)
-except admin.sites.NotRegistered:
+except NotRegistered:
     pass
 admin.site.register(User, ProtectedUserAdmin)
