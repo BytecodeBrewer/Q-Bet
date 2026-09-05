@@ -29,6 +29,23 @@ jobs:
   test:
     name: Python and Django checks
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: qbet
+          POSTGRES_PASSWORD: qbet
+          POSTGRES_DB: qbet_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qbet -d qbet_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      QBET_DATABASE_URL: postgresql://qbet:qbet@127.0.0.1:5432/qbet_test
+      QBET_TEST_DATABASE_URL: postgresql://qbet:qbet@127.0.0.1:5432/qbet_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -139,6 +156,13 @@ jobs:
               --fail --silent
           )"
           printf '%s' "$home" | grep -q '/static/qbet_web/app.css'
+
+          login="$(
+            vercel curl /accounts/login/ \
+              --deployment "$DEPLOYMENT_URL" \
+              --fail --silent
+          )"
+          printf '%s' "$login" | grep -q '<form'
 
           vercel curl /static/qbet_web/app.css \
             --deployment "$DEPLOYMENT_URL" \

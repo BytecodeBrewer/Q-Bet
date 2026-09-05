@@ -1,8 +1,5 @@
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
 from django.contrib.auth.models import User
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from qbet.simulation import SimulationEngine
 from qbet.web.models import SimulationAvailability, SimulationRunState
@@ -15,9 +12,6 @@ class SimulationReportRedirectTests(TestCase):
             password="Strong-pass-123",
             is_staff=True,
         )
-        self.directory = TemporaryDirectory()
-        self.addCleanup(self.directory.cleanup)
-        self.report_db = Path(self.directory.name) / "simulation.sqlite3"
         SimulationAvailability.objects.all().delete()
         SimulationRunState.objects.all().delete()
 
@@ -25,15 +19,14 @@ class SimulationReportRedirectTests(TestCase):
         SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.staff)
 
-        with override_settings(QBET_SIMULATION_REPORT_DB=self.report_db):
-            response = self.client.post(
-                "/simulation/start/",
-                {
-                    "engine": SimulationEngine.BONUS.value,
-                    "starting_capital": "100.00",
-                    "max_duration_minutes": "60",
-                },
-            )
+        response = self.client.post(
+            "/simulation/start/",
+            {
+                "engine": SimulationEngine.BONUS.value,
+                "starting_capital": "100.00",
+                "max_duration_minutes": "60",
+            },
+        )
 
         run = SimulationRunState.objects.get()
         self.assertIsNotNone(run.report_id)

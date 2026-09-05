@@ -6,8 +6,6 @@ import logging
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
 
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
@@ -19,7 +17,7 @@ from qbet.web.settings import parse_allowed_hosts
 from qbet.web.views import _monitoring_service
 
 from django.conf import settings
-from django.test import Client, SimpleTestCase, override_settings
+from django.test import Client, SimpleTestCase
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 
@@ -38,9 +36,7 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok", "service": "q-bet-web"})
 
-    def test_home_renders_execution_statuses_without_internal_monitoring_link(
-        self,
-    ) -> None:
+    def test_home_renders_execution_statuses_without_internal_monitoring_link(self) -> None:
         response = self.client.get("/")
 
         self.assertContains(response, "Q-Bet")
@@ -67,9 +63,7 @@ class WebShellSmokeTests(SimpleTestCase):
         response = self.client.get("/accounts/login/")
         self.assertContains(response, "csrfmiddlewaretoken")
 
-    def test_correlation_id_is_propagated_and_log_excludes_secret_bearing_data(
-        self,
-    ) -> None:
+    def test_correlation_id_is_propagated_and_log_excludes_secret_bearing_data(self) -> None:
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
         handler.setFormatter(SafeRequestJSONFormatter())
@@ -219,15 +213,10 @@ def test_monitoring_snapshot_renders_unconfigured_history_state() -> None:
     assert snapshot.engines[0].detail == "Simulation history is not configured."
 
 
-def test_configured_read_only_history_with_missing_schema_is_unavailable() -> None:
-    with TemporaryDirectory() as directory:
-        database_path = Path(directory) / "simulation-history.sqlite3"
-        database_path.touch()
-        with override_settings(QBET_SIMULATION_REPORT_DB=database_path):
-            snapshot = _monitoring_service().snapshot()
+def test_monitoring_service_uses_shared_postgres_history() -> None:
+    snapshot = _monitoring_service().snapshot()
 
-        assert snapshot.history_available is False
-        assert database_path.exists() is True
+    assert snapshot.history_available is True
 
 
 def test_monitoring_uses_newest_report_for_engine_status() -> None:

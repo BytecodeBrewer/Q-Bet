@@ -8,11 +8,11 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 Q-Bet already has a working deterministic sports core around `BonusEngine` and `SportsCapitalEngine`. The calculation layer uses `Decimal` and covers qualifying bets, free bets, two-way arbitrage, multi-outcome dutching, dynamic rounding, fees, commission, tax handling, stake and liquidity limits, and liability. Normalized market-data contracts plus the `Sports Match Builder` validate provider-neutral snapshots before engine evaluation. Real market and result collectors are not connected yet; the current collector implementation is deterministic and in-memory behind typed `DataCollector` and `ApiAdapter` contracts.
 
-The connected sports path already runs through `WorkflowOrchestrator`, correlation IDs and structured transitions, `OperationalRiskLayer`, targeted `RequestHandler` refresh hooks, and the proposal-only `LiquidityChecker`. From there, the implemented end-to-end target is Simulation: `WorkflowSimulationRunner` evaluates the two sports engines with virtual capital, progress and run state, safe failure handling, and persisted reports. SQLite adapters persist provider state and simulation reports locally; Django persists authentication, sessions, and simulation control/run state in its configured database. DuckDB is kept separate for ordered replay and backtesting streams.
+The connected sports path already runs through `WorkflowOrchestrator`, correlation IDs and structured transitions, `OperationalRiskLayer`, targeted `RequestHandler` refresh hooks, and the proposal-only `LiquidityChecker`. From there, the implemented end-to-end target is Simulation: `WorkflowSimulationRunner` evaluates the two sports engines with virtual capital, progress and run state, safe failure handling, and persisted reports. Supabase/PostgreSQL is now the durable operational source of truth for Django auth/sessions, simulation control/run state, simulation reports/log records, and provider state. DuckDB remains separate for runtime-local analytics, ordered replay, and backtesting workloads.
 
-The Django web application provides registration and authentication, a user-facing Execution dashboard, and administrator-only Simulation and Monitoring surfaces. Staff can enable and start deterministic simulations, inspect progress and reports, export CSV/JSON, and use presentation settings plus session-persisted dashboard ordering. Execution and Simulation stay separated; the Execution dashboard currently reports live state as unavailable because no real execution source is connected.
+The Django web application provides registration and authentication, a user-facing Execution dashboard, and administrator-only Simulation and Monitoring surfaces. Staff can enable and start deterministic simulations, inspect progress and reports, export CSV/JSON, and use presentation settings plus session-persisted dashboard ordering. Django Admin is the central user/permission administration surface for users, staff/superuser access, groups, and permissions. A server-side and PostgreSQL guard prevents deleting, deactivating, or demoting the last active staff superuser. Execution and Simulation stay separated; the Execution dashboard currently reports live state as unavailable because no real execution source is connected.
 
-The operational and tooling layer is also in place. GitHub Actions runs Ruff, Pyright, pytest, Django checks, and package builds before creating Vercel Preview/Staging deployments. Django can use PostgreSQL through `QBET_DATABASE_URL`, and a Supabase migration hardens Django-owned tables in the public schema. SQLite remains the local operational fallback. Hosted previews deliberately disable Simulation and live execution and fail closed for SQLite-backed internal features that do not yet have cloud adapters.
+The operational and tooling layer is also in place. GitHub Actions runs Ruff, Pyright, pytest, Django checks, and package builds before creating Vercel Preview/Staging deployments. CI uses an isolated PostgreSQL service rather than the shared Supabase database. Both a locally started Q-Bet web application and the Vercel-hosted application use `QBET_DATABASE_URL`; normal runtime no longer falls back to SQLite. SQLite remains only as a read-only legacy import source. Preview deployments keep Simulation disabled through environment configuration, while a deployed environment may enable it explicitly once its PostgreSQL migrations are current.
 
 **Still missing:**
 
@@ -20,35 +20,56 @@ The operational and tooling layer is also in place. GitHub Actions runs Ruff, Py
 - the `PortfolioLedger` capital authority with reservations, settlement, realized P/L, cost tracking, and capital-movement proposals;
 - bank and provider adapters beyond research/mock boundaries, including sandbox balance, transaction, and funding flows;
 - controlled live execution with separate live queues/history, pre-execution revalidation, approvals, provider order submission, and settlement;
-- PostgreSQL/Supabase adapters for Q-Bet-specific provider/report operational repositories so Simulation and Monitoring can run in hosted mode;
 - a clean customer-facing Reporting model separated from internal Monitoring/diagnostics, plus stronger multi-user ownership and isolation;
 - production implementations for `TicketEngine`, `PredictionMarketEngine`, `CryptoYieldEngine`, and `MLEdgeLayer`.
 
 ## Local Web Setup
 
-For the local Django shell, initialize Django's built-in authentication and session tables once before signing in:
+Normal local Q-Bet runtime uses PostgreSQL/Supabase as the same operational source of truth as the deployed application. Configure `QBET_DATABASE_URL` before starting Django; there is no SQLite runtime fallback.
 
 ```powershell
+$env:QBET_DATABASE_URL='postgresql://...'
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 ```
 
-SQLite remains the default local operational database. Setting `QBET_DATABASE_URL` opts the Django web shell into PostgreSQL locally as well, providing the migration seam for eventually removing SQLite from operational development without using DuckDB as an application database.
+For everyday local development against the shared Q-Bet cloud state, use the appropriate Supabase PostgreSQL connection string. Do not commit the connection string or database password.
+
+The first cloud superuser can be created with `python manage.py createsuperuser` while `QBET_DATABASE_URL` points to Supabase. Further user, staff, superuser, group, and permission administration is available through `/admin/`. Q-Bet protects the last active staff superuser from deletion, deactivation, or demotion.
+
+### Legacy SQLite Import
+
+SQLite is no longer an active runtime database. Existing provider state and simulation history can be imported once into PostgreSQL with the explicit legacy command:
+
+```powershell
+python manage.py import_legacy_sqlite --simulation-db path\to\qbet-simulation.sqlite3 --provider-db path\to\provider-state.sqlite3
+```
+
+The importer opens SQLite read-only, reports imported/skipped/conflicting rows, and is designed to be safely re-run without silently overwriting authoritative PostgreSQL conflicts. Disposable/test Django users do not need to be migrated.
 
 ## Validation
 
-The same gates used by GitHub Actions can be run locally with:
+Automated tests must never use the shared production Supabase database. Point `QBET_TEST_DATABASE_URL` to an isolated/disposable PostgreSQL database before running pytest locally:
 
 ```powershell
+$env:QBET_TEST_DATABASE_URL='postgresql://qbet:qbet@127.0.0.1:5432/qbet_test'
 python -m pip install . -r requirements-dev.txt
 python -m ruff check .
 python -m pyright
-python manage.py migrate --noinput
 python -m pytest
+```
+
+For explicit Django migration/configuration checks, point `QBET_DATABASE_URL` at the intended PostgreSQL target:
+
+```powershell
+$env:QBET_DATABASE_URL=$env:QBET_TEST_DATABASE_URL
+python manage.py migrate --noinput
 python manage.py check
 python -m build
 ```
+
+GitHub Actions provides an isolated PostgreSQL 16 service automatically for its test job.
 
 ## Vercel Preview / Staging CD
 
@@ -63,21 +84,23 @@ Configure these GitHub repository values for the deployment workflow:
 
 The existing `q-bet` Vercel project is targeted explicitly by its project/account identifiers. The existing portfolio Vercel project is not used or modified.
 
-Hosted mode never uses writable SQLite as persistent Vercel storage. Without `QBET_DATABASE_URL`, the hosted shell remains read-only and only `/`, `/health/`, templates, and static assets are exposed. When a Supabase/PostgreSQL `QBET_DATABASE_URL` is configured and Django migrations have been applied, registration, login/logout, the basic authenticated dashboard, engine details, account boundary, and session-backed presentation/layout preferences may use persistent PostgreSQL state.
+Vercel must provide `QBET_DATABASE_URL` through project environment configuration. Preview and Production can use the same Supabase/PostgreSQL source of truth when that is the intended environment model. Missing `QBET_DATABASE_URL` is now a startup configuration error rather than a request-time fallback to read-only/SQLite behavior.
 
-Routes that still depend on Q-Bet-specific SQLite repositories, including simulation/report persistence and internal monitoring surfaces, remain fail-closed with HTTP 503 until those repositories receive dedicated cloud adapters. Simulation/live execution remains disabled in hosted deployments.
+The CI preview explicitly supplies `QBET_HOSTED_PREVIEW=true`, `QBET_DJANGO_DEBUG=false`, the Vercel host allowlist, and `QBET_SIMULATION_MODE_ENABLED=false`. Production may enable Simulation deliberately through `QBET_SIMULATION_MODE_ENABLED=true`; durable simulation reports and control state are stored in PostgreSQL rather than Vercel-local files.
 
-The deployment job verifies the live preview with Vercel's authenticated curl command, including `/health/`, the public shell, and `/static/qbet_web/app.css`.
+The deployment job verifies the live preview with Vercel's authenticated curl command, including `/health/`, the public shell, `/accounts/login/`, and `/static/qbet_web/app.css`.
 
 ## Persistence Architecture
 
-Q-Bet deliberately separates operational state from analytical workloads:
+Q-Bet deliberately separates durable operational state from runtime-local analytical workloads:
 
-- **Supabase/PostgreSQL** is the cloud target for Django authentication, sessions, permissions, and later operational/ledger state.
-- **SQLite** remains the transitional local default for operational repositories that have not yet migrated. Local Django can opt into PostgreSQL through `QBET_DATABASE_URL`.
-- **DuckDB** is the local analytics/replay/backtesting store and must not become the Django authentication, session, provider-state, or ledger database.
+- **Supabase/PostgreSQL** is the durable shared source of truth for authentication, sessions, permissions, provider state, simulation/control state, reports, monitoring inputs, workflow state, and future ledger state. Local and hosted web instances reference this same database in normal use.
+- **DuckDB** is the per-runtime analytics/replay/backtesting/fast-processing layer. A local Q-Bet process and a Vercel runtime have separate DuckDB contexts. DuckDB state is not synchronized and must not be treated as durable shared storage.
+- **SQLite** is legacy-only. It may be read by the one-time importer but is not part of normal application persistence.
 
-`SUPABASE_QBET_TOKEN` is a Supabase Management API credential for automation/administration. It is not a PostgreSQL connection string. The hosted Django application requires `QBET_DATABASE_URL` from the Supabase project's Connect dialog, stored only in environment/secrets configuration. See [Django Web Shell](docs/django-web-shell.md) for bootstrap details.
+Any analytical/simulation result that must survive process termination or be visible across local/hosted instances must be written back through the PostgreSQL operational boundary.
+
+`SUPABASE_QBET_TOKEN` is a Supabase Management API credential for automation/administration. It is not a PostgreSQL connection string. The Django application requires `QBET_DATABASE_URL` from the Supabase project's Connect dialog, stored only in environment/secrets configuration. See [Django Web Shell](docs/django-web-shell.md) for bootstrap details.
 
 ## Version 1 Target
 
