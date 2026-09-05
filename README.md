@@ -14,14 +14,26 @@ The Django web application provides registration and authentication, a user-faci
 
 The operational and tooling layer is also in place. GitHub Actions runs Ruff, Pyright, pytest, Django checks, and package builds before creating Vercel Preview/Staging deployments. CI uses an isolated PostgreSQL service rather than the shared Supabase database. Both a locally started Q-Bet web application and the Vercel-hosted application use `QBET_DATABASE_URL`; normal runtime no longer falls back to SQLite. SQLite remains only as a read-only legacy import source. Preview deployments keep Simulation disabled through environment configuration, while a deployed environment may enable it explicitly once its PostgreSQL migrations are current.
 
-**Still missing:**
+**Still missing before Phase 2 is complete:**
 
-- conformant production market/result API adapters, concrete smart polling, and live provider refresh clients;
-- the `PortfolioLedger` capital authority with reservations, settlement, realized P/L, cost tracking, and capital-movement proposals;
-- bank and provider adapters beyond research/mock boundaries, including sandbox balance, transaction, and funding flows;
-- controlled live execution with separate live queues/history, pre-execution revalidation, approvals, provider order submission, and settlement;
-- a clean customer-facing Reporting model separated from internal Monitoring/diagnostics, plus stronger multi-user ownership and isolation;
-- production implementations for `TicketEngine`, `PredictionMarketEngine`, `CryptoYieldEngine`, and `MLEdgeLayer`.
+- GUI-backed `WorkflowOrchestrator` configuration for selecting which engines are active and whether each engine participates in Simulation, Execution, or both modes.
+- deterministic engine/mode routing from one eligible opportunity into the configured dispatch targets. If the same engine is enabled for both Simulation and Execution, the eligible order fans out into both isolated paths; if only one mode is enabled, only that path receives it. Simulation and Execution must not share queues, histories, capital contexts, lifecycle state, or results.
+- mode-specific `RequestHandler` implementations for Simulation and Execution. Before dispatch they revalidate whether an order is still valid and worthwhile. After an event they can also provide a validated result so the match can be evaluated and settled. Phase 2 uses deterministic or sandbox data sources for this rather than production provider APIs.
+- a real `PortfolioLedger` as the authoritative capital domain for available, reserved, locked, pending, settled, and cost state. Simulation starting capital is established and tracked through the ledger instead of being owned directly by the simulation runner. A later sandbox account may back that virtual capital, but the ledger remains the capital authority.
+- a complete controlled Execution path using deterministic/mock components, including queueing, approval boundaries, dispatch state, result handling, and settlement without requiring production provider or bank adapters.
+- an end-to-end settlement flow in which Simulation and Execution results update their respective ledger state through a dedicated settlement boundary instead of mutating capital directly inside runners or execution components.
+- a strict separation between customer-facing Reporting and administrator-facing Monitoring.
+  - **Reporting** exposes product-level match information only: which provider was matched against which provider, the amounts assigned to each side of the match, the resulting match state, and when the match was created. It must not expose internal pipeline stages, service names, implementation details, stack traces, correlation internals, adapter state, or other information that could reveal Q-Bet's internal architecture.
+  - the main dashboard provides a compact Reporting overview across engines and matches. Each engine has a simple status indicator: **grey** when inactive, **green** when active without known problems, and **red** when active and one or more warnings or errors are present.
+  - warning and error symbols appear on the engine overview when relevant. The expanded engine view shows a readable list of the current warnings and errors below the normal engine information.
+  - **Warnings** represent external availability/dependency problems, for example `Sports betting data unavailable`. **Errors** represent internal processing or system failures, for example `Data import blocked` or `Matches cannot be evaluated`.
+  - Reporting messages remain intentionally coarse and actionable so an administrator can react without exposing internal architecture or diagnostic details.
+  - **Monitoring** contains the detailed technical state behind those Reporting states: pipeline stages and transitions, engine/mode routing, Simulation and Execution queues, `RequestHandler` activity and revalidation results, provider/dependency state, Domain Risk and Liquidity decisions, `PortfolioLedger` reservations and capital state, settlement, Simulation/Execution lifecycle details, warnings, internal errors, external failures, correlation data, and relevant diagnostic metadata.
+  - the Monitoring GUI must allow administrators to inspect the complete technical cause behind a warning or error shown in Reporting.
+  - Monitoring data must be exportable for an administrator-selected time range. The export collects the relevant matches, pipeline events, transitions, decisions, warnings, errors, capital changes, Simulation/Execution activity, and settlement records from that period so system behaviour or incidents can be reconstructed outside the live GUI.
+- a more polished GUI product experience with a dedicated start/home page, clearer visual hierarchy between home, dashboard, engine detail, Reporting, Monitoring, settings, and administration, and a main dashboard optimized for fast recognition of engine activity, match summaries, capital state, warnings, and errors.
+- restrained animations and transitions that give the application more life without reducing usability, including smooth engine-state changes, dashboard-card transitions, loading/progress motion, and subtle page or section transitions.
+- end-to-end tests for GUI configuration, engine/mode routing, dual-mode fan-out, revalidation and rejection, capital reservation, simulation and mock execution, result retrieval, settlement, engine status states, warning/error presentation, Reporting/Monitoring separation, safe user-facing messages, monitoring export ranges, state isolation, and failure recovery.
 
 ## Local Web Setup
 
