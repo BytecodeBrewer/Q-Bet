@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.contrib import admin
 from django.contrib.auth.models import Group, User
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import DatabaseError, transaction
 from django.test import TestCase
 
@@ -32,9 +32,10 @@ class LastActiveSuperuserGuardTests(TestCase):
                 self.assertTrue(persisted.is_staff)
                 self.assertTrue(persisted.is_superuser)
 
-    def test_last_active_superuser_cannot_be_deleted(self) -> None:
-        with self.assertRaisesMessage(ValidationError, last_superuser_message()):
-            self.admin_user.delete()
+    def test_database_guard_blocks_deleting_last_active_superuser(self) -> None:
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.admin_user.delete()
 
         self.assertTrue(User.objects.filter(pk=self.admin_user.pk).exists())
 
@@ -61,6 +62,15 @@ class LastActiveSuperuserGuardTests(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn(last_superuser_message(), form.non_field_errors())
+
+    def test_admin_delete_model_rejects_last_active_superuser(self) -> None:
+        registered_admin = admin.site._registry[User]
+        self.assertIsInstance(registered_admin, ProtectedUserAdmin)
+
+        with self.assertRaisesMessage(PermissionDenied, last_superuser_message()):
+            registered_admin.delete_model(None, self.admin_user)
+
+        self.assertTrue(User.objects.filter(pk=self.admin_user.pk).exists())
 
     def test_second_active_superuser_allows_first_to_be_demoted_or_deleted(self) -> None:
         second = User.objects.create_superuser(
