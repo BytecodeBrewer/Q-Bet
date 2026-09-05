@@ -47,6 +47,12 @@ class StaticLiquidityChecker:
 
 
 class WorkflowOrchestrator:
+    @staticmethod
+    def route_opportunity(configuration, engine, opportunity_id, correlation_id, owner):
+        from qbet.workflow.routing import resolve_routes
+
+        return resolve_routes(configuration, engine, opportunity_id, correlation_id, owner)
+
     def __init__(
         self,
         stage_handlers: Mapping[WorkflowStage, WorkflowStageHandler] | None = None,
