@@ -7,6 +7,15 @@ from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.layers import SimulationLogRecordType
 from qbet.reporting import ReportDetailSelection, SimulationReportBuilder
+from qbet.request_handler import (
+    ExecutionSandboxRequestHandler,
+    ModeRequestHandlers,
+    ResultStatus,
+    RevalidationOutcome,
+    SandboxResultFixture,
+    SandboxRevalidationFixture,
+    SimulationSandboxRequestHandler,
+)
 from qbet.simulation import (
     SimulationEngine,
     SimulationRunConfig,
@@ -132,6 +141,63 @@ def test_sports_capital_simulation_uses_concrete_engine() -> None:
 
     assert result.simulation_result.evaluations[0].strategy_result.strategy == "two_way_arbitrage"
     assert result.workflow_results[0].mode.value == "simulation"
+
+
+def test_simulation_runner_uses_mode_specific_revalidation_before_virtual_dispatch() -> None:
+    correlation_id = UUID("12345678-1234-5678-1234-567812345678")
+    handlers = ModeRequestHandlers(
+        simulation=SimulationSandboxRequestHandler(
+            revalidation_fixtures=(
+                SandboxRevalidationFixture(
+                    opportunity_id="bonus-1",
+                    outcome=RevalidationOutcome.VALID,
+                    validated_at=GENERATED_AT,
+                ),
+            ),
+            result_fixtures=(
+                SandboxResultFixture(
+                    opportunity_id="bonus-1",
+                    status=ResultStatus.SUCCESS,
+                    observed_at=GENERATED_AT,
+                    result_reference="simulation-result-1",
+                ),
+            ),
+        ),
+        execution=ExecutionSandboxRequestHandler(),
+    )
+
+    result = WorkflowSimulationRunner(mode_request_handlers=handlers).run(
+        request(SimulationEngine.BONUS, (bonus_request(),), correlation_id=correlation_id)
+    )
+
+    workflow_result = result.workflow_results[0]
+    assert result.simulation_result.completed_steps
+    assert workflow_result.request_handler_result is not None
+    assert workflow_result.request_handler_result.status is ResultStatus.SUCCESS
+    assert workflow_result.request_handler_result.correlation_id == correlation_id
+
+
+def test_changed_simulation_revalidation_blocks_virtual_dispatch() -> None:
+    handlers = ModeRequestHandlers(
+        simulation=SimulationSandboxRequestHandler(
+            revalidation_fixtures=(
+                SandboxRevalidationFixture(
+                    opportunity_id="bonus-1",
+                    outcome=RevalidationOutcome.CHANGED,
+                    validated_at=GENERATED_AT,
+                    reason_code="odds_changed",
+                ),
+            )
+        ),
+        execution=ExecutionSandboxRequestHandler(),
+    )
+
+    result = WorkflowSimulationRunner(mode_request_handlers=handlers).run(
+        request(SimulationEngine.BONUS, (bonus_request(),))
+    )
+
+    assert result.simulation_result.completed_steps == ()
+    assert result.workflow_results[0].final_decision is WorkflowDecision.RECHECK
 
 
 def test_risk_rejection_stops_before_initial_top_up_or_virtual_capital_change() -> None:

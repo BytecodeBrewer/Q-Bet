@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 
 from qbet.domain.models import DomainModel, Identifier
 from qbet.layers.logging import SimulationLogRecord
+from qbet.request_handler.models import RequestHandlerResult
 
 
 class WorkflowStage(StrEnum):
@@ -48,10 +49,15 @@ class WorkflowStageDecision(DomainModel):
 
 class WorkflowRequest(DomainModel):
     id: Identifier
+    opportunity_id: Identifier | None = None
     mode: WorkflowMode
     stages: tuple[WorkflowStage, ...] = Field(min_length=1)
     correlation_id: UUID | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def resolved_opportunity_id(self) -> str:
+        return self.opportunity_id or self.id
 
     @model_validator(mode="after")
     def validates_route(self) -> WorkflowRequest:
@@ -94,6 +100,7 @@ class WorkflowResult(DomainModel):
     final_decision: WorkflowDecision
     transitions: tuple[WorkflowTransition, ...]
     log_records: tuple[SimulationLogRecord, ...]
+    request_handler_result: RequestHandlerResult | None = None
 
 
 def new_correlation_id() -> UUID:
