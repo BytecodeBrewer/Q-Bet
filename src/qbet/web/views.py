@@ -127,8 +127,6 @@ def health(_: HttpRequest) -> JsonResponse:
 
 
 def home(request: HttpRequest) -> HttpResponse:
-    if request.user.is_authenticated:
-        return redirect("dashboard")
     return render(
         request,
         "qbet_web/home.html",
