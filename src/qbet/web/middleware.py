@@ -45,3 +45,37 @@ class RequestCorrelationMiddleware:
             },
         )
         return response
+<<<<<<< Updated upstream
+=======
+
+
+class HostedPreviewBoundaryMiddleware:
+    """Expose only persistence-safe routes in hosted deployments."""
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        if not getattr(settings, "QBET_HOSTED_PREVIEW", False):
+            return self.get_response(request)
+
+        path = request.path_info
+        if path in _HOSTED_PUBLIC_PATHS or any(
+            path.startswith(prefix) for prefix in _HOSTED_PUBLIC_PREFIXES
+        ):
+            return self.get_response(request)
+
+        database_enabled = bool(getattr(settings, "QBET_HOSTED_DATABASE_ENABLED", False))
+        if database_enabled and (
+            path in _HOSTED_OPERATIONAL_PATHS
+            or any(path.startswith(prefix) for prefix in _HOSTED_OPERATIONAL_PREFIXES)
+        ):
+            return self.get_response(request)
+
+        message = _HOSTED_UNMIGRATED_MESSAGE if database_enabled else _HOSTED_NO_DATABASE_MESSAGE
+        return HttpResponse(
+            message,
+            status=503,
+            content_type="text/plain; charset=utf-8",
+        )
+>>>>>>> Stashed changes

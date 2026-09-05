@@ -128,10 +128,27 @@ TEMPLATES = [
 ]
 WSGI_APPLICATION = "vercel_wsgi.application"
 
+<<<<<<< Updated upstream
 DATABASES = {
     "default": database_config_from_url(
         QBET_DATABASE_URL,
         require_ssl=QBET_HOSTED_PREVIEW,
+=======
+if QBET_HOSTED_PREVIEW:
+    QBET_SIMULATION_REPORT_DB = None
+    QBET_SIMULATION_MODE_ENABLED = False
+    if QBET_DATABASE_URL:
+        DATABASES = {"default": database_config_from_url(QBET_DATABASE_URL, require_ssl=True)}
+    else:
+        DATABASES = {"default": {"ENGINE": "django.db.backends.dummy"}}
+        SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+else:
+    QBET_SIMULATION_REPORT_DB = Path(
+        os.environ.get(
+            "QBET_SIMULATION_REPORT_DB",
+            str(BASE_DIR / "qbet-simulation.sqlite3"),
+        )
+>>>>>>> Stashed changes
     )
 }
 QBET_SIMULATION_MODE_ENABLED = _environment_flag("QBET_SIMULATION_MODE_ENABLED")
