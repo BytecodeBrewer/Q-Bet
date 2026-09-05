@@ -75,10 +75,45 @@ class AuthenticationAndDashboardTests(TestCase):
         self.assertEqual(dashboard.wsgi_request.user, user)
         self.assertEqual(content.count('data-engine-widget="bonus"'), 1)
         self.assertEqual(content.count('data-engine-widget="sports_capital"'), 1)
+        self.assertContains(dashboard, "Execution idle")
+        self.assertContains(dashboard, "Engine status")
+        self.assertContains(dashboard, "No known issues")
+        self.assertContains(dashboard, "Inactive")
         self.assertNotContains(dashboard, "BaseEngine")
         self.assertNotContains(dashboard, "YieldEngine")
         self.assertNotContains(dashboard, "AlphaEngine")
         self.assertEqual(self.client.post("/accounts/logout/").status_code, 302)
+
+    def test_authenticated_home_stays_available_and_hides_admin_navigation(self) -> None:
+        user = User.objects.create_user("member-home", password="Strong-pass-123")
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Open dashboard")
+        self.assertContains(response, 'href="/dashboard/"')
+        self.assertContains(response, 'href="/settings/presentation/"')
+        self.assertNotContains(response, 'href="/monitoring/"')
+        self.assertNotContains(response, 'href="/admin-area/"')
+        self.assertNotContains(response, 'href="/admin/"')
+
+    def test_staff_home_exposes_separate_operator_destinations(self) -> None:
+        staff = User.objects.create_user(
+            "staff-home",
+            password="Strong-pass-123",
+            is_staff=True,
+        )
+        self.client.force_login(staff)
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Operator shortcuts")
+        self.assertContains(response, 'href="/reports/"')
+        self.assertContains(response, 'href="/monitoring/"')
+        self.assertContains(response, 'href="/admin-area/"')
+        self.assertContains(response, 'href="/admin/"')
 
     def test_invalid_login_is_generic(self) -> None:
         User.objects.create_user("protected-user", password="Strong-pass-123")
