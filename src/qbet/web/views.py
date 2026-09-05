@@ -10,6 +10,7 @@ from uuid import UUID
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.db import DatabaseError
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST
@@ -38,6 +39,7 @@ from qbet.web.forms import (
     SimulationStartForm,
 )
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
+from qbet.web.models import CustomerReportAccess
 from qbet.web.simulation_control import (
     SimulationControlError,
     SimulationControlService,
@@ -253,6 +255,14 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
     if run.report_id is None:
         messages.error(request, "Simulation completed but its report is unavailable.")
         return redirect("dashboard")
+    try:
+        CustomerReportAccess.objects.get_or_create(
+            report_id=run.report_id,
+            user=request.user,
+        )
+    except DatabaseError:
+        messages.error(request, "Simulation completed but its customer report access is unavailable.")
+        return redirect("dashboard")
 
     messages.success(
         request,
@@ -294,14 +304,19 @@ def presentation_settings(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def report_history(request: HttpRequest) -> HttpResponse:
-    _require_staff(request)
     snapshot = MONITORING_SERVICE.snapshot()
     engine_id = request.GET.get("engine")
+    visible_report_ids = _visible_customer_report_ids(request)
     reports = tuple(
         customer_report
-        for report in snapshot.reports
-        if engine_id in (None, "") or report.engine == engine_id
-        if (customer_report := _customer_report(report)) is not None
+        for summary in snapshot.reports
+        if engine_id in (None, "") or summary.engine == engine_id
+        if visible_report_ids is None or summary.run_id in visible_report_ids
+        if (
+            customer_report := _customer_report(
+                MONITORING_SERVICE.load_report(summary.run_id, ReportDetailSelection()).report
+            )
+        ) is not None
     )
     return render(
         request,
@@ -317,7 +332,8 @@ def report_history(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
-    _require_staff(request)
+    if not _can_view_customer_report(request, run_id):
+        raise Http404("Report not found.")
     lookup = MONITORING_SERVICE.load_report(run_id, ReportDetailSelection())
     if lookup.report is None:
         return render(
@@ -349,7 +365,8 @@ def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
 
 @login_required
 def report_export(request: HttpRequest, run_id: UUID, export_format: str) -> HttpResponse:
-    _require_staff(request)
+    if not _can_view_customer_report(request, run_id):
+        raise Http404("Report not found.")
     lookup = MONITORING_SERVICE.load_report(run_id, ReportDetailSelection())
     if lookup.report is None:
         raise Http404(lookup.message or "Report not found.")
@@ -384,6 +401,29 @@ def _customer_report(report: object) -> CustomerResultReport | None:
         return CustomerResultReport.from_simulation_report(report)
     except CustomerReportUnavailable:
         return None
+
+
+def _can_view_customer_report(request: HttpRequest, report_id: UUID) -> bool:
+    if _is_staff(request.user):
+        return True
+    try:
+        return CustomerReportAccess.objects.filter(
+            report_id=report_id,
+            user=request.user,
+        ).exists()
+    except DatabaseError:
+        return False
+
+
+def _visible_customer_report_ids(request: HttpRequest) -> set[UUID] | None:
+    if _is_staff(request.user):
+        return None
+    try:
+        return set(
+            CustomerReportAccess.objects.filter(user=request.user).values_list("report_id", flat=True)
+        )
+    except DatabaseError:
+        return set()
 
 
 @user_passes_test(_is_staff, login_url="login")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 
 
@@ -55,3 +56,25 @@ class SimulationRunState(models.Model):
     @property
     def is_active(self) -> bool:
         return self.status in {self.Status.PENDING, self.Status.RUNNING}
+
+
+class CustomerReportAccess(models.Model):
+    """Explicit per-user permission for one customer-facing result report."""
+
+    report_id = models.UUIDField()
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_customer_report_accesses",
+    )
+    granted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "qbet_customer_report_access"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("report_id", "user"),
+                name="qbet_customer_report_access_unique",
+            )
+        ]
+        ordering = ("-granted_at",)

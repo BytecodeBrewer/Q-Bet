@@ -13,7 +13,7 @@ from django.test import TestCase, override_settings
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
 from qbet.reporting import CustomerReportAmount, CustomerReportInput, SimulationReport
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
-from qbet.web.models import SimulationAvailability
+from qbet.web.models import CustomerReportAccess, SimulationAvailability
 from qbet.web.monitoring import MonitoringService
 
 
@@ -140,6 +140,7 @@ def _records(report: SimulationReport) -> tuple[SimulationLogRecord, ...]:
 class GuiControlPlaneTests(TestCase):
     def setUp(self) -> None:
         self.user = User.objects.create_user("member", password="Strong-pass-123")
+        self.other_user = User.objects.create_user("other-member", password="Strong-pass-123")
         self.staff = User.objects.create_user("staff", password="Strong-pass-123", is_staff=True)
         self.bonus_report = _report(SimulationEngine.BONUS, status=SimulationStatus.RUNNING)
         self.sports_report = _report(SimulationEngine.SPORTS_CAPITAL)
@@ -295,12 +296,35 @@ class GuiControlPlaneTests(TestCase):
             staff_dashboard.index('data-simulation-engine="bonus"'),
         )
 
-    def test_current_simulation_reports_are_admin_only(self) -> None:
+    def test_customer_reports_require_an_owner_grant_or_staff_access(self) -> None:
         self.client.force_login(self.user)
-        self.assertEqual(self.client.get("/reports/").status_code, 404)
-        self.assertEqual(self.client.get(f"/reports/{self.bonus_report.run_id}/").status_code, 404)
+        self.assertEqual(self.client.get("/reports/").status_code, 200)
+        self.assertNotContains(self.client.get("/reports/"), "Northbridge v Riverside")
+        self.assertEqual(self.client.get(f"/reports/{self.sports_report.run_id}/").status_code, 404)
         self.assertEqual(
-            self.client.get(f"/reports/{self.bonus_report.run_id}/export/json/").status_code,
+            self.client.get(f"/reports/{self.sports_report.run_id}/export/json/").status_code,
+            404,
+        )
+
+        CustomerReportAccess.objects.create(report_id=self.sports_report.run_id, user=self.user)
+        history = self.client.get("/reports/")
+        detail = self.client.get(f"/reports/{self.sports_report.run_id}/")
+        csv_export = self.client.get(f"/reports/{self.sports_report.run_id}/export/csv/")
+        json_export = self.client.get(f"/reports/{self.sports_report.run_id}/export/json/")
+        pdf_export = self.client.get(f"/reports/{self.sports_report.run_id}/export/pdf/")
+
+        self.assertEqual(history.status_code, 200)
+        self.assertContains(history, "Northbridge v Riverside")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(csv_export.status_code, 200)
+        self.assertEqual(json_export.status_code, 200)
+        self.assertEqual(pdf_export.status_code, 200)
+
+        self.client.force_login(self.other_user)
+        self.assertNotContains(self.client.get("/reports/"), "Northbridge v Riverside")
+        self.assertEqual(self.client.get(f"/reports/{self.sports_report.run_id}/").status_code, 404)
+        self.assertEqual(
+            self.client.get(f"/reports/{self.sports_report.run_id}/export/json/").status_code,
             404,
         )
 

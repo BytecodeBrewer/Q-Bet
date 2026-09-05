@@ -12,6 +12,7 @@ from qbet.web.admin_guard import (
     is_active_admin,
     last_superuser_message,
 )
+from qbet.web.models import CustomerReportAccess
 
 
 class ProtectedUserChangeForm(UserChangeForm):
@@ -61,3 +62,10 @@ class ProtectedUserAdmin(UserAdmin):
 if admin.site.is_registered(User):
     admin.site.unregister(User)
 admin.site.register(User, ProtectedUserAdmin)
+
+
+@admin.register(CustomerReportAccess)
+class CustomerReportAccessAdmin(admin.ModelAdmin):
+    list_display = ("report_id", "user", "granted_at")
+    search_fields = ("report_id", "user__username")
+    raw_id_fields = ("user",)
