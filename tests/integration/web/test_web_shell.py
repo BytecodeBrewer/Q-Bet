@@ -6,6 +6,7 @@ import logging
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
@@ -36,18 +37,36 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok", "service": "q-bet-web"})
 
-    def test_home_renders_execution_statuses_without_internal_monitoring_link(self) -> None:
+    def test_home_renders_product_overview_without_staff_destinations(self) -> None:
         response = self.client.get("/")
 
         self.assertContains(response, "Q-Bet")
+        self.assertContains(response, "Operational workspace")
+        self.assertContains(response, "Portfolio snapshot")
+        self.assertContains(response, "Engine overview")
         self.assertContains(response, "BonusEngine")
         self.assertContains(response, "SportsCapitalEngine")
         self.assertContains(response, "Sign in")
-        self.assertNotContains(response, "Open monitoring")
+        self.assertContains(response, "Create account")
+        self.assertContains(response, 'aria-label="Engine status legend"')
+        self.assertContains(response, "Inactive")
+        self.assertContains(response, "Healthy")
+        self.assertContains(response, "Attention")
         self.assertContains(response, "status-gray")
+        self.assertNotContains(response, 'href="/monitoring/"')
+        self.assertNotContains(response, 'href="/admin-area/"')
+        self.assertNotContains(response, 'href="/admin/"')
         self.assertNotContains(response, "Base")
         self.assertNotContains(response, "Yield")
         self.assertNotContains(response, "Alpha")
+
+    def test_product_styles_respect_reduced_motion(self) -> None:
+        stylesheet = Path(settings.BASE_DIR, "static", "qbet_web", "app.css").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("@media (prefers-reduced-motion: reduce)", stylesheet)
+        self.assertIn("transition-duration: .001ms", stylesheet)
 
     def test_account_boundary_requires_django_authentication(self) -> None:
         response = self.client.get("/account/")
