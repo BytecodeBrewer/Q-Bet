@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -57,7 +58,7 @@ class LegacySQLiteImportTests(TestCase):
             source="legacy-test",
             payload={"status": "completed"},
         )
-        with sqlite3.connect(source) as connection:
+        with closing(sqlite3.connect(source)) as connection, connection:
             connection.execute(
                 "CREATE TABLE simulation_reports ("
                 "run_id TEXT PRIMARY KEY, generated_at TEXT NOT NULL, payload TEXT NOT NULL)"
@@ -85,7 +86,7 @@ class LegacySQLiteImportTests(TestCase):
             last_bet_timestamp=datetime(2026, 9, 4, 11, 30, tzinfo=UTC),
             is_cooldown_active=False,
         )
-        with sqlite3.connect(source) as connection:
+        with closing(sqlite3.connect(source)) as connection, connection:
             connection.execute(
                 "CREATE TABLE provider_states ("
                 "provider_id TEXT PRIMARY KEY, active_bets_count INTEGER NOT NULL, "
