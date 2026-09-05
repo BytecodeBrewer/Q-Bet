@@ -126,6 +126,7 @@ body[data-theme="dark"] .incident-summary.has-incidents { background: #452e31; }
 .capital-coverage, .recorded-activity { padding: 15px 17px; }
 .capital-coverage { margin: 0; }
 .capital-coverage p { margin: 4px 0 0; }
+.recorded-activity > span { display: block; margin-bottom: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
 .recorded-activity strong { display: block; font-size: 24px; }
 .dashboard-engine-grid { margin-top: 4px; }
 .engine-card { padding: 18px; }
@@ -247,7 +248,6 @@ body[data-theme="dark"] .empty-state, body[data-theme="dark"] .message { backgro
   .engine-priority-metrics { grid-template-columns: repeat(3, minmax(74px, 1fr)); }
   .section-heading { align-items: flex-start; flex-direction: column; }
   .status-legend { gap: 8px 12px; }
-  .drag-handle { display: none; }
   .reorder-hint { display: none; }
 }
 @media (max-width: 440px) {

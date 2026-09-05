@@ -47,9 +47,7 @@
         <span class="support-label">Capital coverage</span>
         <p><span class="status status-{{ execution_monitoring.capital_coverage.status }}" aria-hidden="true"></span>{{ execution_monitoring.capital_coverage.detail }}</p>
       </section>
-      <section class="recorded-activity" aria-label="Recorded execution activity">
-        <span class="support-label">Recorded activity</span>
-        <strong>{{ execution_monitoring.summary.recorded_activity }}</strong>
+      <section class="recorded-activity" aria-label="Recorded execution activity"><span>Recorded activity</span><strong>{{ execution_monitoring.summary.recorded_activity }}</strong>
       </section>
     </div>
 
@@ -114,6 +112,7 @@
       <section class="summary-grid dashboard-summary-grid" aria-label="Simulation activity summary">
         <article class="summary-item summary-item-primary"><span>Active matches</span><strong>{{ simulation_monitoring.summary.active_matches }}</strong><small>running now</small></article>
         <article class="summary-item"><span>Pending matches</span><strong>{{ simulation_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
+        <article class="summary-item"><span>Recorded runs</span><strong>{{ simulation_monitoring.summary.recorded_activity }}</strong><small>available history</small></article>
         <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{{ simulation_monitoring.summary.involved_capital }}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>simulation only</small></article>
         <article class="summary-item incident-summary{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %} has-incidents{% endif %}">
           <span>Warnings / errors</span>
@@ -124,7 +123,7 @@
 
       <section class="simulation-control-panel">
         <div class="section-heading">
-          <div><span class="eyebrow">Sandbox control</span><h3>Start deterministic run</h3></div>
+          <div><span class="eyebrow">Sandbox control</span><h3>Start deterministic sandbox run</h3></div>
           <span class="tag simulation-tag">Virtual only</span>
         </div>
         <form method="post" action="{% url 'simulation-start' %}">
