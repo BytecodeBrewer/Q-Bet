@@ -80,6 +80,38 @@ def test_release_and_cost():
     assert state.balance.cost == 2
 
 
+def test_explicit_operations_use_the_same_idempotent_boundary():
+    state, decision = ledger().reserve(
+        command_id="reserve",
+        dispatch_id="dispatch",
+        correlation_id="correlation",
+        amount=Decimal("10"),
+    )
+    assert decision.accepted
+    state, decision = state.lock(
+        command_id="lock",
+        dispatch_id="dispatch",
+        correlation_id="correlation",
+        amount=Decimal("10"),
+    )
+    assert decision.accepted
+    state, decision = state.mark_pending(
+        command_id="pending",
+        dispatch_id="dispatch",
+        correlation_id="correlation",
+        amount=Decimal("10"),
+    )
+    assert decision.accepted
+    state, decision = state.settle_success(
+        command_id="settle",
+        dispatch_id="dispatch",
+        correlation_id="correlation",
+        amount=Decimal("11"),
+    )
+    assert decision.accepted
+    assert state.balance.available == 101
+
+
 def test_failed_dispatch_returns_only_reserved_principal():
     state, _ = ledger().apply(command(LedgerOperation.RESERVE))
     state, _ = state.apply(command(LedgerOperation.LOCK))

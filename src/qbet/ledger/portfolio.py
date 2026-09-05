@@ -7,7 +7,7 @@ from pydantic import Field
 from qbet.domain.ledger import (
     LedgerCommand, LedgerDecision, LedgerOperation, PortfolioBalance,
 )
-from qbet.domain.models import DomainModel
+from qbet.domain.models import Currency, DomainModel
 
 
 class Position(DomainModel):
@@ -19,6 +19,104 @@ class PortfolioLedger(DomainModel):
     balance: PortfolioBalance
     positions: dict[str, Position] = Field(default_factory=dict)
     commands: dict[str, LedgerCommand] = Field(default_factory=dict)
+
+    def reserve(
+        self, *, command_id: str, dispatch_id: str, correlation_id: str, amount: Decimal
+    ) -> tuple["PortfolioLedger", LedgerDecision]:
+        return self.apply(
+            _command(
+                command_id,
+                dispatch_id,
+                correlation_id,
+                self.balance.currency,
+                LedgerOperation.RESERVE,
+                amount,
+            )
+        )
+
+    def release(
+        self, *, command_id: str, dispatch_id: str, correlation_id: str, amount: Decimal
+    ) -> tuple["PortfolioLedger", LedgerDecision]:
+        return self.apply(
+            _command(
+                command_id,
+                dispatch_id,
+                correlation_id,
+                self.balance.currency,
+                LedgerOperation.RELEASE,
+                amount,
+            )
+        )
+
+    def lock(
+        self, *, command_id: str, dispatch_id: str, correlation_id: str, amount: Decimal
+    ) -> tuple["PortfolioLedger", LedgerDecision]:
+        return self.apply(
+            _command(
+                command_id,
+                dispatch_id,
+                correlation_id,
+                self.balance.currency,
+                LedgerOperation.LOCK,
+                amount,
+            )
+        )
+
+    def mark_pending(
+        self, *, command_id: str, dispatch_id: str, correlation_id: str, amount: Decimal
+    ) -> tuple["PortfolioLedger", LedgerDecision]:
+        return self.apply(
+            _command(
+                command_id,
+                dispatch_id,
+                correlation_id,
+                self.balance.currency,
+                LedgerOperation.PENDING,
+                amount,
+            )
+        )
+
+    def settle_success(
+        self, *, command_id: str, dispatch_id: str, correlation_id: str, amount: Decimal
+    ) -> tuple["PortfolioLedger", LedgerDecision]:
+        return self.apply(
+            _command(
+                command_id,
+                dispatch_id,
+                correlation_id,
+                self.balance.currency,
+                LedgerOperation.SETTLE,
+                amount,
+            )
+        )
+
+    def settle_failure(
+        self, *, command_id: str, dispatch_id: str, correlation_id: str, amount: Decimal
+    ) -> tuple["PortfolioLedger", LedgerDecision]:
+        return self.apply(
+            _command(
+                command_id,
+                dispatch_id,
+                correlation_id,
+                self.balance.currency,
+                LedgerOperation.FAIL,
+                amount,
+            )
+        )
+
+    def record_cost(
+        self, *, command_id: str, dispatch_id: str, correlation_id: str, amount: Decimal
+    ) -> tuple["PortfolioLedger", LedgerDecision]:
+        return self.apply(
+            _command(
+                command_id,
+                dispatch_id,
+                correlation_id,
+                self.balance.currency,
+                LedgerOperation.COST,
+                amount,
+            )
+        )
 
     def apply(self, command: LedgerCommand) -> tuple["PortfolioLedger", LedgerDecision]:
         def reject(reason: str) -> tuple["PortfolioLedger", LedgerDecision]:
@@ -85,3 +183,21 @@ class PortfolioLedger(DomainModel):
             commands={**self.commands, command.id: command},
         )
         return ledger, LedgerDecision(accepted=True, balance=ledger.balance)
+
+
+def _command(
+    command_id: str,
+    dispatch_id: str,
+    correlation_id: str,
+    currency: Currency,
+    operation: LedgerOperation,
+    amount: Decimal,
+) -> LedgerCommand:
+    return LedgerCommand(
+        id=command_id,
+        dispatch_id=dispatch_id,
+        correlation_id=correlation_id,
+        currency=currency,
+        operation=operation,
+        amount=amount,
+    )
