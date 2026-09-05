@@ -119,8 +119,9 @@ def test_structured_decision_logs_with_the_workflow_correlation_id() -> None:
 
 def test_repository_injection_reloads_provider_state_and_rechecks_unknown_provider() -> None:
     from datetime import datetime
+    from uuid import uuid4
 
-    provider_id = "risk-layer-repository-test-book"
+    provider_id = f"risk-layer-repository-test-book-{uuid4()}"
     repository = PostgresProviderStateRepository()
     layer = OperationalRiskLayer(provider_state_repository=repository)
 
