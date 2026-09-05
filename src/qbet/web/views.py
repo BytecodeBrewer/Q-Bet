@@ -14,7 +14,13 @@ from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
-from qbet.reporting import ReportDetailSelection
+from qbet.reporting import (
+    CustomerReportUnavailable,
+    CustomerResultReport,
+    ReportDetailSelection,
+    SimulationReport,
+)
+from qbet.reporting.exports import CustomerReportExport, json_bytes
 from qbet.simulation import SimulationEngine
 from qbet.storage.postgres import PostgresSimulationReportReader
 from qbet.web.controls import (
@@ -32,7 +38,6 @@ from qbet.web.forms import (
     SimulationStartForm,
 )
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
-from qbet.web.report_exports import SimulationReportExport
 from qbet.web.simulation_control import (
     SimulationControlError,
     SimulationControlService,
@@ -293,9 +298,10 @@ def report_history(request: HttpRequest) -> HttpResponse:
     snapshot = MONITORING_SERVICE.snapshot()
     engine_id = request.GET.get("engine")
     reports = tuple(
-        report
+        customer_report
         for report in snapshot.reports
         if engine_id in (None, "") or report.engine == engine_id
+        if (customer_report := _customer_report(report)) is not None
     )
     return render(
         request,
@@ -312,8 +318,7 @@ def report_history(request: HttpRequest) -> HttpResponse:
 @login_required
 def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
     _require_staff(request)
-    selection = _selection(request)
-    lookup = MONITORING_SERVICE.load_report(run_id, selection)
+    lookup = MONITORING_SERVICE.load_report(run_id, ReportDetailSelection())
     if lookup.report is None:
         return render(
             request,
@@ -321,14 +326,23 @@ def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
             _context(request, message=lookup.message or "This report is not available."),
             status=404,
         )
+    customer_report = _customer_report(lookup.report)
+    if customer_report is None:
+        return render(
+            request,
+            "qbet_web/report_unavailable.html",
+            _context(
+                request,
+                message="Required business data is unavailable, so no customer report was created.",
+            ),
+            status=404,
+        )
     return render(
         request,
         "qbet_web/report_detail.html",
         _context(
             request,
-            report=lookup.report,
-            detail_selection=selection,
-            detail_message=lookup.message,
+            report=customer_report,
         ),
     )
 
@@ -336,14 +350,20 @@ def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
 @login_required
 def report_export(request: HttpRequest, run_id: UUID, export_format: str) -> HttpResponse:
     _require_staff(request)
-    selection = _selection(request)
-    lookup = MONITORING_SERVICE.load_report(run_id, selection)
+    lookup = MONITORING_SERVICE.load_report(run_id, ReportDetailSelection())
     if lookup.report is None:
         raise Http404(lookup.message or "Report not found.")
-    export = SimulationReportExport.from_report(lookup.report, selection)
+    customer_report = _customer_report(lookup.report)
+    if customer_report is None:
+        raise Http404("Customer report is unavailable because required business data is missing.")
+    export = CustomerReportExport(customer_report)
     if export_format == "json":
-        response = JsonResponse(export.json_document(), json_dumps_params={"indent": 2})
+        response = HttpResponse(json_bytes(export), content_type="application/json; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="qbet-report-{run_id}.json"'
+        return response
+    if export_format == "pdf":
+        response = HttpResponse(export.pdf_document(), content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="qbet-report-{run_id}.pdf"'
         return response
     if export_format != "csv":
         raise Http404("Export format not found.")
@@ -355,6 +375,15 @@ def report_export(request: HttpRequest, run_id: UUID, export_format: str) -> Htt
     response = HttpResponse(output.getvalue(), content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="qbet-report-{run_id}.csv"'
     return response
+
+
+def _customer_report(report: object) -> CustomerResultReport | None:
+    if not isinstance(report, SimulationReport):
+        return None
+    try:
+        return CustomerResultReport.from_simulation_report(report)
+    except CustomerReportUnavailable:
+        return None
 
 
 @user_passes_test(_is_staff, login_url="login")

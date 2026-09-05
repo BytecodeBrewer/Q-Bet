@@ -14,7 +14,7 @@ from qbet.domain.verification import (
 )
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.layers import OperationalRiskLayer, SimulationLogContext
-from qbet.reporting import SimulationReport
+from qbet.reporting import CustomerReportInput, SimulationReport
 from qbet.simulation.adapters import (
     BonusSimulationAdapter,
     SimulationEngineAdapter,
@@ -46,6 +46,7 @@ class WorkflowSimulationRequest(DomainModel):
     opportunities: tuple[WorkflowSimulationOpportunity, ...] = Field(min_length=1)
     provider_state: ProviderState
     correlation_id: UUID | None = None
+    customer_report_input: CustomerReportInput | None = None
 
     @model_validator(mode="after")
     def opportunities_match_simulation_engine(self) -> "WorkflowSimulationRequest":
@@ -178,6 +179,7 @@ class WorkflowSimulationRunner:
             on_step_completed=on_step_completed,
             on_step_ready=route_step,
             log_context=log_context,
+            customer_report_input=request.customer_report_input,
         )
         self.last_report = self._runner.last_report
         self.last_records = self._runner.last_records

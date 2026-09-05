@@ -11,7 +11,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
-from qbet.reporting import SimulationReport
+from qbet.reporting import CustomerReportAmount, CustomerReportInput, SimulationReport
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
 from qbet.web.models import SimulationAvailability
 from qbet.web.monitoring import MonitoringService
@@ -66,6 +66,18 @@ def _report(
         elapsed_duration=timedelta(minutes=5),
         progress=Decimal(1),
         generated_at=datetime(2026, 9, 2, tzinfo=UTC),
+        customer_report_input=CustomerReportInput(
+            match="Northbridge v Riverside",
+            provider="Bookmaker A",
+            counterparty_provider="Exchange B",
+            strategy="Qualifying bet",
+            assigned_amounts=(
+                CustomerReportAmount(label="Back stake", amount=Decimal("50")),
+                CustomerReportAmount(label="Lay stake", amount=Decimal("48.25")),
+            ),
+            invested_capital=Decimal("50"),
+            currency="EUR",
+        ),
     )
 
 
@@ -298,102 +310,35 @@ class GuiControlPlaneTests(TestCase):
         self.assertContains(history, "bonus")
         self.assertContains(history, "sports_capital")
 
-    def test_report_exports_share_required_metadata_and_selected_sections(self) -> None:
+    def test_customer_report_exports_share_business_data_across_all_formats(self) -> None:
         self.client.force_login(self.staff)
-        detail_url = f"/reports/{self.bonus_report.run_id}/"
-        all_sections = (
-            "include_events=1&include_intermediate_results=1&include_raw_inputs=1&"
-            "include_warnings=1&include_errors=1&include_risk_decisions=1&"
-            "include_workflow_transitions=1"
-        )
-
-        compact = self.client.get(detail_url)
-        selected = self.client.get(f"{detail_url}?{all_sections}")
-        json_export = self.client.get(
-            f"/reports/{self.bonus_report.run_id}/export/json/?{all_sections}"
-        )
-        csv_export = self.client.get(
-            f"/reports/{self.bonus_report.run_id}/export/csv/?{all_sections}"
-        )
-
-        self.assertEqual(compact.status_code, 200)
-        self.assertNotIn("fixture", compact.content.decode())
-        self.assertIn("fixture", selected.content.decode())
+        report = self.sports_report
+        detail = self.client.get(f"/reports/{report.run_id}/")
+        json_export = self.client.get(f"/reports/{report.run_id}/export/json/")
+        csv_export = self.client.get(f"/reports/{report.run_id}/export/csv/")
+        pdf_export = self.client.get(f"/reports/{report.run_id}/export/pdf/")
 
         payload = json.loads(json_export.content)
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, "Northbridge v Riverside")
+        self.assertNotContains(detail, "Workflow transitions")
         self.assertEqual(json_export.status_code, 200)
-        self.assertEqual(payload["run_id"], str(self.bonus_report.run_id))
-        self.assertEqual(payload["engine"], "bonus")
+        self.assertEqual(payload["report_id"], str(report.run_id))
+        self.assertEqual(payload["engine"], "sports_capital")
         self.assertEqual(payload["mode"], "simulation")
-        self.assertTrue(payload["generated_at"].endswith("+00:00"))
-        self.assertEqual(
-            set(payload["details"]),
-            {
-                "events",
-                "intermediate_results",
-                "raw_input_snapshots",
-                "warnings",
-                "errors",
-                "risk_decisions",
-                "workflow_transitions",
-            },
-        )
-        self.assertEqual(payload["details"]["raw_input_snapshots"][0]["market"], "fixture")
-        self.assertEqual(
-            payload["details"]["raw_input_snapshots"][0]["credential"],
-            "raw-input-secret",
-        )
+        self.assertEqual(payload["providers"]["primary"], "Bookmaker A")
+        self.assertEqual(payload["profit_loss"], "12")
+        self.assertNotIn("details", payload)
 
         content = csv_export.content.decode()
         self.assertEqual(csv_export.status_code, 200)
-        self.assertIn("run_id," + str(self.bonus_report.run_id), content)
-        self.assertIn("engine,bonus", content)
+        self.assertIn("report_id," + str(report.run_id), content)
+        self.assertIn("match,Northbridge v Riverside", content)
         self.assertIn("mode,simulation", content)
-        self.assertIn(f"generated_at,{payload['generated_at']}", content)
-        for field in payload["details"]:
-            self.assertIn(f"detail.{field}", content)
-
-    def test_report_exports_redact_non_raw_sensitive_log_payloads(self) -> None:
-        self.client.force_login(self.staff)
-        selection = (
-            "include_warnings=1&include_errors=1&include_risk_decisions=1&"
-            "include_workflow_transitions=1"
-        )
-        json_export = self.client.get(
-            f"/reports/{self.bonus_report.run_id}/export/json/?{selection}"
-        )
-        csv_export = self.client.get(f"/reports/{self.bonus_report.run_id}/export/csv/?{selection}")
-
-        json_content = json_export.content.decode()
-        csv_content = csv_export.content.decode()
-        for sensitive_value in (
-            "workflow-secret",
-            "warning-credential",
-            "warning-account",
-            "error-token",
-            "risk-account",
-        ):
-            self.assertNotIn(sensitive_value, json_content)
-            self.assertNotIn(sensitive_value, csv_content)
-        for sensitive_key in (
-            "secret",
-            "credential",
-            "account_id",
-            "token",
-            "account_identifier",
-        ):
-            self.assertNotIn(sensitive_key, json_content)
-            self.assertNotIn(sensitive_key, csv_content)
-
-        payload = json.loads(json_content)
-        self.assertEqual(
-            payload["details"]["warnings"][0]["payload"],
-            {"message": "safe warning"},
-        )
-        self.assertEqual(
-            payload["details"]["workflow_transitions"][0]["payload"],
-            {"stage": "data_aggregation", "decision": "allow"},
-        )
+        self.assertNotIn("workflow-secret", content)
+        self.assertEqual(pdf_export.status_code, 200)
+        self.assertEqual(pdf_export["Content-Type"], "application/pdf")
+        self.assertTrue(pdf_export.content.startswith(b"%PDF-1.4"))
 
     def test_missing_simulation_report_has_safe_admin_state(self) -> None:
         self.client.force_login(self.staff)
