@@ -47,17 +47,36 @@ class StaticLiquidityChecker:
 
 
 class WorkflowOrchestrator:
+    def route(self, engine, opportunity_id, correlation_id, owner):
+        from qbet.workflow.routing import RoutingConfiguration
+
+        return self.route_opportunity(
+            self._routing_configuration or RoutingConfiguration(),
+            engine,
+            opportunity_id,
+            correlation_id,
+            owner,
+        )
+
+    @staticmethod
+    def route_opportunity(configuration, engine, opportunity_id, correlation_id, owner):
+        from qbet.workflow.routing import resolve_routes
+
+        return resolve_routes(configuration, engine, opportunity_id, correlation_id, owner)
+
     def __init__(
         self,
         stage_handlers: Mapping[WorkflowStage, WorkflowStageHandler] | None = None,
         *,
         liquidity_checker: LiquidityChecker | None = None,
         request_handler: RequestHandler | None = None,
+        routing_configuration=None,
     ) -> None:
         self._stage_handlers = dict(stage_handlers or {})
         self._liquidity_checker = liquidity_checker
         # This ticket defines the refresh seam; later workflow stages invoke it explicitly.
         self._request_handler = request_handler
+        self._routing_configuration = routing_configuration
 
     def process(
         self,

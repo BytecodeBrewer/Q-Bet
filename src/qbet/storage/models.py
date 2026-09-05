@@ -43,3 +43,48 @@ class ProviderStateRow(models.Model):
 
     class Meta:
         db_table = "qbet_provider_states"
+
+
+class PortfolioLedgerRow(models.Model):
+    """Durable snapshot for one isolated mode and currency context."""
+
+    id = models.BigAutoField(primary_key=True)
+    mode = models.CharField(max_length=16)
+    currency = models.CharField(max_length=3)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_portfolio_ledgers"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("mode", "currency"),
+                name="qbet_portfolio_ledger_mode_currency_unique",
+            )
+        ]
+
+
+class ExecutionRecordRow(models.Model):
+    """Durable approval and settlement lifecycle snapshot."""
+
+    record_id = models.UUIDField(primary_key=True, editable=False)
+    correlation_id = models.UUIDField(db_index=True)
+    mode = models.CharField(max_length=16)
+    state = models.CharField(max_length=32)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_execution_records"
+        ordering = ("-updated_at",)
+
+
+class RoutingConfigurationRow(models.Model):
+    """Durable GUI-controlled engine and mode routing configuration."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_routing_configurations"
