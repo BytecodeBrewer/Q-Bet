@@ -28,15 +28,11 @@ class Command(BaseCommand):
             if simulation_db:
                 summary = import_simulation_history(simulation_db)
                 total = total.combine(summary)
-                self.stdout.write(
-                    self._format_summary("simulation", summary)
-                )
+                self.stdout.write(self._format_summary("simulation", summary))
             if provider_db:
                 summary = import_provider_state(provider_db)
                 total = total.combine(summary)
-                self.stdout.write(
-                    self._format_summary("provider-state", summary)
-                )
+                self.stdout.write(self._format_summary("provider-state", summary))
         except LegacySQLiteImportError as error:
             raise CommandError(str(error)) from error
 

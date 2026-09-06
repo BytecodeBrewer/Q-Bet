@@ -33,7 +33,10 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="ProviderStateRow",
             fields=[
-                ("provider_id", models.CharField(max_length=255, primary_key=True, serialize=False)),
+                (
+                    "provider_id",
+                    models.CharField(max_length=255, primary_key=True, serialize=False),
+                ),
                 ("active_bets_count", models.PositiveIntegerField(default=0)),
                 ("last_bet_timestamp", models.DateTimeField(blank=True, null=True)),
                 ("is_cooldown_active", models.BooleanField(default=False)),
@@ -55,7 +58,12 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="SimulationRecordRow",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
                 ("run_id", models.UUIDField()),
                 ("sequence", models.BigIntegerField()),
                 ("payload", models.TextField()),

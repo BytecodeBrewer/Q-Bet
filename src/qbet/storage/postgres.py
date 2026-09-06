@@ -18,7 +18,11 @@ class PostgresSimulationReportReader:
 
     def load_report(self, run_id: UUID) -> SimulationReport:
         try:
-            row = SimulationReportRow.objects.filter(run_id=run_id).values_list("payload", flat=True).first()
+            row = (
+                SimulationReportRow.objects.filter(run_id=run_id)
+                .values_list("payload", flat=True)
+                .first()
+            )
         except DatabaseError as error:
             raise OSError("simulation history is unavailable") from error
         if row is None:
@@ -43,8 +47,9 @@ class PostgresSimulationReportReader:
             raise ValueError("limit must be positive")
         try:
             rows = tuple(
-                SimulationReportRow.objects.order_by("-generated_at")
-                .values_list("payload", flat=True)[:limit]
+                SimulationReportRow.objects.order_by("-generated_at").values_list(
+                    "payload", flat=True
+                )[:limit]
             )
         except DatabaseError as error:
             raise OSError("simulation history is unavailable") from error

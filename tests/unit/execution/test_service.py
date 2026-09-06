@@ -48,9 +48,7 @@ def proposal(*, expires_at: datetime | None = None) -> ExecutionProposal:
 
 def ledger() -> PortfolioLedger:
     return PortfolioLedger(
-        balance=PortfolioBalance(
-            mode="execution", currency="EUR", available=Decimal("1000")
-        )
+        balance=PortfolioBalance(mode="execution", currency="EUR", available=Decimal("1000"))
     )
 
 
@@ -97,9 +95,7 @@ def test_approval_dispatch_and_settlement_are_explicit_and_deterministic():
 def test_expired_proposal_is_rejected_before_reservation():
     original = ledger()
     record, state = ExecutionService().decide(
-        ExecutionRecord(
-            proposal=proposal(expires_at=datetime(2025, 1, 1, tzinfo=UTC))
-        ),
+        ExecutionRecord(proposal=proposal(expires_at=datetime(2025, 1, 1, tzinfo=UTC))),
         original,
         actor="owner",
         owner="owner",

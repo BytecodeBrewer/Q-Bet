@@ -114,13 +114,8 @@ class WorkflowOrchestrator:
                 final_decision = refresh_decision.decision
                 if final_decision is not WorkflowDecision.ALLOW:
                     break
-            if (
-                self._mode_request_handlers is not None
-                and stage is WorkflowStage.DISPATCH
-            ):
-                revalidation = self._mode_request_handlers.revalidate(
-                    self._mode_request(context)
-                )
+            if self._mode_request_handlers is not None and stage is WorkflowStage.DISPATCH:
+                revalidation = self._mode_request_handlers.revalidate(self._mode_request(context))
                 decision_name, reason = self._mode_request_handlers.workflow_decision(revalidation)
                 mode_decision = WorkflowStageDecision(
                     decision=WorkflowDecision(decision_name), reason=reason

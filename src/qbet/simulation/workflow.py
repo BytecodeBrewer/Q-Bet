@@ -14,12 +14,8 @@ from qbet.domain.verification import (
 )
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.layers import OperationalRiskLayer, SimulationLogContext
-<<<<<<< HEAD
-from qbet.reporting import CustomerReportInput, SimulationReport
-=======
 from qbet.reporting import SimulationReport
 from qbet.request_handler import ModeRequestHandlers
->>>>>>> 7777f38 (feat(#96): add mode-specific sandbox request handlers)
 from qbet.simulation.adapters import (
     BonusSimulationAdapter,
     SimulationEngineAdapter,

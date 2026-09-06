@@ -19,12 +19,14 @@ def ledger_command(record: ExecutionRecord, operation: LedgerOperation, amount) 
 
 
 def transition(record: ExecutionRecord, state: Lifecycle, **changes) -> ExecutionRecord:
-    return ExecutionRecord.model_validate({
-        **record.model_dump(),
-        "state": state,
-        "transitions": (*record.transitions, state),
-        **changes,
-    })
+    return ExecutionRecord.model_validate(
+        {
+            **record.model_dump(),
+            "state": state,
+            "transitions": (*record.transitions, state),
+            **changes,
+        }
+    )
 
 
 class SettlementService:
@@ -46,6 +48,8 @@ class SettlementService:
         if not decision.accepted:
             return record.model_copy(update={"error": decision.reason}), ledger
         state = {
-            "success": Lifecycle.SETTLED, "failed": Lifecycle.FAILED, "cancelled": Lifecycle.CANCELLED
+            "success": Lifecycle.SETTLED,
+            "failed": Lifecycle.FAILED,
+            "cancelled": Lifecycle.CANCELLED,
         }[result.status]
         return transition(record, state, result=result, error=None), updated

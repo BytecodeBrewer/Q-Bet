@@ -43,12 +43,16 @@ def handlers(
     simulation_status: ResultStatus = ResultStatus.SUCCESS,
     execution_status: ResultStatus = ResultStatus.SUCCESS,
 ) -> ModeRequestHandlers:
-    def revalidation(opportunity_id: str, outcome: RevalidationOutcome) -> SandboxRevalidationFixture:
+    def revalidation(
+        opportunity_id: str, outcome: RevalidationOutcome
+    ) -> SandboxRevalidationFixture:
         return SandboxRevalidationFixture(
             opportunity_id=opportunity_id,
             outcome=outcome,
             validated_at=_TIMESTAMP,
-            reason_code=None if outcome is RevalidationOutcome.VALID else f"{outcome.value}_fixture",
+            reason_code=None
+            if outcome is RevalidationOutcome.VALID
+            else f"{outcome.value}_fixture",
         )
 
     def result(opportunity_id: str, status: ResultStatus) -> SandboxResultFixture:

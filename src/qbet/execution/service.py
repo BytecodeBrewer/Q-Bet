@@ -6,7 +6,9 @@ from typing import Protocol
 from qbet.domain.ledger import LedgerOperation
 from qbet.execution.models import ApprovedExecutionRequest, ExecutionRecord, Lifecycle
 from qbet.execution.sandbox import (
-    BonusSandboxAdapter, SandboxRequestHandler, SportsCapitalSandboxAdapter,
+    BonusSandboxAdapter,
+    SandboxRequestHandler,
+    SportsCapitalSandboxAdapter,
 )
 from qbet.ledger import PortfolioLedger
 from qbet.settlement import SettlementService, ledger_command, transition
@@ -40,8 +42,14 @@ class ExecutionService:
         return record, ledger
 
     def decide(
-        self, record: ExecutionRecord, ledger: PortfolioLedger, *,
-        actor: str, owner: str, approve: bool, now: datetime,
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+        *,
+        actor: str,
+        owner: str,
+        approve: bool,
+        now: datetime,
     ) -> tuple[ExecutionRecord, PortfolioLedger]:
         if not actor or actor != owner:
             raise PermissionError("proposal_owner_required")
@@ -53,9 +61,7 @@ class ExecutionService:
         if ledger.balance.mode != record.proposal.work.mode.value:
             reason = "ledger_mode_mismatch"
         if reason:
-            return self._persist(
-                transition(record, Lifecycle.REJECTED, error=reason), ledger
-            )
+            return self._persist(transition(record, Lifecycle.REJECTED, error=reason), ledger)
         reserved, decision = ledger.apply(
             ledger_command(record, LedgerOperation.RESERVE, record.proposal.capital_required)
         )
