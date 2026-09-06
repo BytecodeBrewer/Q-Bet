@@ -437,10 +437,12 @@ class ModeSettlementIsolationE2ETests(TransactionTestCase):
     def test_non_successful_result_statuses_persist_safe_queue_decisions(self) -> None:
         expected = {
             ResultStatus.NOT_YET_AVAILABLE: WorkState.RECHECK,
+            ResultStatus.PARTIAL: WorkState.RECHECK,
             ResultStatus.FAILED: WorkState.FAILED,
             ResultStatus.UNKNOWN: WorkState.FAILED,
         }
         results: dict[ResultStatus, WorkState] = {}
+        queue_items = {}
         for index, (status, state) in enumerate(expected.items(), start=1):
             request = _sports_request().model_copy(
                 update={"opportunity_id": f"sports-result-{status.value}"}
@@ -459,10 +461,15 @@ class ModeSettlementIsolationE2ETests(TransactionTestCase):
             )
             (result,) = coordinator.dispatch_due(now=NOW, owner="owner")
             results[status] = result.state
+            queue_items[status] = result
 
         self.assertEqual(results, expected)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
+
+        partial_item = queue_items[ResultStatus.PARTIAL]
+        self.assertEqual(partial_item.state, WorkState.RECHECK)
+        self.assertEqual(partial_item.history[-1].reason, "result_partial")
 
     def test_simulation_only_bonus_persists_a_report_without_execution_state(self) -> None:
         request = _bonus_request()

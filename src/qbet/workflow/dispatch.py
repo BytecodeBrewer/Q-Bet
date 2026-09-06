@@ -117,6 +117,17 @@ class ModeDispatchCoordinator:
                     )
                 )
                 continue
+            if handler_result is not None and handler_result.status is ResultStatus.PARTIAL:
+                # A request-handler partial result has no validated settlement amount. Keep the
+                # durable work item pending for a complete result rather than treating it as a loss.
+                processed.append(
+                    self._queue_repository.save(
+                        processing.transition(
+                            WorkState.RECHECK, now=now, reason="result_partial"
+                        )
+                    )
+                )
+                continue
             if handler_result is not None and handler_result.status is ResultStatus.CANCELLED:
                 processed.append(
                     self._queue_repository.save(
