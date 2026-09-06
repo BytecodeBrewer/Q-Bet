@@ -14,7 +14,7 @@ from qbet.domain.verification import (
 )
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.layers import OperationalRiskLayer, SimulationLogContext
-from qbet.reporting import SimulationReport
+from qbet.reporting import CustomerReportInput, SimulationReport
 from qbet.request_handler import ModeRequestHandlers
 from qbet.simulation.adapters import (
     BonusSimulationAdapter,
