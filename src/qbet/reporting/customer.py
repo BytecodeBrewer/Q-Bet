@@ -40,7 +40,9 @@ class CustomerResultReport:
     @classmethod
     def from_simulation_report(cls, report: SimulationReport) -> CustomerResultReport:
         if report.status is not SimulationStatus.COMPLETED:
-            raise CustomerReportUnavailable("This result is not completed and cannot be reported yet.")
+            raise CustomerReportUnavailable(
+                "This result is not completed and cannot be reported yet."
+            )
         if report.customer_report_input is None:
             raise CustomerReportUnavailable(
                 "Required business data is unavailable, so no customer report was created."

@@ -261,7 +261,9 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
             user=request.user,
         )
     except DatabaseError:
-        messages.error(request, "Simulation completed but its customer report access is unavailable.")
+        messages.error(
+            request, "Simulation completed but its customer report access is unavailable."
+        )
         return redirect("dashboard")
 
     messages.success(
@@ -316,7 +318,8 @@ def report_history(request: HttpRequest) -> HttpResponse:
             customer_report := _customer_report(
                 MONITORING_SERVICE.load_report(summary.run_id, ReportDetailSelection()).report
             )
-        ) is not None
+        )
+        is not None
     )
     return render(
         request,
@@ -420,7 +423,9 @@ def _visible_customer_report_ids(request: HttpRequest) -> set[UUID] | None:
         return None
     try:
         return set(
-            CustomerReportAccess.objects.filter(user=request.user).values_list("report_id", flat=True)
+            CustomerReportAccess.objects.filter(user=request.user).values_list(
+                "report_id", flat=True
+            )
         )
     except DatabaseError:
         return set()

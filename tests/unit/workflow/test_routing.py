@@ -26,9 +26,7 @@ def test_both_modes_create_distinct_isolated_work_items():
 
 def test_disabled_mode_is_not_routed_and_resolution_is_repeatable():
     correlation_id = uuid4()
-    config = RoutingConfiguration(
-        sports_capital=EngineModes(simulation=False, execution=True)
-    )
+    config = RoutingConfiguration(sports_capital=EngineModes(simulation=False, execution=True))
     first = resolve_routes(config, "sports_capital", "opportunity", correlation_id, "run")
     second = resolve_routes(config, "sports_capital", "opportunity", correlation_id, "run")
     assert len(first) == 1

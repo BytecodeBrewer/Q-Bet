@@ -91,7 +91,9 @@ class PostgresSimulationReportStoreTests(TestCase):
         self.assertEqual([record.sequence for record in records], list(range(1, len(records) + 1)))
         self.assertEqual(detailed_report.events[0].sequence, 1)
         self.assertEqual(detailed_report.intermediate_results, result.evaluations)
-        self.assertEqual(detailed_report.raw_input_snapshots[0]["config"]["starting_capital"], "100.10")
+        self.assertEqual(
+            detailed_report.raw_input_snapshots[0]["config"]["starting_capital"], "100.10"
+        )
         self.assertEqual(reopened_store.list_recent_reports(), (compact_report,))
 
     def test_store_raises_for_missing_run_id(self) -> None:

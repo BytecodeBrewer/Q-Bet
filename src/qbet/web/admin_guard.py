@@ -3,9 +3,7 @@ from __future__ import annotations
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser
 
-_LAST_SUPERUSER_MESSAGE = (
-    "Q-Bet must retain at least one active staff superuser with admin access."
-)
+_LAST_SUPERUSER_MESSAGE = "Q-Bet must retain at least one active staff superuser with admin access."
 
 
 def is_active_admin(user: AbstractUser) -> bool:

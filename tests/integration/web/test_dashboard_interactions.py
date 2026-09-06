@@ -82,6 +82,8 @@ class DashboardInteractionTests(TestCase):
             encoding="utf-8"
         )
         narrow_viewport_rules = stylesheet.split("@media (max-width: 760px)", maxsplit=1)[1]
-        narrow_viewport_rules = narrow_viewport_rules.split("@media (max-width: 440px)", maxsplit=1)[0]
+        narrow_viewport_rules = narrow_viewport_rules.split(
+            "@media (max-width: 440px)", maxsplit=1
+        )[0]
 
         self.assertNotIn(".drag-handle { display: none; }", narrow_viewport_rules)

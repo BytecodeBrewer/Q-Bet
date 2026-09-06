@@ -8,15 +8,17 @@ from qbet.ledger import PortfolioLedger
 
 
 def command(operation, amount="10", **overrides):
-    return LedgerCommand.model_validate({
-        "id": operation.value,
-        "dispatch_id": "dispatch",
-        "correlation_id": "correlation",
-        "currency": "EUR",
-        "operation": operation,
-        "amount": amount,
-        **overrides,
-    })
+    return LedgerCommand.model_validate(
+        {
+            "id": operation.value,
+            "dispatch_id": "dispatch",
+            "correlation_id": "correlation",
+            "currency": "EUR",
+            "operation": operation,
+            "amount": amount,
+            **overrides,
+        }
+    )
 
 
 def ledger():
@@ -46,7 +48,9 @@ def test_full_lifecycle_and_replay():
 @pytest.mark.parametrize("amount", ["-1", "Infinity", "-Infinity", "NaN"])
 def test_non_finite_or_negative_capital_is_rejected(amount):
     with pytest.raises(ValidationError):
-        PortfolioBalance.model_validate({"mode": "execution", "currency": "EUR", "available": amount})
+        PortfolioBalance.model_validate(
+            {"mode": "execution", "currency": "EUR", "available": amount}
+        )
     with pytest.raises(ValidationError):
         command(LedgerOperation.RESERVE, amount)
 

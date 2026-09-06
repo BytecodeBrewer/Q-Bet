@@ -27,7 +27,9 @@ class SandboxRequestHandler:
     def validate(self, proposal: ExecutionProposal, now: datetime) -> str | None:
         if now >= proposal.expires_at:
             return "proposal_expired"
-        expected_engine = "bonus" if isinstance(proposal.request, BonusEngineRequest) else "sports_capital"
+        expected_engine = (
+            "bonus" if isinstance(proposal.request, BonusEngineRequest) else "sports_capital"
+        )
         if proposal.work.engine != expected_engine:
             return "engine_mismatch"
         if proposal.request.currency != proposal.currency:

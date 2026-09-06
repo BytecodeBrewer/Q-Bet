@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from uuid import UUID
 
 from qbet.layers import SimulationLogContext, SimulationLogRecordType
+from qbet.request_handler import ModeRequest, ModeRequestHandlers, RequestHandlerMode
 from qbet.workflow.models import (
     WorkflowContext,
     WorkflowDecision,
@@ -70,12 +71,14 @@ class WorkflowOrchestrator:
         *,
         liquidity_checker: LiquidityChecker | None = None,
         request_handler: RequestHandler | None = None,
+        mode_request_handlers: ModeRequestHandlers | None = None,
         routing_configuration=None,
     ) -> None:
         self._stage_handlers = dict(stage_handlers or {})
         self._liquidity_checker = liquidity_checker
         # This ticket defines the refresh seam; later workflow stages invoke it explicitly.
         self._request_handler = request_handler
+        self._mode_request_handlers = mode_request_handlers
         self._routing_configuration = routing_configuration
 
     def process(
@@ -90,6 +93,7 @@ class WorkflowOrchestrator:
         log = log_context or SimulationLogContext(run_id=correlation_id)
         transitions: list[WorkflowTransition] = []
         final_decision = WorkflowDecision.ALLOW
+        request_handler_result = None
         for stage in request.stages:
             context = WorkflowContext(request=request, correlation_id=correlation_id, stage=stage)
             request_handler = self._request_handler
@@ -110,6 +114,23 @@ class WorkflowOrchestrator:
                 final_decision = refresh_decision.decision
                 if final_decision is not WorkflowDecision.ALLOW:
                     break
+            if self._mode_request_handlers is not None and stage is WorkflowStage.DISPATCH:
+                revalidation = self._mode_request_handlers.revalidate(self._mode_request(context))
+                decision_name, reason = self._mode_request_handlers.workflow_decision(revalidation)
+                mode_decision = WorkflowStageDecision(
+                    decision=WorkflowDecision(decision_name), reason=reason
+                )
+                self._record_transition(
+                    transitions,
+                    log,
+                    correlation_id,
+                    stage,
+                    WorkflowTransitionKind.REFRESH,
+                    mode_decision,
+                )
+                final_decision = mode_decision.decision
+                if final_decision is not WorkflowDecision.ALLOW:
+                    break
             decision = self._decide(context)
             self._record_transition(
                 transitions,
@@ -122,12 +143,31 @@ class WorkflowOrchestrator:
             final_decision = decision.decision
             if final_decision is not WorkflowDecision.ALLOW:
                 break
+            if self._mode_request_handlers is not None and stage is WorkflowStage.DISPATCH:
+                request_handler_result = self._mode_request_handlers.retrieve_result(
+                    self._mode_request(context)
+                )
+                log.record(
+                    SimulationLogRecordType.EVENT,
+                    "request_handler.result",
+                    request_handler_result.model_dump(mode="json"),
+                )
         return WorkflowResult(
             correlation_id=correlation_id,
             mode=request.mode,
             final_decision=final_decision,
             transitions=tuple(transitions),
             log_records=log.records,
+            request_handler_result=request_handler_result,
+        )
+
+    @staticmethod
+    def _mode_request(context: WorkflowContext) -> ModeRequest:
+        return ModeRequest(
+            opportunity_id=context.request.resolved_opportunity_id,
+            mode=RequestHandlerMode(context.request.mode.value),
+            correlation_id=context.correlation_id,
+            lifecycle_id=context.request.id,
         )
 
     @staticmethod

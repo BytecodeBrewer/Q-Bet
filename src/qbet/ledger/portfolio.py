@@ -5,7 +5,10 @@ from decimal import Decimal
 from pydantic import Field
 
 from qbet.domain.ledger import (
-    LedgerCommand, LedgerDecision, LedgerOperation, PortfolioBalance,
+    LedgerCommand,
+    LedgerDecision,
+    LedgerOperation,
+    PortfolioBalance,
 )
 from qbet.domain.models import Currency, DomainModel
 
