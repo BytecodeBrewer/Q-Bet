@@ -16,9 +16,11 @@ from .orchestrator import (
     WorkflowOrchestrator,
 )
 from .protocol import LiquidityChecker, RequestHandler, WorkflowStageHandler
+from .queue import QueuedWorkItem, WorkHistoryEvent, WorkState
 
 __all__ = [
     "LiquidityChecker",
+    "QueuedWorkItem",
     "RequestHandler",
     "StaticLiquidityChecker",
     "StaticRequestHandler",
@@ -34,4 +36,6 @@ __all__ = [
     "WorkflowStageHandler",
     "WorkflowTransition",
     "WorkflowTransitionKind",
+    "WorkHistoryEvent",
+    "WorkState",
 ]

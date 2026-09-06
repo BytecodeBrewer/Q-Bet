@@ -6,9 +6,10 @@ from django.db import transaction
 
 from qbet.execution.models import ExecutionRecord
 from qbet.ledger import PortfolioLedger
-from qbet.storage.models import ExecutionRecordRow, PortfolioLedgerRow
+from qbet.storage.models import ExecutionRecordRow, ModeWorkQueueRow, PortfolioLedgerRow
 from qbet.storage.models import RoutingConfigurationRow
 from qbet.workflow.routing import RoutingConfiguration
+from qbet.workflow.queue import QueuedWorkItem, WorkState
 
 
 class PortfolioLedgerRepository:
@@ -72,3 +73,39 @@ class RoutingConfigurationRepository:
         if row is None:
             return None
         return RoutingConfiguration.model_validate(row.payload)
+
+
+class ModeWorkQueueRepository:
+    """Persistence boundary for independent Simulation and Execution queues."""
+
+    def enqueue(self, item: QueuedWorkItem) -> QueuedWorkItem:
+        existing = self.load(item.work.id)
+        if existing is not None:
+            if existing.work != item.work or existing.request != item.request:
+                raise ValueError("work_id already belongs to a different dispatch")
+            return existing
+        return self.save(item)
+
+    def save(self, item: QueuedWorkItem) -> QueuedWorkItem:
+        ModeWorkQueueRow.objects.update_or_create(
+            work_id=item.work.id,
+            defaults={
+                "correlation_id": item.work.correlation_id,
+                "mode": item.work.mode.value,
+                "state": item.state.value,
+                "scheduled_for": item.scheduled_for,
+                "payload": item.model_dump(mode="json"),
+            },
+        )
+        return item
+
+    def load(self, work_id: UUID) -> QueuedWorkItem | None:
+        row = ModeWorkQueueRow.objects.filter(work_id=work_id).first()
+        return None if row is None else QueuedWorkItem.model_validate(row.payload)
+
+    def due(self, now) -> tuple[QueuedWorkItem, ...]:
+        rows = ModeWorkQueueRow.objects.filter(
+            scheduled_for__lte=now,
+            state=WorkState.PENDING.value,
+        )
+        return tuple(QueuedWorkItem.model_validate(row.payload) for row in rows)

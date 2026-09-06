@@ -19,6 +19,8 @@ from qbet.request_handler import (
     ModeRequestHandlers,
     RevalidationOutcome,
     SandboxRevalidationFixture,
+    SandboxResultFixture,
+    ResultStatus,
     SimulationSandboxRequestHandler,
 )
 from qbet.settlement import SettlementService, ledger_command, transition
@@ -28,8 +30,17 @@ from qbet.simulation import (
     WorkflowSimulationRequest,
     WorkflowSimulationRunner,
 )
-from qbet.storage.ledger import ExecutionRecordRepository, PortfolioLedgerRepository
-from qbet.storage.models import ExecutionRecordRow, PortfolioLedgerRow, SimulationReportRow
+from qbet.storage.ledger import (
+    ExecutionRecordRepository,
+    ModeWorkQueueRepository,
+    PortfolioLedgerRepository,
+)
+from qbet.storage.models import (
+    ExecutionRecordRow,
+    ModeWorkQueueRow,
+    PortfolioLedgerRow,
+    SimulationReportRow,
+)
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.workflow import (
     WorkflowDecision,
@@ -37,7 +48,9 @@ from qbet.workflow import (
     WorkflowOrchestrator,
     WorkflowRequest,
     WorkflowStage,
+    WorkState,
 )
+from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration, resolve_routes
 
 NOW = datetime(2026, 9, 6, 12, tzinfo=UTC)
@@ -93,8 +106,28 @@ def _handlers(opportunity_id: str, outcome: RevalidationOutcome = RevalidationOu
         reason_code=reason_code,
     )
     return ModeRequestHandlers(
-        simulation=SimulationSandboxRequestHandler(revalidation_fixtures=(fixture,)),
-        execution=ExecutionSandboxRequestHandler(revalidation_fixtures=(fixture,)),
+        simulation=SimulationSandboxRequestHandler(
+            revalidation_fixtures=(fixture,),
+            result_fixtures=(
+                SandboxResultFixture(
+                    opportunity_id=opportunity_id,
+                    status=ResultStatus.SUCCESS,
+                    observed_at=NOW,
+                    result_reference="sandbox-result",
+                ),
+            ),
+        ),
+        execution=ExecutionSandboxRequestHandler(
+            revalidation_fixtures=(fixture,),
+            result_fixtures=(
+                SandboxResultFixture(
+                    opportunity_id=opportunity_id,
+                    status=ResultStatus.SUCCESS,
+                    observed_at=NOW,
+                    result_reference="sandbox-result",
+                ),
+            ),
+        ),
     )
 
 
@@ -162,6 +195,138 @@ class ModeSettlementIsolationE2ETests(TestCase):
             now=NOW,
         )
         return record, ledger, ledger_repository, record_repository
+
+    def _coordinator(self, configuration: RoutingConfiguration, opportunity_id: str):
+        return ModeDispatchCoordinator(
+            configuration,
+            queue_repository=ModeWorkQueueRepository(),
+            mode_request_handlers=_handlers(opportunity_id),
+        )
+
+    def test_single_mode_is_scheduled_and_dispatched_once_from_one_opportunity(self) -> None:
+        request = _bonus_request()
+        coordinator = self._coordinator(
+            RoutingConfiguration(bonus=EngineModes(simulation=True)), request.opportunity_id
+        )
+
+        scheduled = coordinator.schedule(
+            request,
+            owner="owner",
+            correlation_id=CORRELATION_ID,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+        )
+        repeated = coordinator.schedule(
+            request,
+            owner="owner",
+            correlation_id=CORRELATION_ID,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+        )
+        dispatched = coordinator.dispatch_due(now=NOW, owner="owner")
+
+        self.assertEqual(len(scheduled), 1)
+        self.assertEqual(repeated, scheduled)
+        self.assertEqual(tuple(item.state for item in dispatched), (WorkState.COMPLETED,))
+        self.assertEqual(ModeWorkQueueRow.objects.count(), 1)
+        persisted = ModeWorkQueueRepository().load(scheduled[0].work.id)
+        self.assertIsNotNone(persisted)
+        assert persisted is not None
+        self.assertEqual(
+            tuple(event.state for event in persisted.history),
+            (WorkState.PENDING, WorkState.PROCESSING, WorkState.COMPLETED),
+        )
+        self.assertEqual(SimulationReportRow.objects.count(), 1)
+        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
+
+    def test_dual_mode_fanout_uses_persisted_isolated_queues_and_histories(self) -> None:
+        request = _sports_request()
+        coordinator = self._coordinator(
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True, execution=True)),
+            request.opportunity_id,
+        )
+
+        scheduled = coordinator.schedule(
+            request,
+            owner="owner",
+            correlation_id=CORRELATION_ID,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+        )
+        dispatched = coordinator.dispatch_due(now=NOW, owner="owner")
+
+        self.assertEqual(len(scheduled), 2)
+        self.assertEqual({item.work.mode for item in scheduled}, {WorkflowMode.SIMULATION, WorkflowMode.EXECUTION})
+        self.assertEqual({item.state for item in dispatched}, {WorkState.COMPLETED})
+        persisted = tuple(ModeWorkQueueRepository().load(item.work.id) for item in scheduled)
+        self.assertTrue(all(item is not None for item in persisted))
+        histories = [item.history for item in persisted if item is not None]
+        self.assertEqual(len(histories), 2)
+        self.assertTrue(all(history[-1].state is WorkState.COMPLETED for history in histories))
+        self.assertEqual(ModeWorkQueueRow.objects.count(), 2)
+        self.assertEqual(PortfolioLedgerRow.objects.count(), 2)
+        self.assertEqual(SimulationReportRow.objects.count(), 1)
+        self.assertEqual(ExecutionRecordRow.objects.count(), 1)
+
+    def test_queue_recheck_and_expiry_are_persisted_without_dispatch(self) -> None:
+        request = _sports_request()
+        recheck = ModeDispatchCoordinator(
+            RoutingConfiguration(sports_capital=EngineModes(execution=True)),
+            queue_repository=ModeWorkQueueRepository(),
+            mode_request_handlers=_handlers(request.opportunity_id, RevalidationOutcome.CHANGED),
+        )
+        (recheck_item,) = recheck.schedule(
+            request,
+            owner="owner",
+            correlation_id=CORRELATION_ID,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+        )
+        (rechecked,) = recheck.dispatch_due(now=NOW, owner="owner")
+
+        self.assertEqual(rechecked.state, WorkState.RECHECK)
+        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
+        expired = self._coordinator(
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True)), request.opportunity_id
+        )
+        (expired_item,) = expired.schedule(
+            request.model_copy(update={"opportunity_id": "sports-expired"}),
+            owner="owner",
+            correlation_id=UUID("87654321-4321-8765-4321-876543218765"),
+            scheduled_for=NOW - timedelta(minutes=2),
+            expires_at=NOW - timedelta(minutes=1),
+        )
+        expired_result = next(
+            item
+            for item in expired.dispatch_due(now=NOW, owner="owner")
+            if item.work.id == expired_item.work.id
+        )
+
+        self.assertEqual(recheck_item.work.id, rechecked.work.id)
+        self.assertEqual(expired_item.work.id, expired_result.work.id)
+        self.assertEqual(expired_result.state, WorkState.EXPIRED)
+        self.assertEqual(ModeWorkQueueRow.objects.count(), 2)
+
+    def test_revalidation_rejection_cancels_the_routed_execution_before_settlement(self) -> None:
+        request = _sports_request()
+        coordinator = ModeDispatchCoordinator(
+            RoutingConfiguration(sports_capital=EngineModes(execution=True)),
+            queue_repository=ModeWorkQueueRepository(),
+            mode_request_handlers=_handlers(request.opportunity_id, RevalidationOutcome.REJECTED),
+        )
+        coordinator.schedule(
+            request,
+            owner="owner",
+            correlation_id=CORRELATION_ID,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+        )
+
+        (result,) = coordinator.dispatch_due(now=NOW, owner="owner")
+
+        self.assertEqual(result.state, WorkState.CANCELLED)
+        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
+        self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
     def test_simulation_only_bonus_persists_a_report_without_execution_state(self) -> None:
         request = _bonus_request()
