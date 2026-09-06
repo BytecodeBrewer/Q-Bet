@@ -98,7 +98,11 @@ def _sports_request() -> SportsCapitalEngineRequest:
     )
 
 
-def _handlers(opportunity_id: str, outcome: RevalidationOutcome = RevalidationOutcome.VALID):
+def _handlers(
+    opportunity_id: str,
+    outcome: RevalidationOutcome = RevalidationOutcome.VALID,
+    result_status: ResultStatus = ResultStatus.SUCCESS,
+):
     reason_code = None if outcome is RevalidationOutcome.VALID else "fixture_rejected"
     fixture = SandboxRevalidationFixture(
         opportunity_id=opportunity_id,
@@ -106,28 +110,21 @@ def _handlers(opportunity_id: str, outcome: RevalidationOutcome = RevalidationOu
         validated_at=NOW,
         reason_code=reason_code,
     )
+    result_fixture = SandboxResultFixture(
+        opportunity_id=opportunity_id,
+        status=result_status,
+        observed_at=NOW,
+        reason_code=None if result_status is ResultStatus.SUCCESS else "fixture_result_status",
+        result_reference="sandbox-result" if result_status is ResultStatus.SUCCESS else None,
+    )
     return ModeRequestHandlers(
         simulation=SimulationSandboxRequestHandler(
             revalidation_fixtures=(fixture,),
-            result_fixtures=(
-                SandboxResultFixture(
-                    opportunity_id=opportunity_id,
-                    status=ResultStatus.SUCCESS,
-                    observed_at=NOW,
-                    result_reference="sandbox-result",
-                ),
-            ),
+            result_fixtures=(result_fixture,),
         ),
         execution=ExecutionSandboxRequestHandler(
             revalidation_fixtures=(fixture,),
-            result_fixtures=(
-                SandboxResultFixture(
-                    opportunity_id=opportunity_id,
-                    status=ResultStatus.SUCCESS,
-                    observed_at=NOW,
-                    result_reference="sandbox-result",
-                ),
-            ),
+            result_fixtures=(result_fixture,),
         ),
     )
 
@@ -377,12 +374,95 @@ class ModeSettlementIsolationE2ETests(TransactionTestCase):
                 now=NOW,
                 owner="owner",
                 sleep=controlled_sleep,
+                clock=lambda: scheduled_for,
             )
         )
 
         self.assertEqual(delays, [30.0])
         self.assertEqual(tuple(entry.state for entry in result), (WorkState.COMPLETED,))
         self.assertEqual(SimulationReportRow.objects.count(), 1)
+
+    def test_delayed_async_wake_marks_expired_work_without_dispatch(self) -> None:
+        request = _bonus_request()
+        coordinator = self._coordinator(
+            RoutingConfiguration(bonus=EngineModes(simulation=True)), request.opportunity_id
+        )
+        scheduled_for = NOW + timedelta(seconds=30)
+        expires_at = NOW + timedelta(seconds=45)
+        coordinator.schedule(
+            request,
+            owner="owner",
+            correlation_id=CORRELATION_ID,
+            scheduled_for=scheduled_for,
+            expires_at=expires_at,
+        )
+
+        async def delayed_sleep(_: float) -> None:
+            return None
+
+        (result,) = asyncio.run(
+            coordinator.wait_and_dispatch(
+                scheduled_for=scheduled_for,
+                now=NOW,
+                owner="owner",
+                sleep=delayed_sleep,
+                clock=lambda: expires_at + timedelta(seconds=1),
+            )
+        )
+
+        self.assertEqual(result.state, WorkState.EXPIRED)
+        self.assertEqual(SimulationReportRow.objects.count(), 0)
+
+    def test_recheck_cannot_be_rescheduled_past_its_expiry(self) -> None:
+        request = _sports_request()
+        coordinator = ModeDispatchCoordinator(
+            RoutingConfiguration(sports_capital=EngineModes(execution=True)),
+            queue_repository=ModeWorkQueueRepository(),
+            mode_request_handlers=_handlers(request.opportunity_id, RevalidationOutcome.CHANGED),
+        )
+        (item,) = coordinator.schedule(
+            request,
+            owner="owner",
+            correlation_id=CORRELATION_ID,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=1),
+        )
+        coordinator.dispatch_due(now=NOW, owner="owner")
+
+        with self.assertRaisesMessage(ValueError, "rescheduled work must remain before expires_at"):
+            ModeWorkQueueRepository().reschedule(
+                item.work.id, scheduled_for=NOW + timedelta(minutes=1), now=NOW
+            )
+
+    def test_non_successful_result_statuses_persist_safe_queue_decisions(self) -> None:
+        expected = {
+            ResultStatus.NOT_YET_AVAILABLE: WorkState.RECHECK,
+            ResultStatus.FAILED: WorkState.FAILED,
+            ResultStatus.UNKNOWN: WorkState.FAILED,
+        }
+        results: dict[ResultStatus, WorkState] = {}
+        for index, (status, state) in enumerate(expected.items(), start=1):
+            request = _sports_request().model_copy(
+                update={"opportunity_id": f"sports-result-{status.value}"}
+            )
+            coordinator = ModeDispatchCoordinator(
+                RoutingConfiguration(sports_capital=EngineModes(execution=True)),
+                queue_repository=ModeWorkQueueRepository(),
+                mode_request_handlers=_handlers(request.opportunity_id, result_status=status),
+            )
+            coordinator.schedule(
+                request,
+                owner="owner",
+                correlation_id=UUID(f"12345678-1234-5678-1234-{index:012d}"),
+                scheduled_for=NOW,
+                expires_at=NOW + timedelta(minutes=5),
+            )
+            (result,) = coordinator.dispatch_due(now=NOW, owner="owner")
+            results[status] = result.state
+
+        self.assertEqual(results, expected)
+        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
+        self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
     def test_simulation_only_bonus_persists_a_report_without_execution_state(self) -> None:
         request = _bonus_request()

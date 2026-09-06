@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -144,13 +145,15 @@ class ModeDispatchCoordinator:
         now: datetime,
         owner: str,
         sleep=asyncio.sleep,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> tuple[QueuedWorkItem, ...]:
         """Await a controlled clock boundary before atomically claiming due work."""
 
         delay = max(0.0, (scheduled_for - now).total_seconds())
         await sleep(delay)
+        actual_now = clock()
         return await sync_to_async(self.dispatch_due, thread_sensitive=True)(
-            now=scheduled_for, owner=owner
+            now=actual_now, owner=owner
         )
 
     def _run_simulation(self, item: QueuedWorkItem) -> None:

@@ -8,7 +8,8 @@ Issue #99 verifies the deterministic, PostgreSQL-backed boundaries already prese
 | Execution only | SportsCapitalEngine | Execution | Approval, reserve, lock, pending, sandbox dispatch, settlement, and retrieval persist in the execution context. |
 | Single-mode dispatch | BonusEngine | Simulation | One opportunity is scheduled once and produces one persisted mode work item, history, report, and Simulation ledger context. |
 | Dual mode | SportsCapitalEngine | Simulation + Execution | One opportunity fans out once into two persisted mode work items with independent histories, ledgers, report/record state, and capital contexts. |
-| Recheck, reschedule, and expiry | SportsCapitalEngine / BonusEngine | Execution / Simulation | A changed revalidation enters a durable waiting `recheck` state; a controlled async wait resumes only at the scheduled time; an expired item is never dispatched and is stored as expired. |
+| Recheck, reschedule, and expiry | SportsCapitalEngine / BonusEngine | Execution / Simulation | A changed revalidation enters a durable waiting `recheck` state; a controlled async wait re-reads the actual time before claim; an item that expired while waiting is never dispatched and is stored as expired. |
+| Non-success result | SportsCapitalEngine | Execution | `not_yet_available` persists `recheck`; `failed` and `unknown` persist `failed`; none creates an execution record or capital transition. |
 | Concurrent workers | SportsCapitalEngine | Execution | PostgreSQL atomically claims a due item before dispatch, so a second worker cannot execute or settle the same work item. |
 | Repeated delivery | SportsCapitalEngine | Execution | Repeating an already accepted result does not change lifecycle or ledger state. |
 | Cancellation | BonusEngine | Simulation + Execution | A cancelled execution releases its own pending principal without changing the completed simulation report. |
