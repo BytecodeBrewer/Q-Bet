@@ -4,7 +4,7 @@ Issue #99 verifies the deterministic, PostgreSQL-backed boundaries already prese
 
 | Scenario | Engine | Routing | Verified outcome |
 | --- | --- | --- | --- |
-| Simulation only | BonusEngine | Simulation | Report and ordered records persist; no execution record or execution ledger is written. |
+| Simulation only | BonusEngine | Simulation | Report, ordered records, and an isolated Simulation PortfolioLedger lifecycle persist; no execution record is written. |
 | Execution only | SportsCapitalEngine | Execution | Approval, reserve, lock, pending, sandbox dispatch, settlement, and retrieval persist in the execution context. |
 | Dual mode | SportsCapitalEngine | Simulation + Execution | Routing creates distinct work IDs and capital contexts; simulation report and execution record remain separate durable records. |
 | Repeated delivery | SportsCapitalEngine | Execution | Repeating an already accepted result does not change lifecycle or ledger state. |
@@ -13,4 +13,4 @@ Issue #99 verifies the deterministic, PostgreSQL-backed boundaries already prese
 
 ## Current Boundary
 
-Simulation has its own virtual-capital report model and PostgreSQL report history. Execution owns the current `PortfolioLedger` integration and durable execution lifecycle snapshots. The matrix verifies that these persisted contexts do not mix. Moving simulation starting capital itself behind `PortfolioLedger` remains a separate production-architecture change and is intentionally not introduced by this verification ticket.
+Simulation has its own virtual-capital report model, PostgreSQL report history, and a mode-specific PortfolioLedger lifecycle for evaluated steps. Execution keeps its separate approval and settlement lifecycle snapshot. The matrix verifies that these persisted capital and result contexts do not mix.

@@ -22,6 +22,7 @@ from qbet.simulation.models import (
 from qbet.simulation.runner import (
     DeterministicSimulationRunner,
     SimulationStepGate,
+    SimulationStepAppliedObserver,
     SimulationStepObserver,
 )
 from qbet.storage import SimulationReportStore
@@ -50,6 +51,7 @@ class ReportingSimulationRunner:
         steps: Iterable[SimulationStep],
         *,
         on_step_completed: SimulationStepObserver | None = None,
+        on_step_applied: SimulationStepAppliedObserver | None = None,
         on_step_ready: SimulationStepGate | None = None,
         log_context: SimulationLogContext | None = None,
         customer_report_input: CustomerReportInput | None = None,
@@ -110,6 +112,8 @@ class ReportingSimulationRunner:
                     "simulation.engine",
                     step.evaluation.model_dump(mode="json"),
                 )
+            if on_step_applied is not None:
+                on_step_applied(boundary)
 
         try:
             result = self._runner.run(

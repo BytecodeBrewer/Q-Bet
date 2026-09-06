@@ -129,9 +129,11 @@ class ModeSettlementIsolationE2ETests(TestCase):
         correlation_id: UUID = CORRELATION_ID,
     ):
         store = PostgresSimulationReportStore()
+        ledger_repository = PortfolioLedgerRepository()
         runner = WorkflowSimulationRunner(
             report_store=store,
             mode_request_handlers=_handlers(request.opportunity_id),
+            ledger_writer=ledger_repository.save,
         )
         result = runner.run(
             WorkflowSimulationRequest(
@@ -142,7 +144,8 @@ class ModeSettlementIsolationE2ETests(TestCase):
             )
         )
         assert runner.last_report is not None
-        return result, runner.last_report, store
+        assert runner.last_ledger is not None
+        return result, runner.last_report, store, runner.last_ledger, ledger_repository
 
     def _settle_execution(self, request: BonusEngineRequest | SportsCapitalEngineRequest, work):
         ledger_repository = PortfolioLedgerRepository()
@@ -170,7 +173,9 @@ class ModeSettlementIsolationE2ETests(TestCase):
             "owner",
         )
 
-        result, report, store = self._run_simulation(request, SimulationEngine.BONUS)
+        result, report, store, ledger, ledger_repository = self._run_simulation(
+            request, SimulationEngine.BONUS
+        )
 
         self.assertEqual(tuple(route.mode for route in routes), (WorkflowMode.SIMULATION,))
         evaluation = result.simulation_result.completed_steps[0].evaluation
@@ -179,7 +184,9 @@ class ModeSettlementIsolationE2ETests(TestCase):
         self.assertEqual(store.load_report(report.run_id), report)
         self.assertTrue(store.load_records(report.run_id))
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
-        self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
+        self.assertEqual(ledger_repository.load(mode="simulation", currency="EUR"), ledger)
+        self.assertEqual(ledger.balance.pending, Decimal(0))
+        self.assertEqual(ledger.balance.reserved, Decimal(0))
 
     def test_execution_only_sports_settles_and_retrieves_its_own_persisted_state(self) -> None:
         request = _sports_request()
@@ -214,9 +221,11 @@ class ModeSettlementIsolationE2ETests(TestCase):
         )
         simulation_work, execution_work = routes
 
-        simulation, report, report_store = self._run_simulation(
-            request,
-            SimulationEngine.SPORTS_CAPITAL,
+        simulation, report, report_store, simulation_ledger, simulation_ledger_repository = (
+            self._run_simulation(
+                request,
+                SimulationEngine.SPORTS_CAPITAL,
+            )
         )
         execution, ledger, ledger_repository, record_repository = self._settle_execution(
             request,
@@ -231,7 +240,11 @@ class ModeSettlementIsolationE2ETests(TestCase):
         self.assertEqual(report_store.load_report(report.run_id), report)
         self.assertEqual(record_repository.load(execution_work.id), execution)
         self.assertEqual(ledger_repository.load(mode="execution", currency="EUR"), ledger)
+        self.assertEqual(
+            simulation_ledger_repository.load(mode="simulation", currency="EUR"), simulation_ledger
+        )
         self.assertEqual(ExecutionRecordRow.objects.count(), 1)
+        self.assertEqual(PortfolioLedgerRow.objects.count(), 2)
         self.assertEqual(SimulationReportRow.objects.count(), 1)
 
     def test_repeated_settlement_delivery_is_idempotent(self) -> None:
@@ -262,7 +275,9 @@ class ModeSettlementIsolationE2ETests(TestCase):
             "owner",
         )
         _, execution_work = routes
-        simulation, report, report_store = self._run_simulation(request, SimulationEngine.BONUS)
+        simulation, report, report_store, _, _ = self._run_simulation(
+            request, SimulationEngine.BONUS
+        )
         record = ExecutionRecord(proposal=_execution_proposal(request, execution_work))
         ledger = _execution_ledger()
         for operation, state in (
