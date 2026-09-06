@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import Field
@@ -29,6 +29,27 @@ class ReportDetailSelection(DomainModel):
     include_errors: bool = False
     include_risk_decisions: bool = False
     include_workflow_transitions: bool = False
+
+
+class CustomerReportAmount(DomainModel):
+    """One business-facing allocation recorded on a completed result."""
+
+    label: str = Field(min_length=1, max_length=120)
+    amount: Decimal = Field(ge=Decimal(0), allow_inf_nan=False)
+
+
+class CustomerReportInput(DomainModel):
+    """Business data required before a completed result can become a customer report."""
+
+    match: str = Field(min_length=1, max_length=255)
+    provider: str = Field(min_length=1, max_length=120)
+    counterparty_provider: str = Field(min_length=1, max_length=120)
+    strategy: str = Field(min_length=1, max_length=120)
+    assigned_amounts: tuple[CustomerReportAmount, ...] = Field(min_length=1)
+    invested_capital: Decimal = Field(gt=Decimal(0), allow_inf_nan=False)
+    result_state: Literal["completed"] = "completed"
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    transaction_id: Identifier | None = None
 
 
 class CompletedStepSummary(DomainModel):
@@ -69,6 +90,7 @@ class SimulationReport(DomainModel):
     errors: tuple[SimulationLogRecord, ...] = ()
     risk_decisions: tuple[SimulationLogRecord, ...] = ()
     workflow_transitions: tuple[SimulationLogRecord, ...] = ()
+    customer_report_input: CustomerReportInput | None = None
 
 
 class SimulationReportBuilder:
@@ -80,6 +102,7 @@ class SimulationReportBuilder:
         result: SimulationResult,
         records: tuple[SimulationLogRecord, ...],
         selection: ReportDetailSelection | None = None,
+        customer_report_input: CustomerReportInput | None = None,
     ) -> SimulationReport:
         return self._build(
             run_id=run_id,
@@ -93,6 +116,7 @@ class SimulationReportBuilder:
             progress=result.progress,
             records=records,
             selection=selection or ReportDetailSelection(),
+            customer_report_input=customer_report_input,
         )
 
     def rebuild(
@@ -114,6 +138,7 @@ class SimulationReportBuilder:
             records=records,
             selection=selection,
             generated_at=compact_report.generated_at,
+            customer_report_input=compact_report.customer_report_input,
         )
 
     def _build(
@@ -129,6 +154,7 @@ class SimulationReportBuilder:
         records: tuple[SimulationLogRecord, ...],
         selection: ReportDetailSelection,
         generated_at: datetime | None = None,
+        customer_report_input: CustomerReportInput | None = None,
     ) -> SimulationReport:
         warnings = tuple(
             record for record in records if record.record_type is SimulationLogRecordType.WARNING
@@ -194,4 +220,5 @@ class SimulationReportBuilder:
             workflow_transitions=(
                 workflow_transitions if selection.include_workflow_transitions else ()
             ),
+            customer_report_input=customer_report_input,
         )

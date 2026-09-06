@@ -14,7 +14,8 @@ from qbet.domain.verification import (
 )
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.layers import OperationalRiskLayer, SimulationLogContext
-from qbet.reporting import SimulationReport
+from qbet.reporting import CustomerReportInput, SimulationReport
+from qbet.request_handler import ModeRequestHandlers
 from qbet.simulation.adapters import (
     BonusSimulationAdapter,
     SimulationEngineAdapter,
@@ -46,6 +47,7 @@ class WorkflowSimulationRequest(DomainModel):
     opportunities: tuple[WorkflowSimulationOpportunity, ...] = Field(min_length=1)
     provider_state: ProviderState
     correlation_id: UUID | None = None
+    customer_report_input: CustomerReportInput | None = None
 
     @model_validator(mode="after")
     def opportunities_match_simulation_engine(self) -> "WorkflowSimulationRequest":
@@ -111,11 +113,13 @@ class WorkflowSimulationRunner:
         liquidity_checker: LiquidityChecker | None = None,
         risk_layer: OperationalRiskLayer | None = None,
         report_store: SimulationReportStore | None = None,
+        mode_request_handlers: ModeRequestHandlers | None = None,
     ) -> None:
         self._liquidity_checker = liquidity_checker or StaticLiquidityChecker(
             WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
         )
         self._risk_layer = risk_layer or OperationalRiskLayer()
+        self._mode_request_handlers = mode_request_handlers
         self._runner = ReportingSimulationRunner(report_store)
         self.last_report: SimulationReport | None = None
         self.last_records = ()
@@ -151,6 +155,7 @@ class WorkflowSimulationRunner:
                     )
                 },
                 liquidity_checker=self._liquidity_checker,
+                mode_request_handlers=self._mode_request_handlers,
             )
             workflow_result = orchestrator.process(
                 WorkflowRequest(
@@ -165,6 +170,7 @@ class WorkflowSimulationRunner:
                         WorkflowStage.DISPATCH,
                     ),
                     correlation_id=correlation_id,
+                    opportunity_id=opportunity.opportunity_id,
                     payload={"opportunity_id": opportunity.opportunity_id},
                 ),
                 log_context=log_context,
@@ -178,6 +184,7 @@ class WorkflowSimulationRunner:
             on_step_completed=on_step_completed,
             on_step_ready=route_step,
             log_context=log_context,
+            customer_report_input=request.customer_report_input,
         )
         self.last_report = self._runner.last_report
         self.last_records = self._runner.last_records

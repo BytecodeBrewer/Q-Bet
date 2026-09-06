@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from pathlib import Path
-from sqlite3 import Error as SQLiteError
 from uuid import UUID, uuid4
 
 from django.conf import settings
@@ -15,6 +13,7 @@ from django.utils import timezone
 from qbet.calculations import ArbitrageOffer, QualifyingBetInput, TwoWayArbitrageInput
 from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
+from qbet.reporting import CustomerReportAmount, CustomerReportInput
 from qbet.simulation import (
     SimulationContext,
     SimulationEngine,
@@ -22,7 +21,7 @@ from qbet.simulation import (
     WorkflowSimulationRequest,
     WorkflowSimulationRunner,
 )
-from qbet.storage import SQLiteSimulationReportStore
+from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.web.models import SimulationAvailability, SimulationRunState
 
 _ACTIVE_STATUSES = (
@@ -48,10 +47,6 @@ class SimulationAlreadyRunningError(SimulationControlError):
 
 
 class SimulationDisableBlockedError(SimulationControlError):
-    pass
-
-
-class SimulationPersistenceUnavailableError(SimulationControlError):
     pass
 
 
@@ -250,18 +245,8 @@ class SimulationControlService:
         return bool(getattr(settings, "QBET_SIMULATION_MODE_ENABLED", False))
 
     @staticmethod
-    def _report_store() -> SQLiteSimulationReportStore:
-        database_path = getattr(settings, "QBET_SIMULATION_REPORT_DB", None)
-        if database_path is None:
-            raise SimulationPersistenceUnavailableError(
-                "Simulation report persistence is not configured."
-            )
-        try:
-            return SQLiteSimulationReportStore(Path(database_path))
-        except (OSError, SQLiteError) as error:
-            raise SimulationPersistenceUnavailableError(
-                "Simulation report persistence is unavailable."
-            ) from error
+    def _report_store() -> PostgresSimulationReportStore:
+        return PostgresSimulationReportStore()
 
     @staticmethod
     def _record_progress(run_id: UUID, context: SimulationContext) -> None:
@@ -363,4 +348,35 @@ class SimulationControlService:
                 active_bets_count=0,
             ),
             correlation_id=run_id,
+            customer_report_input=SimulationControlService._customer_report_input_for(config),
         )
+
+    @staticmethod
+    def _customer_report_input_for(config: SimulationRunConfig) -> CustomerReportInput:
+        if config.engine is SimulationEngine.BONUS:
+            return CustomerReportInput(
+                match="Deterministic bonus fixture",
+                provider="Fixture sportsbook",
+                counterparty_provider="Fixture exchange",
+                strategy="Qualifying bet",
+                assigned_amounts=(
+                    CustomerReportAmount(label="Back stake", amount=Decimal("10")),
+                    CustomerReportAmount(label="Lay stake", amount=Decimal("9.62")),
+                ),
+                invested_capital=Decimal("10"),
+                currency="EUR",
+            )
+        if config.engine is SimulationEngine.SPORTS_CAPITAL:
+            return CustomerReportInput(
+                match="Deterministic arbitrage fixture",
+                provider="Fixture sportsbook A",
+                counterparty_provider="Fixture sportsbook B",
+                strategy="Two-way arbitrage",
+                assigned_amounts=(
+                    CustomerReportAmount(label="Home allocation", amount=Decimal("10")),
+                    CustomerReportAmount(label="Away allocation", amount=Decimal("10")),
+                ),
+                invested_capital=Decimal("20"),
+                currency="EUR",
+            )
+        raise SimulationControlError("Unsupported simulation engine.")

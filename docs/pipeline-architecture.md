@@ -117,28 +117,30 @@ flowchart LR
     capital["Capital and Liquidity Flow"] --> events
     events --> logging["Structured Logging"]
     events --> reports["Reporting / Exports"]
-    events --> persistence["Persistence"]
+    events --> persistence["Operational Persistence"]
 
-    logging --> sqlite["SQLite<br>operational state"]
-    reports --> duckdb["DuckDB<br>analytics / replay"]
-    persistence --> sqlite
-    persistence --> duckdb
-    persistence -. "later" .-> cloud["Supabase / Postgres<br>multi-user and cloud"]
+    logging --> postgres["Supabase / PostgreSQL<br>durable operational state"]
+    reports --> postgres
+    persistence --> postgres
 
-    sqlite --> django["Django Web GUI"]
-    duckdb --> django
-    cloud --> django
-    django --> admin["Admin Monitoring<br>approvals, queues, warnings"]
+    reports --> duckdb["DuckDB<br>runtime-local analytics / replay"]
+    persistence -. "derived analytical work" .-> duckdb
+
+    postgres --> django["Django Web GUI"]
+    duckdb -. "runtime-local insight" .-> django
+    django --> admin["Admin Monitoring<br>users, approvals, queues, warnings"]
     django --> user["User Views<br>engines, reports, subaccount"]
     admin --> orchestrator["WorkflowOrchestrator<br>configuration and control"]
 
     classDef tracking fill:#dcfce7,stroke:#16a34a,color:#052e16;
-    class pipeline,capital,events,logging,reports,persistence,sqlite,duckdb,cloud,django,admin,user,orchestrator tracking;
+    class pipeline,capital,events,logging,reports,persistence,postgres,duckdb,django,admin,user,orchestrator tracking;
 ```
 
-Every important stage transition, calculation result, risk decision, allocation decision, approval, simulation result, execution result, and settlement emits structured events with a correlation id. SQLite is the local operational store; DuckDB serves analytics, replay, and larger simulation datasets. Supabase/Postgres is a later cloud and multi-user target.
+Every important stage transition, calculation result, risk decision, allocation decision, approval, simulation result, execution result, and settlement emits structured events with a correlation id. Supabase/PostgreSQL is the durable operational source of truth used by normal local and hosted Q-Bet runtimes. DuckDB serves runtime-local analytics, replay, backtesting, and larger transient analytical workloads; local and Vercel DuckDB contexts are separate and are not synchronized.
 
-The GUI observes and configures the system through `WorkflowOrchestrator`. It must never bypass the orchestrator or directly mutate calculation, risk, liquidity, or execution state. Admin views may expose the whole pipeline; normal user views expose their engines, approvals, reports, and assigned capital/subaccount state.
+Any result that must survive runtime termination or be visible across local and hosted application instances is persisted to PostgreSQL. SQLite is not part of the active architecture and exists only as a one-time legacy import source.
+
+The GUI observes and configures the system through `WorkflowOrchestrator`. It must never bypass the orchestrator or directly mutate calculation, risk, liquidity, or execution state. Django Admin is the central user/permission administration surface; Q-Bet admin views expose operational monitoring and controls. Normal user views expose their engines, approvals, reports, and assigned capital/subaccount state.
 
 ## 4. System Architecture Context
 
@@ -167,7 +169,7 @@ architecture-beta
     service orchestrator(server)[WorkflowOrchestrator] in operations
     service gui(server)[Django Web GUI] in operations
     service events(disk)[Structured Events and Reports] in operations
-    service stores(database)[SQLite DuckDB and Postgres Later] in operations
+    service stores(database)[Supabase Postgres and Runtime-local DuckDB] in operations
 
     dataApis:R --> L:ingestion
     ingestion:R --> L:engines
@@ -190,7 +192,7 @@ architecture-beta
     gui:B -- T:stores
 ```
 
-The pipeline remains the product's processing spine. `PortfolioLedger` is a separate capital authority connected through `LiquidityChecker` and adapters. `WorkflowOrchestrator` controls movement but owns neither calculations nor money. The monitoring plane observes both the pipeline and capital domain. API-capable exchanges and prediction markets connect directly to execution adapters; softbookers and ticket providers remain manual-first and may later use narrowly scoped, permitted browser execution.
+The pipeline remains the product's processing spine. `PortfolioLedger` is a separate capital authority connected through `LiquidityChecker` and adapters. `WorkflowOrchestrator` controls movement but owns neither calculations nor money. The monitoring plane observes both the pipeline and capital domain. Supabase/PostgreSQL owns durable operational state; DuckDB remains per-runtime analytical infrastructure. API-capable exchanges and prediction markets connect directly to execution adapters; softbookers and ticket providers remain manual-first and may later use narrowly scoped, permitted browser execution.
 
 ## Canonical Responsibilities
 

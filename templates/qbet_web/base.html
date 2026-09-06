@@ -9,23 +9,47 @@
   <script src="{% static 'qbet_web/dashboard.js' %}" defer></script>
 </head>
 <body data-theme="{{ preferences.theme|default:'light' }}" data-font-size="{{ preferences.font_size|default:'medium' }}">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="site-header">
-    <a class="brand" href="{% url 'home' %}">Q-Bet</a>
-    <nav aria-label="Main navigation">
-      {% if user.is_authenticated %}
-        <a href="{% url 'dashboard' %}">Dashboard</a>
-        {% if user.is_staff %}<a href="{% url 'report-history' %}">Reports</a>{% endif %}
-        {% if user.is_staff %}<a href="{% url 'monitoring' %}">Monitoring</a>{% endif %}
-        <a href="{% url 'presentation-settings' %}">Settings</a>
-        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button" type="submit">Sign out</button></form>
-      {% else %}
-        <a href="{% url 'login' %}">Sign in</a>
-        <a href="{% url 'register' %}">Register</a>
-      {% endif %}
-    </nav>
+    <div class="site-header-inner">
+      <a class="brand" href="{% url 'home' %}" aria-label="Q-Bet home">
+        <span class="brand-mark" aria-hidden="true">Q</span>
+        <span>Q-Bet</span>
+      </a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <div class="nav-group" aria-label="Product navigation">
+          <a class="nav-link" href="{% url 'home' %}"{% if request.resolver_match.url_name == 'home' %} aria-current="page"{% endif %}>Home</a>
+          {% if user.is_authenticated %}
+            <a class="nav-link" href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'engine-detail' %} aria-current="page"{% endif %}>Dashboard</a>
+            {% if user.is_staff %}
+              <a class="nav-link" href="{% url 'report-history' %}"{% if request.resolver_match.url_name == 'report-history' or request.resolver_match.url_name == 'report-detail' %} aria-current="page"{% endif %}>Reports</a>
+            {% endif %}
+            <a class="nav-link" href="{% url 'presentation-settings' %}"{% if request.resolver_match.url_name == 'presentation-settings' %} aria-current="page"{% endif %}>Settings</a>
+          {% endif %}
+        </div>
+
+        {% if user.is_authenticated and user.is_staff %}
+          <div class="nav-group nav-group-admin" aria-label="Administration navigation">
+            <span class="nav-group-label">Admin</span>
+            <a class="nav-link admin-nav-link" href="{% url 'monitoring' %}"{% if request.resolver_match.url_name == 'monitoring' %} aria-current="page"{% endif %}>Monitoring</a>
+            <a class="nav-link admin-nav-link" href="{% url 'admin-area' %}"{% if request.resolver_match.url_name == 'admin-area' %} aria-current="page"{% endif %}>Q-Bet Admin</a>
+            <a class="nav-link admin-nav-link" href="{% url 'admin:index' %}">Django Admin</a>
+          </div>
+        {% endif %}
+
+        <div class="nav-group nav-group-account" aria-label="Account navigation">
+          {% if user.is_authenticated %}
+            <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button nav-account-action" type="submit">Sign out</button></form>
+          {% else %}
+            <a class="nav-link" href="{% url 'login' %}"{% if request.resolver_match.url_name == 'login' %} aria-current="page"{% endif %}>Sign in</a>
+            <a class="nav-link nav-register" href="{% url 'register' %}"{% if request.resolver_match.url_name == 'register' %} aria-current="page"{% endif %}>Register</a>
+          {% endif %}
+        </div>
+      </nav>
+    </div>
   </header>
-  <main>
-    {% for message in messages %}<p class="message">{{ message }}</p>{% endfor %}
+  <main id="main-content">
+    {% for message in messages %}<p class="message" role="status">{{ message }}</p>{% endfor %}
     {% block content %}{% endblock %}
   </main>
 </body>

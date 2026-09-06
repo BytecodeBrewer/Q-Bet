@@ -21,6 +21,4 @@ def test_duckdb_replay_store_keeps_streams_isolated(tmp_path) -> None:
     store.append(ReplayRecord(stream_id="run-a", sequence=0, payload="a"))
     store.append(ReplayRecord(stream_id="run-b", sequence=0, payload="b"))
 
-    assert store.load_stream("run-a") == (
-        ReplayRecord(stream_id="run-a", sequence=0, payload="a"),
-    )
+    assert store.load_stream("run-a") == (ReplayRecord(stream_id="run-a", sequence=0, payload="a"),)

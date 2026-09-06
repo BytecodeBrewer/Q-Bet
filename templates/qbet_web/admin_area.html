@@ -1,2 +1,24 @@
 {% extends "qbet_web/base.html" %}
-{% block content %}<section class="page-heading"><h1>Admin area</h1><p>Protected application administration and internal observability.</p></section><section class="detail-layout"><article class="detail-panel"><h2>Settings</h2><p>Simulation availability now lives in the privileged Admin Area inside normal Settings.</p><a class="button-link" href="{% url 'presentation-settings' %}">Open settings</a></article><article class="detail-panel"><h2>Monitoring</h2><p>Internal monitoring remains administrator-only and separate from customer-facing reporting.</p><a class="button-link" href="{% url 'monitoring' %}">Open monitoring</a></article></section>{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <h1>Admin area</h1>
+  <p>Protected application administration and internal observability.</p>
+</section>
+<section class="detail-layout">
+  <article class="detail-panel">
+    <h2>User administration</h2>
+    <p>Django Admin is the central control plane for users, staff and superuser access, groups, and permissions.</p>
+    <a class="button-link" href="{% url 'admin:index' %}">Open Django Admin</a>
+  </article>
+  <article class="detail-panel">
+    <h2>Settings</h2>
+    <p>Simulation availability lives in the privileged Admin Area inside normal Settings.</p>
+    <a class="button-link" href="{% url 'presentation-settings' %}">Open settings</a>
+  </article>
+  <article class="detail-panel">
+    <h2>Monitoring</h2>
+    <p>Internal monitoring remains administrator-only and separate from customer-facing reporting.</p>
+    <a class="button-link" href="{% url 'monitoring' %}">Open monitoring</a>
+  </article>
+</section>
+{% endblock %}

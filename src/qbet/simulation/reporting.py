@@ -10,7 +10,7 @@ from qbet.layers.logging import (
     SimulationLogRecord,
     SimulationLogRecordType,
 )
-from qbet.reporting import SimulationReport, SimulationReportBuilder
+from qbet.reporting import CustomerReportInput, SimulationReport, SimulationReportBuilder
 from qbet.simulation.models import (
     SimulationContext,
     SimulationEvent,
@@ -52,6 +52,7 @@ class ReportingSimulationRunner:
         on_step_completed: SimulationStepObserver | None = None,
         on_step_ready: SimulationStepGate | None = None,
         log_context: SimulationLogContext | None = None,
+        customer_report_input: CustomerReportInput | None = None,
     ) -> SimulationResult:
         ordered_steps = tuple(steps)
         context = log_context or self.log_context()
@@ -147,6 +148,7 @@ class ReportingSimulationRunner:
             context.run_id,
             result,
             self.last_records,
+            customer_report_input=customer_report_input,
         )
         if self._store is not None:
             self._store.finalize_run(self.last_report)

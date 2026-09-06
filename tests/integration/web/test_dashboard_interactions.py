@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -75,3 +76,14 @@ class DashboardInteractionTests(TestCase):
             count=4,
         )
         self.assertContains(response, "Drag the handles or use arrow keys to reorder.")
+
+    def test_narrow_viewport_keeps_keyboard_reorder_handles_visible(self) -> None:
+        stylesheet = (Path(__file__).parents[3] / "static/qbet_web/app.css").read_text(
+            encoding="utf-8"
+        )
+        narrow_viewport_rules = stylesheet.split("@media (max-width: 760px)", maxsplit=1)[1]
+        narrow_viewport_rules = narrow_viewport_rules.split(
+            "@media (max-width: 440px)", maxsplit=1
+        )[0]
+
+        self.assertNotIn(".drag-handle { display: none; }", narrow_viewport_rules)

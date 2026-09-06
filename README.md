@@ -6,43 +6,82 @@ Q-Bet is a cloud-ready web application for a multi-engine quant betting portfoli
 
 ## Current Status
 
-**Stage 17 - Workflow simulation, provider-state persistence, and typed sports data preparation accepted**:
+Q-Bet already has a working deterministic sports core around `BonusEngine` and `SportsCapitalEngine`. The calculation layer uses `Decimal` and covers qualifying bets, free bets, two-way arbitrage, multi-outcome dutching, dynamic rounding, fees, commission, tax handling, stake and liquidity limits, and liability. Normalized market-data contracts plus the `Sports Match Builder` validate provider-neutral snapshots before engine evaluation. Real market and result collectors are not connected yet; the current collector implementation is deterministic and in-memory behind typed `DataCollector` and `ApiAdapter` contracts.
 
-Q-Bet has the core of the first sports workflow in place. The agent workflow is documented, `BonusEngine` and `SportsCapitalEngine` are separated, and the main sports strategies are covered by deterministic calculation tests. This includes promotional matched betting, free bets, two-way arbitrage, dutching, stake optimization, rounding, fees, commission, liability, and the first operational risk checks.
+The connected sports path already runs through `WorkflowOrchestrator`, correlation IDs and structured transitions, `OperationalRiskLayer`, targeted `RequestHandler` refresh hooks, and the proposal-only `LiquidityChecker`. From there, the implemented end-to-end target is Simulation: `WorkflowSimulationRunner` evaluates the two sports engines with virtual capital, progress and run state, safe failure handling, and persisted reports. Supabase/PostgreSQL is now the durable operational source of truth for Django auth/sessions, simulation control/run state, simulation reports/log records, and provider state. DuckDB remains separate for runtime-local analytics, ordered replay, and backtesting workloads.
 
-The pipeline is taking shape from intake to simulation. Normalized market-data contracts define collected provider data, and the Sports Match Builder now validates typed bookmaker BACK/exchange LAY pairs from distinct providers plus exhaustive Dutching snapshot coverage before creating engine requests. From there, the engines calculate strategy results, domain risk can reject or recheck opportunities, and the concrete `LiquidityChecker` now handles proposal ranking, capital allocation, and workflow liquidity decisions.
+The Django web application provides registration and authentication, a user-facing Execution dashboard, and administrator-only Simulation and Monitoring surfaces. Staff can enable and start deterministic simulations, inspect progress and reports, export CSV/JSON, and use presentation settings plus session-persisted dashboard ordering. Django Admin is the central user/permission administration surface for users, staff/superuser access, groups, and permissions. A server-side and PostgreSQL guard prevents deleting, deactivating, or demoting the last active staff superuser. Execution and Simulation stay separated; the Execution dashboard currently reports live state as unavailable because no real execution source is connected.
 
-The strongest end-to-end path today is simulation: evaluated sports opportunities can move through workflow transitions, risk checks, liquidity decisions, virtual-capital updates, reporting, and SQLite-backed report history without touching real execution. Provider state also has a typed SQLite persistence path, which gives the local version a practical bridge toward Supabase/PostgreSQL later.
+The operational and tooling layer is also in place. GitHub Actions runs Ruff, Pyright, pytest, Django checks, and package builds before creating Vercel Preview/Staging deployments. CI uses an isolated PostgreSQL service rather than the shared Supabase database. Both a locally started Q-Bet web application and the Vercel-hosted application use `QBET_DATABASE_URL`; normal runtime no longer falls back to SQLite. SQLite remains only as a read-only legacy import source. Preview deployments keep Simulation disabled through environment configuration, while a deployed environment may enable it explicitly once its PostgreSQL migrations are current.
 
-The Django GUI now keeps the user-facing Execution plane and the internal Simulation plane explicitly separate. Normal authenticated users see only the two-engine Execution dashboard; simulation history no longer feeds or alters its totals. Staff users can enable an additional, clearly labelled Simulation dashboard from the privileged Admin Area inside Settings. That admin-only plane reuses the existing deterministic `BonusEngine` and `SportsCapitalEngine` simulation path, virtual capital, lifecycle state, persisted reports, and CSV/JSON exports without touching live execution or real-money adapters. Current simulation reports and internal monitoring remain staff-only. Dashboard engine widgets can be reordered independently inside the Execution and Simulation planes, with session-scoped layout persistence so widgets cannot be dragged across the two state domains. Presentation theme and font-size preferences remain session-scoped as well.
+**Still missing before Phase 2 is complete:**
 
-The broader gaps against the expectation model remain conformant external data/result adapters, bank sandbox/connectivity, Portfolio Ledger integration, customer-facing reporting separated from internal monitoring, and controlled live execution. The first bank-connector evaluation is complete; the bank layer remains mock-only until the account type and approved provider-onboarding route are chosen. `RequestHandler` refresh checks are now wired into the workflow at Domain Risk, Liquidity Check, and Dispatch, while concrete provider refresh clients remain future work. The math layer is solid, and Phase 2 is increasingly about making the connected local simulation path controllable, observable, and verifiable before external adapters are introduced.
+- GUI-backed `WorkflowOrchestrator` configuration for selecting which engines are active and whether each engine participates in Simulation, Execution, or both modes.
+- deterministic engine/mode routing from one eligible opportunity into the configured dispatch targets. If the same engine is enabled for both Simulation and Execution, the eligible order fans out into both isolated paths; if only one mode is enabled, only that path receives it. Simulation and Execution must not share queues, histories, capital contexts, lifecycle state, or results.
+- mode-specific `RequestHandler` implementations for Simulation and Execution. Before dispatch they revalidate whether an order is still valid and worthwhile. After an event they can also provide a validated result so the match can be evaluated and settled. Phase 2 uses deterministic or sandbox data sources for this rather than production provider APIs.
+- a real `PortfolioLedger` as the authoritative capital domain for available, reserved, locked, pending, settled, and cost state. Simulation starting capital is established and tracked through the ledger instead of being owned directly by the simulation runner. A later sandbox account may back that virtual capital, but the ledger remains the capital authority.
+- a complete controlled Execution path using deterministic/mock components, including queueing, approval boundaries, dispatch state, result handling, and settlement without requiring production provider or bank adapters.
+- an end-to-end settlement flow in which Simulation and Execution results update their respective ledger state through a dedicated settlement boundary instead of mutating capital directly inside runners or execution components.
+- a strict separation between customer-facing Reporting and administrator-facing Monitoring.
+  - **Reporting** exposes product-level match information only: which provider was matched against which provider, the amounts assigned to each side of the match, the resulting match state, and when the match was created. It must not expose internal pipeline stages, service names, implementation details, stack traces, correlation internals, adapter state, or other information that could reveal Q-Bet's internal architecture.
+  - the main dashboard provides a compact Reporting overview across engines and matches. Each engine has a simple status indicator: **grey** when inactive, **green** when active without known problems, and **red** when active and one or more warnings or errors are present.
+  - warning and error symbols appear on the engine overview when relevant. The expanded engine view shows a readable list of the current warnings and errors below the normal engine information.
+  - **Warnings** represent external availability/dependency problems, for example `Sports betting data unavailable`. **Errors** represent internal processing or system failures, for example `Data import blocked` or `Matches cannot be evaluated`.
+  - Reporting messages remain intentionally coarse and actionable so an administrator can react without exposing internal architecture or diagnostic details.
+  - **Monitoring** contains the detailed technical state behind those Reporting states: pipeline stages and transitions, engine/mode routing, Simulation and Execution queues, `RequestHandler` activity and revalidation results, provider/dependency state, Domain Risk and Liquidity decisions, `PortfolioLedger` reservations and capital state, settlement, Simulation/Execution lifecycle details, warnings, internal errors, external failures, correlation data, and relevant diagnostic metadata.
+  - the Monitoring GUI must allow administrators to inspect the complete technical cause behind a warning or error shown in Reporting.
+  - Monitoring data must be exportable for an administrator-selected time range. The export collects the relevant matches, pipeline events, transitions, decisions, warnings, errors, capital changes, Simulation/Execution activity, and settlement records from that period so system behaviour or incidents can be reconstructed outside the live GUI.
+- a more polished GUI product experience with a dedicated start/home page, clearer visual hierarchy between home, dashboard, engine detail, Reporting, Monitoring, settings, and administration, and a main dashboard optimized for fast recognition of engine activity, match summaries, capital state, warnings, and errors.
+- restrained animations and transitions that give the application more life without reducing usability, including smooth engine-state changes, dashboard-card transitions, loading/progress motion, and subtle page or section transitions.
+- end-to-end tests for GUI configuration, engine/mode routing, dual-mode fan-out, revalidation and rejection, capital reservation, simulation and mock execution, result retrieval, settlement, engine status states, warning/error presentation, Reporting/Monitoring separation, safe user-facing messages, monitoring export ranges, state isolation, and failure recovery.
 
 ## Local Web Setup
 
-For the local Django shell, initialize Django's built-in authentication and session tables once before signing in:
+Normal local Q-Bet runtime uses PostgreSQL/Supabase as the same operational source of truth as the deployed application. Configure `QBET_DATABASE_URL` before starting Django; there is no SQLite runtime fallback.
 
 ```powershell
+$env:QBET_DATABASE_URL='postgresql://...'
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 ```
 
-SQLite remains the default local operational database. Setting `QBET_DATABASE_URL` opts the Django web shell into PostgreSQL locally as well, providing the migration seam for eventually removing SQLite from operational development without using DuckDB as an application database.
+For everyday local development against the shared Q-Bet cloud state, use the appropriate Supabase PostgreSQL connection string. Do not commit the connection string or database password.
+
+The first cloud superuser can be created with `python manage.py createsuperuser` while `QBET_DATABASE_URL` points to Supabase. Further user, staff, superuser, group, and permission administration is available through `/admin/`. Q-Bet protects the last active staff superuser from deletion, deactivation, or demotion.
+
+### Legacy SQLite Import
+
+SQLite is no longer an active runtime database. Existing provider state and simulation history can be imported once into PostgreSQL with the explicit legacy command:
+
+```powershell
+python manage.py import_legacy_sqlite --simulation-db path\to\qbet-simulation.sqlite3 --provider-db path\to\provider-state.sqlite3
+```
+
+The importer opens SQLite read-only, reports imported/skipped/conflicting rows, and is designed to be safely re-run without silently overwriting authoritative PostgreSQL conflicts. Disposable/test Django users do not need to be migrated.
 
 ## Validation
 
-The same gates used by GitHub Actions can be run locally with:
+Automated tests must never use the shared production Supabase database. Point `QBET_TEST_DATABASE_URL` to an isolated/disposable PostgreSQL database before running pytest locally:
 
 ```powershell
+$env:QBET_TEST_DATABASE_URL='postgresql://qbet:qbet@127.0.0.1:5432/qbet_test'
 python -m pip install . -r requirements-dev.txt
 python -m ruff check .
 python -m pyright
-python manage.py migrate --noinput
 python -m pytest
+```
+
+For explicit Django migration/configuration checks, point `QBET_DATABASE_URL` at the intended PostgreSQL target:
+
+```powershell
+$env:QBET_DATABASE_URL=$env:QBET_TEST_DATABASE_URL
+python manage.py migrate --noinput
 python manage.py check
 python -m build
 ```
+
+GitHub Actions provides an isolated PostgreSQL 16 service automatically for its test job.
 
 ## Vercel Preview / Staging CD
 
@@ -57,21 +96,23 @@ Configure these GitHub repository values for the deployment workflow:
 
 The existing `q-bet` Vercel project is targeted explicitly by its project/account identifiers. The existing portfolio Vercel project is not used or modified.
 
-Hosted mode never uses writable SQLite as persistent Vercel storage. Without `QBET_DATABASE_URL`, the hosted shell remains read-only and only `/`, `/health/`, templates, and static assets are exposed. When a Supabase/PostgreSQL `QBET_DATABASE_URL` is configured and Django migrations have been applied, registration, login/logout, the basic authenticated dashboard, engine details, account boundary, and session-backed presentation/layout preferences may use persistent PostgreSQL state.
+Vercel must provide `QBET_DATABASE_URL` through project environment configuration. Preview and Production can use the same Supabase/PostgreSQL source of truth when that is the intended environment model. Missing `QBET_DATABASE_URL` is now a startup configuration error rather than a request-time fallback to read-only/SQLite behavior.
 
-Routes that still depend on Q-Bet-specific SQLite repositories, including simulation/report persistence and internal monitoring surfaces, remain fail-closed with HTTP 503 until those repositories receive dedicated cloud adapters. Simulation/live execution remains disabled in hosted deployments.
+The CI preview explicitly supplies `QBET_HOSTED_PREVIEW=true`, `QBET_DJANGO_DEBUG=false`, the Vercel host allowlist, and `QBET_SIMULATION_MODE_ENABLED=false`. Production may enable Simulation deliberately through `QBET_SIMULATION_MODE_ENABLED=true`; durable simulation reports and control state are stored in PostgreSQL rather than Vercel-local files.
 
-The deployment job verifies the live preview with Vercel's authenticated curl command, including `/health/`, the public shell, and `/static/qbet_web/app.css`.
+The deployment job verifies the live preview with Vercel's authenticated curl command, including `/health/`, the public shell, `/accounts/login/`, and `/static/qbet_web/app.css`.
 
 ## Persistence Architecture
 
-Q-Bet deliberately separates operational state from analytical workloads:
+Q-Bet deliberately separates durable operational state from runtime-local analytical workloads:
 
-- **Supabase/PostgreSQL** is the cloud target for Django authentication, sessions, permissions, and later operational/ledger state.
-- **SQLite** remains the transitional local default for operational repositories that have not yet migrated. Local Django can opt into PostgreSQL through `QBET_DATABASE_URL`.
-- **DuckDB** is the local analytics/replay/backtesting store and must not become the Django authentication, session, provider-state, or ledger database.
+- **Supabase/PostgreSQL** is the durable shared source of truth for authentication, sessions, permissions, provider state, simulation/control state, reports, monitoring inputs, workflow state, and future ledger state. Local and hosted web instances reference this same database in normal use.
+- **DuckDB** is the per-runtime analytics/replay/backtesting/fast-processing layer. A local Q-Bet process and a Vercel runtime have separate DuckDB contexts. DuckDB state is not synchronized and must not be treated as durable shared storage.
+- **SQLite** is legacy-only. It may be read by the one-time importer but is not part of normal application persistence.
 
-`SUPABASE_QBET_TOKEN` is a Supabase Management API credential for automation/administration. It is not a PostgreSQL connection string. The hosted Django application requires `QBET_DATABASE_URL` from the Supabase project's Connect dialog, stored only in environment/secrets configuration. See [Django Web Shell](docs/django-web-shell.md) for bootstrap details.
+Any analytical/simulation result that must survive process termination or be visible across local/hosted instances must be written back through the PostgreSQL operational boundary.
+
+`SUPABASE_QBET_TOKEN` is a Supabase Management API credential for automation/administration. It is not a PostgreSQL connection string. The Django application requires `QBET_DATABASE_URL` from the Supabase project's Connect dialog, stored only in environment/secrets configuration. See [Django Web Shell](docs/django-web-shell.md) for bootstrap details.
 
 ## Version 1 Target
 
