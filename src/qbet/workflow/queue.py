@@ -74,9 +74,42 @@ class QueuedWorkItem(DomainModel):
     def transition(
         self, state: WorkState, *, now: datetime, reason: str | None = None
     ) -> "QueuedWorkItem":
+        permitted = {
+            WorkState.PENDING: {WorkState.PROCESSING, WorkState.EXPIRED, WorkState.CANCELLED},
+            WorkState.PROCESSING: {
+                WorkState.RECHECK,
+                WorkState.COMPLETED,
+                WorkState.CANCELLED,
+                WorkState.FAILED,
+                WorkState.EXPIRED,
+            },
+            WorkState.RECHECK: {WorkState.PENDING, WorkState.CANCELLED, WorkState.EXPIRED},
+        }
+        if state not in permitted.get(self.state, set()):
+            raise ValueError(f"invalid work transition: {self.state} -> {state}")
         return self.model_copy(
             update={
                 "state": state,
                 "history": (*self.history, WorkHistoryEvent(state=state, recorded_at=now, reason=reason)),
+            }
+        )
+
+    def reschedule(self, *, scheduled_for: datetime, now: datetime) -> "QueuedWorkItem":
+        if self.state not in {WorkState.PENDING, WorkState.RECHECK}:
+            raise ValueError("only pending or recheck work can be rescheduled")
+        if scheduled_for >= self.expires_at:
+            raise ValueError("rescheduled work must remain before expires_at")
+        if self.state is WorkState.RECHECK:
+            pending = self.transition(WorkState.PENDING, now=now, reason="rescheduled")
+            return pending.model_copy(update={"scheduled_for": scheduled_for})
+        return self.model_copy(
+            update={
+                "scheduled_for": scheduled_for,
+                "history": (
+                    *self.history,
+                    WorkHistoryEvent(
+                        state=WorkState.PENDING, recorded_at=now, reason="rescheduled"
+                    ),
+                ),
             }
         )

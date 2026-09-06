@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
+from asgiref.sync import sync_to_async
 from qbet.domain.ledger import PortfolioBalance
 from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
@@ -66,8 +68,7 @@ class ModeDispatchCoordinator:
 
     def dispatch_due(self, *, now: datetime, owner: str) -> tuple[QueuedWorkItem, ...]:
         processed: list[QueuedWorkItem] = []
-        for item in self._queue_repository.due(now):
-            processing = self._queue_repository.save(item.transition(WorkState.PROCESSING, now=now))
+        for processing in self._queue_repository.claim_due(now):
             if now >= processing.expires_at:
                 processed.append(
                     self._queue_repository.save(processing.transition(WorkState.EXPIRED, now=now))
@@ -135,6 +136,22 @@ class ModeDispatchCoordinator:
                 self._run_execution(processing, now=now, owner=owner)
             processed.append(self._queue_repository.save(processing.transition(WorkState.COMPLETED, now=now)))
         return tuple(processed)
+
+    async def wait_and_dispatch(
+        self,
+        *,
+        scheduled_for: datetime,
+        now: datetime,
+        owner: str,
+        sleep=asyncio.sleep,
+    ) -> tuple[QueuedWorkItem, ...]:
+        """Await a controlled clock boundary before atomically claiming due work."""
+
+        delay = max(0.0, (scheduled_for - now).total_seconds())
+        await sleep(delay)
+        return await sync_to_async(self.dispatch_due, thread_sensitive=True)(
+            now=scheduled_for, owner=owner
+        )
 
     def _run_simulation(self, item: QueuedWorkItem) -> None:
         engine = SimulationEngine(item.work.engine)

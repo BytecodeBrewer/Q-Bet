@@ -1,10 +1,11 @@
 """PostgreSQL-backed verification of mode routing and sandbox settlement isolation."""
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
-from django.test import TestCase
+from django.test import TransactionTestCase
 
 from qbet.calculations import ArbitrageOffer, QualifyingBetInput, TwoWayArbitrageInput
 from qbet.domain.ledger import LedgerOperation, PortfolioBalance
@@ -151,7 +152,7 @@ def _execution_ledger() -> PortfolioLedger:
     )
 
 
-class ModeSettlementIsolationE2ETests(TestCase):
+class ModeSettlementIsolationE2ETests(TransactionTestCase):
     """Exercise public routing, workflow, persistence, execution, and settlement boundaries."""
 
     def _run_simulation(
@@ -327,6 +328,61 @@ class ModeSettlementIsolationE2ETests(TestCase):
         self.assertEqual(result.state, WorkState.CANCELLED)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
+
+    def test_atomic_claim_prevents_a_second_worker_from_dispatching_the_same_item(self) -> None:
+        request = _sports_request()
+        configuration = RoutingConfiguration(sports_capital=EngineModes(execution=True))
+        first_worker = self._coordinator(configuration, request.opportunity_id)
+        second_worker = self._coordinator(configuration, request.opportunity_id)
+        first_worker.schedule(
+            request,
+            owner="owner",
+            correlation_id=CORRELATION_ID,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+        )
+
+        first_result = first_worker.dispatch_due(now=NOW, owner="owner")
+        second_result = second_worker.dispatch_due(now=NOW, owner="owner")
+
+        self.assertEqual(tuple(item.state for item in first_result), (WorkState.COMPLETED,))
+        self.assertEqual(second_result, ())
+        self.assertEqual(ExecutionRecordRow.objects.count(), 1)
+        self.assertEqual(PortfolioLedgerRow.objects.count(), 1)
+
+    def test_async_wait_reschedule_dispatches_once_at_the_controlled_time(self) -> None:
+        request = _bonus_request()
+        coordinator = self._coordinator(
+            RoutingConfiguration(bonus=EngineModes(simulation=True)), request.opportunity_id
+        )
+        scheduled_for = NOW + timedelta(seconds=30)
+        (item,) = coordinator.schedule(
+            request,
+            owner="owner",
+            correlation_id=CORRELATION_ID,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+        )
+        ModeWorkQueueRepository().reschedule(
+            item.work.id, scheduled_for=scheduled_for, now=NOW
+        )
+        delays: list[float] = []
+
+        async def controlled_sleep(delay: float) -> None:
+            delays.append(delay)
+
+        result = asyncio.run(
+            coordinator.wait_and_dispatch(
+                scheduled_for=scheduled_for,
+                now=NOW,
+                owner="owner",
+                sleep=controlled_sleep,
+            )
+        )
+
+        self.assertEqual(delays, [30.0])
+        self.assertEqual(tuple(entry.state for entry in result), (WorkState.COMPLETED,))
+        self.assertEqual(SimulationReportRow.objects.count(), 1)
 
     def test_simulation_only_bonus_persists_a_report_without_execution_state(self) -> None:
         request = _bonus_request()
