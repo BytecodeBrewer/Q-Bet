@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+import re
 from typing import Any
 from uuid import UUID
 
@@ -11,7 +12,14 @@ from pydantic import AwareDatetime, Field, field_validator
 
 from qbet.domain.models import DomainModel, Identifier
 
-_SENSITIVE_MARKERS = ("credential", "password", "secret", "token", "api_key", "session")
+_SENSITIVE_MARKERS = (
+    "credential", "password", "secret", "token", "api_key", "session", "cookie",
+    "authorization", "stack_trace", "traceback", "raw_payload", "fingerprint",
+)
+_SENSITIVE_CONTENT = re.compile(
+    r"(?:authorization:|bearer\s+\S+|cookie:|set-cookie:|traceback \(most recent call last\)|"
+    r"file \".+\", line \d+|password=|api[_-]?key=|secret=|token=)", re.IGNORECASE,
+)
 
 
 class MonitoringLevel(StrEnum):
@@ -53,4 +61,6 @@ def _redact(value: Any) -> Any:
         return [_redact(item) for item in value]
     if isinstance(value, tuple):
         return [_redact(item) for item in value]
+    if isinstance(value, str) and _SENSITIVE_CONTENT.search(value):
+        return "[redacted]"
     return value

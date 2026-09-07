@@ -462,6 +462,7 @@ def monitoring(request: HttpRequest) -> HttpResponse:
             monitoring_records=records,
             monitoring_start=query.start,
             monitoring_end=query.end,
+            monitoring_query_parameters=_monitoring_query_parameters(request),
         ),
     )
 
@@ -515,6 +516,12 @@ def _query_datetime(value: str | None) -> datetime | None:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise Http404("Monitoring timestamps must include a timezone.")
     return parsed
+
+
+def _monitoring_query_parameters(request: HttpRequest) -> str:
+    parameters = request.GET.copy()
+    parameters.pop("view", None)
+    return parameters.urlencode()
 
 
 @user_passes_test(_is_staff, login_url="login")

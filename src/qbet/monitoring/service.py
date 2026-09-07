@@ -41,6 +41,7 @@ class CompactMonitoringProcess(DomainModel):
     started_at: AwareDatetime
     finished_at: AwareDatetime
     duration_ms: int | None = None
+    opportunity_id: str | None = None
     warning_count: int = 0
     error_count: int = 0
     latest_reason_code: str | None = None
@@ -63,6 +64,14 @@ class MonitoringService:
     def _compact(records: list[MonitoringRecord]) -> CompactMonitoringProcess:
         ordered = sorted(records, key=lambda record: record.occurred_at)
         latest = ordered[-1]
+        opportunity_id = next(
+            (
+                str(record.references["opportunity_id"])
+                for record in reversed(ordered)
+                if record.references.get("opportunity_id") is not None
+            ),
+            None,
+        )
         return CompactMonitoringProcess(
             correlation_id=latest.correlation_id,
             engine=str(latest.engine),
@@ -70,7 +79,10 @@ class MonitoringService:
             status=str(latest.status),
             started_at=ordered[0].occurred_at,
             finished_at=latest.occurred_at,
-            duration_ms=latest.duration_ms,
+            duration_ms=latest.duration_ms
+            if latest.duration_ms is not None
+            else int((latest.occurred_at - ordered[0].occurred_at).total_seconds() * 1000),
+            opportunity_id=opportunity_id,
             warning_count=sum(record.level.value == "warning" for record in ordered),
             error_count=sum(record.level.value == "error" for record in ordered),
             latest_reason_code=str(latest.reason_code) if latest.reason_code else None,
