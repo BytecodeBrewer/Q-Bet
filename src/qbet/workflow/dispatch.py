@@ -20,7 +20,7 @@ from qbet.request_handler import ModeRequestHandlers
 from qbet.request_handler.models import ResultStatus
 from qbet.simulation.models import SimulationEngine, SimulationRunConfig
 from qbet.simulation.workflow import WorkflowSimulationRequest, WorkflowSimulationRunner
-from qbet.storage.ledger import ExecutionRecordRepository, PortfolioLedgerRepository, ModeWorkQueueRepository
+from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepository, PortfolioLedgerRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.workflow.models import WorkflowDecision, WorkflowMode, WorkflowRequest, WorkflowStage
 from qbet.workflow.orchestrator import WorkflowOrchestrator
@@ -193,11 +193,14 @@ class ModeDispatchCoordinator:
             capital_required=capital,
             payout=payout,
         )
-        ledger_repository = PortfolioLedgerRepository()
-        ledger = ledger_repository.load(mode="execution", currency=item.request.currency) or PortfolioLedger(
+        state_repository = ExecutionStateRepository()
+        initial_ledger = PortfolioLedger(
             balance=PortfolioBalance(mode="execution", currency=item.request.currency, available=Decimal("1000"))
         )
-        ExecutionService(
-            ledger_writer=ledger_repository,
-            execution_writer=ExecutionRecordRepository(),
-        ).decide(ExecutionRecord(proposal=proposal), ledger, actor=owner, owner=owner, approve=True, now=now)
+        record, ledger = state_repository.load_or_create(
+            ExecutionRecord(proposal=proposal), initial_ledger
+        )
+        updated_record, updated_ledger = ExecutionService().decide(
+            record, ledger, actor=owner, owner=owner, approve=True, now=now
+        )
+        state_repository.persist(updated_record, updated_ledger)

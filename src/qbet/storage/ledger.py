@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 
 from qbet.execution.models import ExecutionRecord
 from qbet.ledger import PortfolioLedger
@@ -10,6 +10,76 @@ from qbet.storage.models import ExecutionRecordRow, ModeWorkQueueRow, PortfolioL
 from qbet.storage.models import RoutingConfigurationRow
 from qbet.workflow.routing import RoutingConfiguration
 from qbet.workflow.queue import QueuedWorkItem, WorkState
+
+
+class AuthoritativePersistenceError(RuntimeError):
+    """Raised when the configured operational PostgreSQL state cannot be used."""
+
+
+class ExecutionStateRepository:
+    """Atomically restores and persists the coupled execution and ledger state."""
+
+    @transaction.atomic
+    def load_or_create(
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+    ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        try:
+            balance = ledger.balance
+            ledger_row, _ = PortfolioLedgerRow.objects.select_for_update().get_or_create(
+                mode=balance.mode,
+                currency=balance.currency,
+                defaults={"payload": ledger.model_dump(mode="json")},
+            )
+            restored_ledger = PortfolioLedger.model_validate(ledger_row.payload)
+            proposal = record.proposal
+            record_row = ExecutionRecordRow.objects.select_for_update().filter(
+                record_id=proposal.work.id
+            ).first()
+            if record_row is None:
+                ExecutionRecordRow.objects.create(
+                    record_id=proposal.work.id,
+                    correlation_id=proposal.work.correlation_id,
+                    mode=proposal.work.mode.value,
+                    state=record.state.value,
+                    payload=record.model_dump(mode="json"),
+                )
+                return record, restored_ledger
+            restored_record = ExecutionRecord.model_validate(record_row.payload)
+            if restored_record.proposal != proposal:
+                raise ValueError("execution_record_conflict")
+            return restored_record, restored_ledger
+        except DatabaseError as error:
+            raise AuthoritativePersistenceError(
+                "authoritative_execution_state_unavailable"
+            ) from error
+
+    @transaction.atomic
+    def persist(self, record: ExecutionRecord, ledger: PortfolioLedger) -> tuple[ExecutionRecord, PortfolioLedger]:
+        """Store both immutable snapshots in one database transaction."""
+
+        try:
+            balance = ledger.balance
+            ledger_row = PortfolioLedgerRow.objects.select_for_update().get(
+                mode=balance.mode, currency=balance.currency
+            )
+            record_row = ExecutionRecordRow.objects.select_for_update().get(
+                record_id=record.proposal.work.id
+            )
+            if record_row.mode != record.proposal.work.mode.value:
+                raise ValueError("execution_record_mode_conflict")
+            ledger_row.payload = ledger.model_dump(mode="json")
+            ledger_row.save(update_fields=("payload", "updated_at"))
+            record_row.correlation_id = record.proposal.work.correlation_id
+            record_row.state = record.state.value
+            record_row.payload = record.model_dump(mode="json")
+            record_row.save(update_fields=("correlation_id", "state", "payload", "updated_at"))
+            return record, ledger
+        except DatabaseError as error:
+            raise AuthoritativePersistenceError(
+                "authoritative_execution_state_unavailable"
+            ) from error
 
 
 class PortfolioLedgerRepository:
