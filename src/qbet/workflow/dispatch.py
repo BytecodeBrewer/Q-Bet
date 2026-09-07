@@ -20,7 +20,13 @@ from qbet.request_handler import ModeRequestHandlers
 from qbet.request_handler.models import ResultStatus
 from qbet.simulation.models import SimulationEngine, SimulationRunConfig
 from qbet.simulation.workflow import WorkflowSimulationRequest, WorkflowSimulationRunner
-from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepository, PortfolioLedgerRepository
+from qbet.storage.ledger import (
+    AuthoritativePersistenceError,
+    AuthoritativeStateConflict,
+    ExecutionStateRepository,
+    ModeWorkQueueRepository,
+    PortfolioLedgerRepository,
+)
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.workflow.models import WorkflowDecision, WorkflowMode, WorkflowRequest, WorkflowStage
 from qbet.workflow.orchestrator import WorkflowOrchestrator
@@ -145,8 +151,20 @@ class ModeDispatchCoordinator:
             if processing.work.mode is WorkflowMode.SIMULATION:
                 self._run_simulation(processing)
             else:
-                self._run_execution(processing, now=now, owner=owner)
-            processed.append(self._queue_repository.save(processing.transition(WorkState.COMPLETED, now=now)))
+                try:
+                    self._run_execution(processing, now=now, owner=owner)
+                except (AuthoritativePersistenceError, AuthoritativeStateConflict) as error:
+                    processed.append(
+                        self._queue_repository.save(
+                            processing.transition(WorkState.FAILED, now=now, reason=str(error))
+                        )
+                    )
+                    continue
+            processed.append(
+                self._queue_repository.save(
+                    processing.transition(WorkState.COMPLETED, now=now)
+                )
+            )
         return tuple(processed)
 
     async def wait_and_dispatch(
@@ -195,7 +213,11 @@ class ModeDispatchCoordinator:
         )
         state_repository = ExecutionStateRepository()
         initial_ledger = PortfolioLedger(
-            balance=PortfolioBalance(mode="execution", currency=item.request.currency, available=Decimal("1000"))
+            balance=PortfolioBalance(
+                mode="execution",
+                currency=item.request.currency,
+                available=Decimal("1000"),
+            )
         )
         record, ledger = state_repository.load_or_create(
             ExecutionRecord(proposal=proposal), initial_ledger
