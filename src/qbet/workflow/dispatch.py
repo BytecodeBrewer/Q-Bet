@@ -16,11 +16,13 @@ from qbet.execution.models import ExecutionProposal, ExecutionRecord
 from qbet.execution.service import ExecutionService
 from qbet.execution.sandbox import valuation
 from qbet.ledger import PortfolioLedger
+from qbet.monitoring import MonitoringLevel, MonitoringRecord
 from qbet.request_handler import ModeRequestHandlers
 from qbet.request_handler.models import ResultStatus
 from qbet.simulation.models import SimulationEngine, SimulationRunConfig
 from qbet.simulation.workflow import WorkflowSimulationRequest, WorkflowSimulationRunner
 from qbet.storage.ledger import ExecutionRecordRepository, PortfolioLedgerRepository, ModeWorkQueueRepository
+from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.workflow.models import WorkflowDecision, WorkflowMode, WorkflowRequest, WorkflowStage
 from qbet.workflow.orchestrator import WorkflowOrchestrator
@@ -37,10 +39,12 @@ class ModeDispatchCoordinator:
         *,
         queue_repository: ModeWorkQueueRepository | None = None,
         mode_request_handlers: ModeRequestHandlers | None = None,
+        monitoring_writer: PostgresMonitoringRepository | None = None,
     ) -> None:
         self._configuration = configuration
         self._queue_repository = queue_repository or ModeWorkQueueRepository()
         self._mode_request_handlers = mode_request_handlers
+        self._monitoring_writer = monitoring_writer or PostgresMonitoringRepository()
 
     def schedule(
         self,
@@ -93,6 +97,7 @@ class ModeDispatchCoordinator:
                     ),
                 )
             )
+            self._record_workflow(processing, workflow_result)
             if workflow_result.final_decision is WorkflowDecision.RECHECK:
                 processed.append(
                     self._queue_repository.save(
@@ -148,6 +153,35 @@ class ModeDispatchCoordinator:
                 self._run_execution(processing, now=now, owner=owner)
             processed.append(self._queue_repository.save(processing.transition(WorkState.COMPLETED, now=now)))
         return tuple(processed)
+
+    def _record_workflow(self, item: QueuedWorkItem, workflow_result) -> None:
+        """Persist only safe transition metadata for the administrator read model."""
+
+        for transition in workflow_result.transitions:
+            level = (
+                MonitoringLevel.ERROR
+                if transition.decision is WorkflowDecision.REJECT
+                else MonitoringLevel.WARNING
+                if transition.decision is WorkflowDecision.RECHECK
+                else MonitoringLevel.INFO
+            )
+            self._monitoring_writer.append(
+                MonitoringRecord(
+                    correlation_id=workflow_result.correlation_id,
+                    occurred_at=datetime.now(UTC),
+                    engine=item.work.engine,
+                    mode=item.work.mode.value,
+                    stage=transition.stage.value,
+                    event_type=transition.kind.value,
+                    status=transition.decision.value,
+                    reason_code=transition.reason,
+                    level=level,
+                    references={
+                        "work_id": str(item.work.id),
+                        "opportunity_id": item.work.opportunity_id,
+                    },
+                )
+            )
 
     async def wait_and_dispatch(
         self,

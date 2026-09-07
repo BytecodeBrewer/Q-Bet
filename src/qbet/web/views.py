@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import csv
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from io import StringIO
 from uuid import UUID
 
@@ -14,6 +14,12 @@ from django.db import DatabaseError
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST
+from pydantic import ValidationError
+
+from qbet.monitoring import MonitoringQuery, MonitoringService as WorkflowMonitoringService
+from qbet.monitoring.exports import csv_header as monitoring_csv_header
+from qbet.monitoring.exports import csv_rows as monitoring_csv_rows
+from qbet.monitoring.exports import json_document as monitoring_json_document
 
 from qbet.reporting import (
     CustomerReportUnavailable,
@@ -24,6 +30,7 @@ from qbet.reporting import (
 from qbet.reporting.exports import CustomerReportExport, json_bytes
 from qbet.simulation import SimulationEngine
 from qbet.storage.postgres import PostgresSimulationReportReader
+from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.web.controls import (
     DashboardLayout,
     PresentationPreferences,
@@ -62,6 +69,8 @@ def _monitoring_service() -> MonitoringService:
 
 
 MONITORING_SERVICE = _monitoring_service()
+WORKFLOW_MONITORING_REPOSITORY = PostgresMonitoringRepository()
+WORKFLOW_MONITORING_SERVICE = WorkflowMonitoringService(WORKFLOW_MONITORING_REPOSITORY)
 SIMULATION_CONTROL = SimulationControlService()
 
 
@@ -434,11 +443,78 @@ def _visible_customer_report_ids(request: HttpRequest) -> set[UUID] | None:
 @user_passes_test(_is_staff, login_url="login")
 @require_GET
 def monitoring(request: HttpRequest) -> HttpResponse:
+    query = _monitoring_query(request)
+    mode = request.GET.get("view", "compact")
+    if mode not in {"compact", "extended"}:
+        raise Http404("Monitoring view not found.")
+    records = (
+        WORKFLOW_MONITORING_SERVICE.extended(query)
+        if mode == "extended"
+        else WORKFLOW_MONITORING_SERVICE.compact(query)
+    )
     return render(
         request,
         "qbet_web/monitoring.html",
-        _context(request, monitoring=MONITORING_SERVICE.snapshot()),
+        _context(
+            request,
+            monitoring=MONITORING_SERVICE.snapshot(),
+            monitoring_view=mode,
+            monitoring_records=records,
+            monitoring_start=query.start,
+            monitoring_end=query.end,
+        ),
     )
+
+
+@user_passes_test(_is_staff, login_url="login")
+@require_GET
+def monitoring_export(request: HttpRequest, export_format: str) -> HttpResponse:
+    query = _monitoring_query(request)
+    mode = request.GET.get("view", "compact")
+    if mode not in {"compact", "extended"} or export_format not in {"csv", "json"}:
+        raise Http404("Monitoring export not found.")
+    values = (
+        WORKFLOW_MONITORING_SERVICE.extended(query)
+        if mode == "extended"
+        else WORKFLOW_MONITORING_SERVICE.compact(query)
+    )
+    if export_format == "json":
+        return HttpResponse(
+            monitoring_json_document(values), content_type="application/json; charset=utf-8"
+        )
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(monitoring_csv_header(extended=mode == "extended"))
+    writer.writerows(monitoring_csv_rows(values))
+    return HttpResponse(output.getvalue(), content_type="text/csv; charset=utf-8")
+
+
+def _monitoring_query(request: HttpRequest) -> MonitoringQuery:
+    end = _query_datetime(request.GET.get("end")) or datetime.now(UTC)
+    start = _query_datetime(request.GET.get("start")) or end - timedelta(days=1)
+    try:
+        correlation = request.GET.get("correlation")
+        return MonitoringQuery(
+            start=start,
+            end=end,
+            correlation_id=UUID(correlation) if correlation else None,
+        )
+    except ValidationError as error:
+        raise Http404(error.errors()[0]["msg"]) from error
+    except ValueError as error:
+        raise Http404("Monitoring correlation identifiers must be UUID values.") from error
+
+
+def _query_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise Http404("Monitoring timestamps must be ISO-8601 values.") from error
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise Http404("Monitoring timestamps must include a timezone.")
+    return parsed
 
 
 @user_passes_test(_is_staff, login_url="login")
