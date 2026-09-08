@@ -3,11 +3,16 @@
 from uuid import UUID
 
 from django.db import DatabaseError, IntegrityError, transaction
+from pydantic import ValidationError
 
 from qbet.execution.models import ExecutionRecord
 from qbet.ledger import PortfolioLedger
-from qbet.storage.models import ExecutionRecordRow, ModeWorkQueueRow, PortfolioLedgerRow
-from qbet.storage.models import RoutingConfigurationRow
+from qbet.storage.models import (
+    ExecutionRecordRow,
+    ModeWorkQueueRow,
+    PortfolioLedgerRow,
+    RoutingConfigurationRow,
+)
 from qbet.workflow.queue import QueuedWorkItem, WorkState
 from qbet.workflow.routing import RoutingConfiguration
 
@@ -18,6 +23,10 @@ class AuthoritativePersistenceError(RuntimeError):
 
 class AuthoritativeStateConflict(ValueError):
     """Raised when a stale or conflicting snapshot would overwrite newer state."""
+
+
+class RoutingConfigurationPersistenceError(RuntimeError):
+    """Raised when durable engine/mode routing configuration is unavailable or invalid."""
 
 
 def _validate_record_progress(stored: ExecutionRecord, incoming: ExecutionRecord) -> None:
@@ -182,17 +191,27 @@ class ExecutionRecordRepository:
 
 class RoutingConfigurationRepository:
     def save(self, configuration: RoutingConfiguration) -> RoutingConfiguration:
-        RoutingConfigurationRow.objects.update_or_create(
-            pk=1,
-            defaults={"payload": configuration.model_dump(mode="json")},
-        )
+        try:
+            RoutingConfigurationRow.objects.update_or_create(
+                pk=1,
+                defaults={"payload": configuration.model_dump(mode="json")},
+            )
+        except DatabaseError as error:
+            raise RoutingConfigurationPersistenceError(
+                "routing configuration is unavailable"
+            ) from error
         return configuration
 
     def load(self) -> RoutingConfiguration | None:
-        row = RoutingConfigurationRow.objects.filter(pk=1).first()
-        if row is None:
-            return None
-        return RoutingConfiguration.model_validate(row.payload)
+        try:
+            row = RoutingConfigurationRow.objects.filter(pk=1).first()
+            if row is None:
+                return None
+            return RoutingConfiguration.model_validate(row.payload)
+        except (DatabaseError, ValidationError) as error:
+            raise RoutingConfigurationPersistenceError(
+                "routing configuration is unavailable"
+            ) from error
 
 
 class ModeWorkQueueRepository:

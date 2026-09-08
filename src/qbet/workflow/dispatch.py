@@ -29,6 +29,7 @@ from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
     PortfolioLedgerRepository,
+    RoutingConfigurationRepository,
 )
 from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
@@ -40,7 +41,7 @@ from qbet.workflow.models import (
 )
 from qbet.workflow.orchestrator import WorkflowOrchestrator
 from qbet.workflow.queue import QueuedWorkItem, WorkState
-from qbet.workflow.routing import RoutingConfiguration, V1Engine, resolve_routes
+from qbet.workflow.routing import RoutingConfiguration, V1Engine
 
 
 class ModeDispatchCoordinator:
@@ -48,13 +49,23 @@ class ModeDispatchCoordinator:
 
     def __init__(
         self,
-        configuration: RoutingConfiguration,
+        configuration: RoutingConfiguration | None = None,
         *,
+        routing_configuration_loader: Callable[[], RoutingConfiguration | None] | None = None,
         queue_repository: ModeWorkQueueRepository | None = None,
         mode_request_handlers: ModeRequestHandlers | None = None,
         monitoring_writer: PostgresMonitoringRepository | None = None,
     ) -> None:
-        self._configuration = configuration
+        if configuration is not None and routing_configuration_loader is not None:
+            raise ValueError(
+                "routing configuration and routing configuration loader are mutually exclusive"
+            )
+        if configuration is None and routing_configuration_loader is None:
+            routing_configuration_loader = RoutingConfigurationRepository().load
+        self._routing_orchestrator = WorkflowOrchestrator(
+            routing_configuration=configuration,
+            routing_configuration_loader=routing_configuration_loader,
+        )
         self._queue_repository = queue_repository or ModeWorkQueueRepository()
         self._mode_request_handlers = mode_request_handlers
         self._monitoring_writer = monitoring_writer or PostgresMonitoringRepository()
@@ -71,8 +82,7 @@ class ModeDispatchCoordinator:
         engine: V1Engine = (
             "bonus" if isinstance(request, BonusEngineRequest) else "sports_capital"
         )
-        routes = resolve_routes(
-            self._configuration,
+        routes = self._routing_orchestrator.route(
             engine,
             request.opportunity_id,
             correlation_id,
