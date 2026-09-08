@@ -11,8 +11,13 @@
     <a class="button-link" href="{% url 'admin:index' %}">Open Django Admin</a>
   </article>
   <article class="detail-panel">
-    <h2>Settings</h2>
-    <p>Simulation availability lives in the privileged Admin Area inside normal Settings.</p>
+    <h2>Engine routing</h2>
+    <p>Configure BonusEngine and SportsCapitalEngine independently for Simulation, Execution, both modes, or inactive.</p>
+    <a class="button-link" href="{% url 'admin-gui-settings' %}">Open engine routing</a>
+  </article>
+  <article class="detail-panel">
+    <h2>Presentation and simulation</h2>
+    <p>Presentation preferences and Simulation availability remain separate from routing configuration.</p>
     <a class="button-link" href="{% url 'presentation-settings' %}">Open settings</a>
   </article>
   <article class="detail-panel">

@@ -2,32 +2,51 @@
 {% block content %}
 <section class="page-heading">
   <p><a href="{% url 'admin-area' %}">Admin</a></p>
-  <h1>GUI availability</h1>
-  <p>Simulation availability is a persisted control-plane setting. <code>QBET_SIMULATION_MODE_ENABLED</code> remains only the deployment bootstrap default until an administrator saves a runtime choice.</p>
+  <h1>Engine routing</h1>
+  <p>Choose which v1 engines may receive Simulation work, Execution work, both, or neither.</p>
 </section>
 
 <section class="detail-panel">
-  <h2>Simulation area</h2>
-  <dl class="metric-list">
-    <div><dt>Runtime state</dt><dd>{% if simulation_enabled %}Enabled{% else %}Disabled{% endif %}</dd></div>
-    <div><dt>Persisted override</dt><dd>{% if simulation_control.availability.persisted %}Yes{% else %}No — deployment bootstrap is active{% endif %}</dd></div>
-    <div><dt>Active runs</dt><dd>{{ simulation_control.active_runs|length }}</dd></div>
-  </dl>
-
-  {% if simulation_control.active_runs %}
-    <p class="status-warning">Simulation cannot be disabled while an engine run is active.</p>
-    <ul>
-      {% for run in simulation_control.active_runs %}
-        <li>{{ run.engine }} · {{ run.run_id }} · {{ run.status }} · progress {{ run.progress }}</li>
-      {% endfor %}
-    </ul>
+  <h2>Current configuration</h2>
+  {% if routing_available %}
+    <dl class="metric-list">
+      <div><dt>BonusEngine</dt><dd>{{ routing_summary.bonus }}</dd></div>
+      <div><dt>SportsCapitalEngine</dt><dd>{{ routing_summary.sports_capital }}</dd></div>
+      <div><dt>Persisted override</dt><dd>{% if routing_persisted %}Yes{% else %}No — safe inactive defaults are active{% endif %}</dd></div>
+    </dl>
+  {% else %}
+    <p class="status-warning">Routing configuration is temporarily unavailable. No routing changes can be made from this page.</p>
   {% endif %}
+</section>
 
-  <form method="post" action="{% url 'admin-simulation-availability' %}">
+{% if routing_available and routing_form %}
+<section class="detail-panel">
+  <h2>Configure routing</h2>
+  <p class="muted">Saving these settings only changes future route eligibility. It does not start a simulation, approve an execution, dispatch an order, or move capital.</p>
+  {% if routing_error %}<p class="status-warning">The routing configuration could not be saved. The previous persisted configuration remains authoritative.</p>{% endif %}
+  <form method="post">
     {% csrf_token %}
-    {{ simulation_toggle_form.enabled }}
-    {{ simulation_toggle_form.enabled.label_tag }}
-    <button type="submit">Save simulation availability</button>
+    {{ routing_form.non_field_errors }}
+    <fieldset>
+      <legend>BonusEngine</legend>
+      {{ routing_form.bonus.errors }}
+      {{ routing_form.bonus }}
+    </fieldset>
+    <fieldset>
+      <legend>SportsCapitalEngine</legend>
+      {{ routing_form.sports_capital.errors }}
+      {{ routing_form.sports_capital }}
+    </fieldset>
+    <button type="submit">Save engine routing</button>
   </form>
+</section>
+{% elif routing_error and routing_available %}
+<section class="detail-panel"><p class="status-warning">The routing configuration could not be saved.</p></section>
+{% endif %}
+
+<section class="detail-panel">
+  <h2>Separate controls</h2>
+  <p>Simulation availability and presentation preferences are independent from engine routing.</p>
+  <a class="button-link" href="{% url 'presentation-settings' %}">Open presentation and simulation settings</a>
 </section>
 {% endblock %}

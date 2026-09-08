@@ -3,20 +3,25 @@
 from typing import Literal
 from uuid import UUID, uuid5
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from qbet.domain.models import DomainModel
 from qbet.workflow.models import WorkflowMode
 
 V1Engine = Literal["bonus", "sports_capital"]
+V1_ENGINES: tuple[V1Engine, ...] = ("bonus", "sports_capital")
 
 
 class EngineModes(DomainModel):
+    model_config = ConfigDict(frozen=True, str_strip_whitespace=True, extra="forbid")
+
     simulation: bool = False
     execution: bool = False
 
 
 class RoutingConfiguration(DomainModel):
+    model_config = ConfigDict(frozen=True, str_strip_whitespace=True, extra="forbid")
+
     bonus: EngineModes = Field(default_factory=EngineModes)
     sports_capital: EngineModes = Field(default_factory=EngineModes)
 
@@ -30,6 +35,14 @@ class RoutedWorkItem(DomainModel):
     capital_context: str
 
 
+def engine_modes(configuration: RoutingConfiguration, engine: V1Engine) -> EngineModes:
+    if engine == "bonus":
+        return configuration.bonus
+    if engine == "sports_capital":
+        return configuration.sports_capital
+    raise ValueError("unsupported v1 engine")
+
+
 def resolve_routes(
     configuration: RoutingConfiguration,
     engine: V1Engine,
@@ -37,7 +50,7 @@ def resolve_routes(
     correlation_id: UUID,
     owner: str,
 ) -> tuple[RoutedWorkItem, ...]:
-    modes = configuration.bonus if engine == "bonus" else configuration.sports_capital
+    modes = engine_modes(configuration, engine)
     return tuple(
         RoutedWorkItem(
             id=uuid5(correlation_id, f"{owner}:{engine}:{mode.value}:{opportunity_id}"),

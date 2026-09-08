@@ -15,6 +15,7 @@ from django.test import TestCase, override_settings
 
 from qbet.layers import SimulationLogRecordType
 from qbet.simulation import SimulationEngine
+from qbet.storage.ledger import RoutingConfigurationRepository
 from qbet.storage.postgres import PostgresSimulationReportReader
 from qbet.web.models import SimulationAvailability, SimulationRunState
 from qbet.web.monitoring import MonitoringService
@@ -23,6 +24,7 @@ from qbet.web.simulation_control import (
     SimulationControlService,
 )
 from qbet.workflow import WorkflowStage
+from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
 django.setup()
 
@@ -184,11 +186,27 @@ class SimulationGuiControlTests(TestCase):
         self.assertEqual(SimulationRunState.objects.count(), 1)
         self.assertTrue(SimulationRunState.objects.filter(pk=active_run.run_id).exists())
 
-    def test_gui_start_runs_connected_pipeline_and_persists_report_and_records(self) -> None:
+    def test_gui_pipeline_test_requires_started_engine_and_persists_report_and_records(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         reader = PostgresSimulationReportReader()
         monitoring = MonitoringService(reader)
         self.client.force_login(self.staff)
+
+        blocked = self.client.post(
+            "/simulation/start/",
+            {
+                "engine": SimulationEngine.BONUS.value,
+                "starting_capital": "100.00",
+                "max_duration_minutes": "60",
+            },
+            follow=True,
+        )
+        self.assertContains(blocked, "Start this engine in Simulation before running a pipeline test.")
+        self.assertFalse(SimulationRunState.objects.exists())
+
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(bonus=EngineModes(simulation=True))
+        )
 
         with patch("qbet.web.views.MONITORING_SERVICE", monitoring):
             response = self.client.post(

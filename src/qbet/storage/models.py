@@ -88,3 +88,32 @@ class RoutingConfigurationRow(models.Model):
 
     class Meta:
         db_table = "qbet_routing_configurations"
+
+
+class ModeWorkQueueRow(models.Model):
+    """Durable mode-specific dispatch queue and lifecycle history snapshot."""
+
+    work_id = models.UUIDField(primary_key=True, editable=False)
+    correlation_id = models.UUIDField(db_index=True)
+    mode = models.CharField(max_length=16)
+    state = models.CharField(max_length=16, db_index=True)
+    scheduled_for = models.DateTimeField(db_index=True)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_mode_work_queue"
+        ordering = ("scheduled_for", "work_id")
+
+
+class MonitoringRecordRow(models.Model):
+    """Append-only, redacted technical activity for the administrator Monitoring plane."""
+
+    id = models.BigAutoField(primary_key=True)
+    correlation_id = models.UUIDField(db_index=True)
+    occurred_at = models.DateTimeField(db_index=True)
+    payload = models.JSONField()
+
+    class Meta:
+        db_table = "qbet_monitoring_records"
+        ordering = ("occurred_at", "id")

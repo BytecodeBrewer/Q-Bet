@@ -33,8 +33,14 @@ class SettlementService:
     def settle(
         self, record: ExecutionRecord, ledger: PortfolioLedger, result: SandboxResult
     ) -> tuple[ExecutionRecord, PortfolioLedger]:
-        if record.result is not None and record.result == result:
-            return record, ledger
+        if record.state in {
+            Lifecycle.SETTLED,
+            Lifecycle.FAILED,
+            Lifecycle.CANCELLED,
+        }:
+            if record.result == result:
+                return record, ledger
+            return record.model_copy(update={"error": "settlement_result_conflict"}), ledger
         if record.state is not Lifecycle.ACKNOWLEDGED:
             return record.model_copy(update={"error": "invalid_settlement_state"}), ledger
         reason = SandboxRequestHandler().validate_result(record.proposal, result)

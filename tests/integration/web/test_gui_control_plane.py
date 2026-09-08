@@ -169,10 +169,12 @@ class GuiControlPlaneTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(content.count("data-engine-widget="), 2)
         self.assertNotIn("data-simulation-engine=", content)
+        self.assertNotIn("data-legacy-", content)
         self.assertEqual(content.count('data-engine-widget="bonus"'), 1)
         self.assertEqual(content.count('data-engine-widget="sports_capital"'), 1)
-        self.assertContains(response, "Execution")
-        self.assertContains(response, "No live execution activity is connected yet.")
+        self.assertContains(response, "Execution idle")
+        self.assertContains(response, "No known issues")
+        self.assertNotContains(response, 'aria-label="Start BonusEngine execution"')
         self.assertNotContains(response, "Simulation reports")
         self.assertNotContains(response, "BaseEngine")
         self.assertNotContains(response, "YieldEngine")
@@ -188,22 +190,31 @@ class GuiControlPlaneTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(content.count("data-engine-widget="), 2)
         self.assertEqual(content.count("data-simulation-engine="), 2)
+        self.assertNotIn("data-legacy-", content)
         self.assertIn("<span>Recorded activity</span><strong>0</strong>", content)
         self.assertIn("<span>Recorded runs</span><strong>2</strong>", content)
         self.assertContains(response, "Customer plane")
         self.assertContains(response, "Admin only")
-        self.assertContains(response, "Start deterministic sandbox run")
+        self.assertContains(response, "Deterministic pipeline test")
+        self.assertContains(response, "Run pipeline test")
 
-    def test_engine_detail_is_execution_only(self) -> None:
+    def test_engine_detail_hides_monitoring_internals_from_normal_user(self) -> None:
         self.client.force_login(self.user)
 
         response = self.client.get("/engines/bonus/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Data aggregation")
-        self.assertContains(response, "LiquidityChecker")
-        self.assertContains(response, "Execution Layer state")
+        self.assertContains(response, "Operational state")
+        self.assertContains(response, "Running matches")
+        self.assertContains(response, "Recorded capital")
+        self.assertContains(response, "Warnings")
+        self.assertContains(response, "Errors")
         self.assertContains(response, "No live execution history source is connected yet")
+        self.assertNotContains(response, "Workflow state")
+        self.assertNotContains(response, "Data aggregation")
+        self.assertNotContains(response, "LiquidityChecker")
+        self.assertNotContains(response, "Execution Layer state")
+        self.assertNotContains(response, "workflow.orchestrator")
         self.assertNotContains(response, "All BonusEngine reports")
 
     def test_monitoring_requires_staff_access(self) -> None:
@@ -225,18 +236,18 @@ class GuiControlPlaneTests(TestCase):
         SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.user)
         self.assertEqual(self.client.get("/simulation/").status_code, 404)
-        self.assertNotContains(self.client.get("/dashboard/"), "Start deterministic sandbox run")
+        self.assertNotContains(self.client.get("/dashboard/"), "Run pipeline test")
 
         self.client.force_login(self.staff)
         simulation = self.client.get("/simulation/")
         dashboard = self.client.get("/dashboard/")
         self.assertEqual(simulation.status_code, 200)
         self.assertEqual(simulation.content.decode().count("data-simulation-engine="), 2)
-        self.assertContains(dashboard, "Start deterministic sandbox run")
+        self.assertContains(dashboard, "Run pipeline test")
 
         SimulationAvailability.objects.filter(pk=1).update(enabled=False)
         self.assertEqual(self.client.get("/simulation/").status_code, 404)
-        self.assertNotContains(self.client.get("/dashboard/"), "Start deterministic sandbox run")
+        self.assertNotContains(self.client.get("/dashboard/"), "Run pipeline test")
 
     def test_settings_show_admin_area_only_to_staff(self) -> None:
         self.client.force_login(self.user)

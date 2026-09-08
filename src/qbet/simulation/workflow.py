@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+from typing import Callable
 from uuid import UUID, uuid4
 
 from pydantic import Field, model_validator
 
 from qbet.domain.models import DomainModel
+from qbet.domain.ledger import LedgerCommand, LedgerOperation, PortfolioBalance
 from qbet.domain.verification import (
     DomainRiskStatus,
     ProviderState,
@@ -14,6 +17,7 @@ from qbet.domain.verification import (
 )
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.layers import OperationalRiskLayer, SimulationLogContext
+from qbet.ledger import PortfolioLedger
 from qbet.reporting import CustomerReportInput, SimulationReport
 from qbet.request_handler import ModeRequestHandlers
 from qbet.simulation.adapters import (
@@ -114,15 +118,20 @@ class WorkflowSimulationRunner:
         risk_layer: OperationalRiskLayer | None = None,
         report_store: SimulationReportStore | None = None,
         mode_request_handlers: ModeRequestHandlers | None = None,
+        simulation_ledger: PortfolioLedger | None = None,
+        ledger_writer: Callable[[PortfolioLedger], PortfolioLedger] | None = None,
     ) -> None:
         self._liquidity_checker = liquidity_checker or StaticLiquidityChecker(
             WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
         )
         self._risk_layer = risk_layer or OperationalRiskLayer()
         self._mode_request_handlers = mode_request_handlers
+        self._simulation_ledger = simulation_ledger
+        self._ledger_writer = ledger_writer
         self._runner = ReportingSimulationRunner(report_store)
         self.last_report: SimulationReport | None = None
         self.last_records = ()
+        self.last_ledger: PortfolioLedger | None = None
 
     def request_stop(self) -> None:
         self._runner.request_stop()
@@ -140,6 +149,31 @@ class WorkflowSimulationRunner:
             opportunity.opportunity_id: opportunity for opportunity in request.opportunities
         }
         workflow_results: list[WorkflowResult] = []
+        ledger = self._simulation_ledger or PortfolioLedger(
+            balance=PortfolioBalance(
+                mode="simulation",
+                currency=request.opportunities[0].currency,
+                available=request.config.starting_capital,
+            )
+        )
+        pending_amounts: dict[str, Decimal] = {}
+
+        def apply_ledger(step: SimulationStep, operation: LedgerOperation, amount: Decimal) -> bool:
+            nonlocal ledger
+            updated, decision = ledger.apply(
+                LedgerCommand(
+                    id=f"{correlation_id}:{step.id}:{operation.value}",
+                    dispatch_id=f"{correlation_id}:{step.id}",
+                    correlation_id=str(correlation_id),
+                    currency=ledger.balance.currency,
+                    operation=operation,
+                    amount=amount,
+                )
+            )
+            if not decision.accepted:
+                return False
+            ledger = self._ledger_writer(updated) if self._ledger_writer is not None else updated
+            return True
 
         def route_step(step: SimulationStep) -> bool:
             assert step.evaluation is not None
@@ -176,18 +210,42 @@ class WorkflowSimulationRunner:
                 log_context=log_context,
             )
             workflow_results.append(workflow_result)
-            return workflow_result.final_decision is WorkflowDecision.ALLOW
+            if workflow_result.final_decision is not WorkflowDecision.ALLOW:
+                return False
+            amount = step.evaluation.strategy_result.stake
+            if amount == 0:
+                return True
+            for operation in (
+                LedgerOperation.RESERVE,
+                LedgerOperation.LOCK,
+                LedgerOperation.PENDING,
+            ):
+                if not apply_ledger(step, operation, amount):
+                    return False
+            pending_amounts[step.id] = amount
+            return True
+
+        def settle_step(context) -> None:
+            step = steps[context.completed_step_count - 1]
+            amount = pending_amounts.pop(step.id, None)
+            if amount is None:
+                return
+            payout = max(Decimal(0), amount + step.capital_change)
+            if not apply_ledger(step, LedgerOperation.SETTLE, payout):
+                raise ValueError("simulation ledger settlement failed")
 
         simulation_result = self._runner.run(
             request.config,
             steps,
             on_step_completed=on_step_completed,
+            on_step_applied=settle_step,
             on_step_ready=route_step,
             log_context=log_context,
             customer_report_input=request.customer_report_input,
         )
         self.last_report = self._runner.last_report
         self.last_records = self._runner.last_records
+        self.last_ledger = ledger
         return WorkflowSimulationResult(
             correlation_id=correlation_id,
             simulation_result=simulation_result,

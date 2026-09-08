@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import csv
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from io import StringIO
+from typing import cast
 from uuid import UUID
 
 from django.contrib import messages
@@ -14,7 +15,12 @@ from django.db import DatabaseError
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST
+from pydantic import ValidationError
 
+from qbet.monitoring import MonitoringQuery, MonitoringService as WorkflowMonitoringService
+from qbet.monitoring.exports import csv_header as monitoring_csv_header
+from qbet.monitoring.exports import csv_rows as monitoring_csv_rows
+from qbet.monitoring.exports import json_document as monitoring_json_document
 from qbet.reporting import (
     CustomerReportUnavailable,
     CustomerResultReport,
@@ -23,6 +29,11 @@ from qbet.reporting import (
 )
 from qbet.reporting.exports import CustomerReportExport, json_bytes
 from qbet.simulation import SimulationEngine
+from qbet.storage.ledger import (
+    RoutingConfigurationPersistenceError,
+    RoutingConfigurationRepository,
+)
+from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportReader
 from qbet.web.controls import (
     DashboardLayout,
@@ -38,13 +49,14 @@ from qbet.web.forms import (
     SimulationAvailabilityForm,
     SimulationStartForm,
 )
-from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.models import CustomerReportAccess
+from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.simulation_control import (
     SimulationControlError,
     SimulationControlService,
     SimulationDisableBlockedError,
 )
+from qbet.workflow.routing import RoutingConfiguration, V1Engine, engine_modes
 
 _DETAIL_FIELDS = (
     "include_events",
@@ -62,11 +74,20 @@ def _monitoring_service() -> MonitoringService:
 
 
 MONITORING_SERVICE = _monitoring_service()
+WORKFLOW_MONITORING_REPOSITORY = PostgresMonitoringRepository()
+WORKFLOW_MONITORING_SERVICE = WorkflowMonitoringService(WORKFLOW_MONITORING_REPOSITORY)
 SIMULATION_CONTROL = SimulationControlService()
 
 
 def _simulation_enabled() -> bool:
     return SIMULATION_CONTROL.availability().enabled
+
+
+def _routing_configuration() -> tuple[RoutingConfiguration, bool]:
+    try:
+        return RoutingConfigurationRepository().load() or RoutingConfiguration(), True
+    except RoutingConfigurationPersistenceError:
+        return RoutingConfiguration(), False
 
 
 def _is_staff(user: object) -> bool:
@@ -107,15 +128,24 @@ def _dashboard_context(
     start_form: SimulationStartForm | None = None,
 ) -> dict[str, object]:
     layout: DashboardLayout = dashboard_layout(request.session)
-    execution = execution_snapshot()
+    routing_configuration, routing_available = _routing_configuration()
+    execution = execution_snapshot(
+        routing_configuration,
+        configuration_available=routing_available,
+    )
     values: dict[str, object] = {
         "execution_monitoring": execution,
         "execution_engines": _ordered_engines(execution.engines, layout.execution),
+        "execution_layer_active": execution.summary.active_engines > 0,
         "dashboard_layout": layout,
+        "routing_available": routing_available,
         "simulation_enabled": False,
     }
     if _is_staff(request.user) and _simulation_enabled():
-        simulation_monitoring = MONITORING_SERVICE.snapshot()
+        simulation_monitoring = MONITORING_SERVICE.snapshot(
+            runtime_configuration=routing_configuration,
+            runtime_available=routing_available,
+        )
         values.update(
             simulation_enabled=True,
             simulation_monitoring=simulation_monitoring,
@@ -123,6 +153,7 @@ def _dashboard_context(
                 simulation_monitoring.engines,
                 layout.simulation,
             ),
+            simulation_layer_active=simulation_monitoring.summary.active_engines > 0,
             simulation_control=SIMULATION_CONTROL.snapshot(),
             start_form=start_form or SimulationStartForm(),
         )
@@ -191,7 +222,11 @@ def dashboard_layout_update(request: HttpRequest) -> JsonResponse:
 
 @login_required
 def engine_detail(request: HttpRequest, engine_id: str) -> HttpResponse:
-    snapshot = execution_snapshot()
+    routing_configuration, routing_available = _routing_configuration()
+    snapshot = execution_snapshot(
+        routing_configuration,
+        configuration_available=routing_available,
+    )
     engine = next(
         (candidate for candidate in snapshot.engines if candidate.engine_id == engine_id),
         None,
@@ -212,12 +247,16 @@ def simulation(request: HttpRequest) -> HttpResponse:
     control = SIMULATION_CONTROL.snapshot()
     if not control.availability.enabled:
         raise Http404("Simulation visibility is disabled.")
+    routing_configuration, routing_available = _routing_configuration()
     return render(
         request,
         "qbet_web/simulation.html",
         _context(
             request,
-            monitoring=MONITORING_SERVICE.snapshot(),
+            monitoring=MONITORING_SERVICE.snapshot(
+                runtime_configuration=routing_configuration,
+                runtime_available=routing_available,
+            ),
             simulation_control=control,
             start_form=SimulationStartForm(),
             simulation_enabled=True,
@@ -242,9 +281,21 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
             status=400,
         )
 
+    engine = SimulationEngine(form.cleaned_data["engine"])
+    routing_configuration, routing_available = _routing_configuration()
+    if not routing_available:
+        messages.error(request, "Engine control is temporarily unavailable.")
+        return redirect("dashboard")
+    if not engine_modes(
+        routing_configuration,
+        cast(V1Engine, engine.value),
+    ).simulation:
+        messages.error(request, "Start this engine in Simulation before running a pipeline test.")
+        return redirect("dashboard")
+
     try:
         run = SIMULATION_CONTROL.start(
-            engine=SimulationEngine(form.cleaned_data["engine"]),
+            engine=engine,
             starting_capital=form.cleaned_data["starting_capital"],
             max_duration=timedelta(minutes=form.cleaned_data["max_duration_minutes"]),
         )
@@ -268,7 +319,7 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
 
     messages.success(
         request,
-        f"Simulation {run.run_id} finished with status {run.status}.",
+        f"Pipeline test {run.run_id} finished with status {run.status}.",
     )
     return redirect("report-detail", run_id=run.report_id)
 
@@ -434,11 +485,96 @@ def _visible_customer_report_ids(request: HttpRequest) -> set[UUID] | None:
 @user_passes_test(_is_staff, login_url="login")
 @require_GET
 def monitoring(request: HttpRequest) -> HttpResponse:
+    query = _monitoring_query(request)
+    mode = request.GET.get("view", "compact")
+    if mode not in {"compact", "extended"}:
+        raise Http404("Monitoring view not found.")
+    records = (
+        WORKFLOW_MONITORING_SERVICE.extended(query)
+        if mode == "extended"
+        else WORKFLOW_MONITORING_SERVICE.compact(query)
+    )
+    routing_configuration, routing_available = _routing_configuration()
+    simulation_runtime = MONITORING_SERVICE.snapshot(
+        runtime_configuration=routing_configuration,
+        runtime_available=routing_available,
+    )
     return render(
         request,
         "qbet_web/monitoring.html",
-        _context(request, monitoring=MONITORING_SERVICE.snapshot()),
+        _context(
+            request,
+            monitoring=simulation_runtime,
+            execution_runtime=execution_snapshot(
+                routing_configuration,
+                configuration_available=routing_available,
+            ),
+            simulation_runtime=simulation_runtime,
+            routing_available=routing_available,
+            monitoring_view=mode,
+            monitoring_records=records,
+            monitoring_start=query.start,
+            monitoring_end=query.end,
+            monitoring_query_parameters=_monitoring_query_parameters(request),
+        ),
     )
+
+
+@user_passes_test(_is_staff, login_url="login")
+@require_GET
+def monitoring_export(request: HttpRequest, export_format: str) -> HttpResponse:
+    query = _monitoring_query(request)
+    mode = request.GET.get("view", "compact")
+    if mode not in {"compact", "extended"} or export_format not in {"csv", "json"}:
+        raise Http404("Monitoring export not found.")
+    values = (
+        WORKFLOW_MONITORING_SERVICE.extended(query)
+        if mode == "extended"
+        else WORKFLOW_MONITORING_SERVICE.compact(query)
+    )
+    if export_format == "json":
+        return HttpResponse(
+            monitoring_json_document(values), content_type="application/json; charset=utf-8"
+        )
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(monitoring_csv_header(extended=mode == "extended"))
+    writer.writerows(monitoring_csv_rows(values))
+    return HttpResponse(output.getvalue(), content_type="text/csv; charset=utf-8")
+
+
+def _monitoring_query(request: HttpRequest) -> MonitoringQuery:
+    end = _query_datetime(request.GET.get("end")) or datetime.now(UTC)
+    start = _query_datetime(request.GET.get("start")) or end - timedelta(days=1)
+    try:
+        correlation = request.GET.get("correlation")
+        return MonitoringQuery(
+            start=start,
+            end=end,
+            correlation_id=UUID(correlation) if correlation else None,
+        )
+    except ValidationError as error:
+        raise Http404(error.errors()[0]["msg"]) from error
+    except ValueError as error:
+        raise Http404("Monitoring correlation identifiers must be UUID values.") from error
+
+
+def _query_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise Http404("Monitoring timestamps must be ISO-8601 values.") from error
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise Http404("Monitoring timestamps must include a timezone.")
+    return parsed
+
+
+def _monitoring_query_parameters(request: HttpRequest) -> str:
+    parameters = request.GET.copy()
+    parameters.pop("view", None)
+    return parameters.urlencode()
 
 
 @user_passes_test(_is_staff, login_url="login")
