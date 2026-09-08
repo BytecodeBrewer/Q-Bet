@@ -150,10 +150,13 @@ Initial matched-betting strategy focus:
 
 ## Guardrails
 
-Q-Bet should support research, simulation, reporting, lawful integrations, and user-approved execution. It should not move money from a bank account without explicit approval. It should not run as unmanaged full autonomy; unattended runs are capped at 48 hours.
+Q-Bet should support research, Simulation, sandbox execution, Reporting, permitted integrations, and user-approved live Execution. Simulation and official provider/bank sandbox environments may run continuously, including 24/7 test runs, without an artificial global timeout because they cannot create live-money side effects. Automated transactions inside an official sandbox are part of the intended integration and ledger-validation surface.
+
+Runtime caps such as the earlier 48-hour unattended-run limit belong only to live or otherwise high-authority Execution policy; they are not system-wide timers and must never be applied to Simulation or sandbox operation. Live bank movement and irreversible provider actions remain behind the explicit approval/automation policy of the Execution path.
 
 ## Project Documents
 
 - [Expectation Model](docs/expectation-model.md)
 - [Pipeline Architecture](docs/pipeline-architecture.md)
+- [Phase 3 Integration Register](docs/phase-3-integration-register.md)
 - [Django Web Shell](docs/django-web-shell.md)
