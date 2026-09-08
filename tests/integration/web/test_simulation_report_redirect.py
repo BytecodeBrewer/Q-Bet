@@ -2,7 +2,9 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 
 from qbet.simulation import SimulationEngine
+from qbet.storage.ledger import RoutingConfigurationRepository
 from qbet.web.models import SimulationAvailability, SimulationRunState
+from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
 
 class SimulationReportRedirectTests(TestCase):
@@ -17,6 +19,9 @@ class SimulationReportRedirectTests(TestCase):
 
     def test_successful_gui_start_redirects_to_persisted_report_detail(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(bonus=EngineModes(simulation=True))
+        )
         self.client.force_login(self.staff)
 
         response = self.client.post(

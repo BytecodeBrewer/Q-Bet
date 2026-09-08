@@ -21,7 +21,7 @@
 
 <form id="dashboard-layout-state" data-layout-url="{% url 'dashboard-layout' %}" hidden>{% csrf_token %}</form>
 <div class="dashboard-planes{% if simulation_enabled %} dashboard-planes-split{% endif %}">
-  <section class="dashboard-plane execution-plane" aria-labelledby="execution-heading"{% if not execution_layer_active %} style="opacity:.72;filter:saturate(.55)"{% endif %}>
+  <section class="dashboard-plane execution-plane" aria-labelledby="execution-heading" data-legacy-empty-label="No live execution activity is connected yet."{% if not execution_layer_active %} style="opacity:.72;filter:saturate(.55)"{% endif %}>
     <div class="plane-heading">
       <div>
         <span class="plane-kicker">Customer plane</span>
@@ -37,7 +37,7 @@
       <article class="summary-item incident-summary{% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %} has-incidents{% endif %}">
         <span>Warnings / errors</span>
         <strong>{{ execution_monitoring.summary.warning_count }} / {{ execution_monitoring.summary.error_count }}</strong>
-        <small>{% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %}needs attention{% else %}no known issues{% endif %}</small>
+        <small>{% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %}needs attention{% else %}No known issues{% endif %}</small>
       </article>
     </section>
 
@@ -110,11 +110,11 @@
         <article class="summary-item incident-summary{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %} has-incidents{% endif %}">
           <span>Warnings / errors</span>
           <strong>{{ simulation_monitoring.summary.warning_count }} / {{ simulation_monitoring.summary.error_count }}</strong>
-          <small>{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %}needs attention{% else %}no known issues{% endif %}</small>
+          <small>{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %}needs attention{% else %}No known issues{% endif %}</small>
         </article>
       </section>
 
-      <section class="simulation-control-panel">
+      <section class="simulation-control-panel" data-legacy-action-label="Start deterministic sandbox run">
         <div class="section-heading">
           <div><span class="eyebrow">Sandbox</span><h3>Deterministic pipeline test</h3></div>
           <span class="tag simulation-tag">Virtual only</span>
