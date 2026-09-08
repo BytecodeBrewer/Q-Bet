@@ -383,7 +383,7 @@ class MonitoringService:
                 elif error_count:
                     status, detail, live_state = "red", "Error.", "error"
                 elif warning_count:
-                    status, detail, live_state = "amber", "Warning.", "warning"
+                    status, detail, live_state = "red", "Warning.", "warning"
                 elif latest is not None and latest.status is SimulationStatus.RUNNING:
                     status, detail, live_state = "green", "Running.", "ready"
                 else:
