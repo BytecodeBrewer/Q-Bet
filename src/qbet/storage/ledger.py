@@ -13,8 +13,9 @@ from qbet.storage.models import (
     PortfolioLedgerRow,
     RoutingConfigurationRow,
 )
+from qbet.workflow.models import WorkflowMode
 from qbet.workflow.queue import QueuedWorkItem, WorkState
-from qbet.workflow.routing import RoutingConfiguration
+from qbet.workflow.routing import RoutingConfiguration, V1Engine, engine_modes
 
 
 class AuthoritativePersistenceError(RuntimeError):
@@ -208,6 +209,33 @@ class RoutingConfigurationRepository:
             if row is None:
                 return None
             return RoutingConfiguration.model_validate(row.payload)
+        except (DatabaseError, ValidationError) as error:
+            raise RoutingConfigurationPersistenceError(
+                "routing configuration is unavailable"
+            ) from error
+
+    def set_mode_active(
+        self,
+        *,
+        engine: V1Engine,
+        mode: WorkflowMode,
+        active: bool,
+    ) -> RoutingConfiguration:
+        """Atomically toggle one engine/mode runtime route without touching the sibling mode."""
+
+        try:
+            with transaction.atomic():
+                row, _ = RoutingConfigurationRow.objects.select_for_update().get_or_create(
+                    pk=1,
+                    defaults={"payload": RoutingConfiguration().model_dump(mode="json")},
+                )
+                current = RoutingConfiguration.model_validate(row.payload)
+                modes = engine_modes(current, engine)
+                updated_modes = modes.model_copy(update={mode.value: active})
+                updated = current.model_copy(update={engine: updated_modes})
+                row.payload = updated.model_dump(mode="json")
+                row.save(update_fields=("payload", "updated_at"))
+                return updated
         except (DatabaseError, ValidationError) as error:
             raise RoutingConfigurationPersistenceError(
                 "routing configuration is unavailable"

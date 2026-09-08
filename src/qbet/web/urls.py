@@ -3,6 +3,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from qbet.web import views
+from qbet.web.engine_runtime import engine_runtime_control
 from qbet.web.routing_settings import routing_settings
 
 urlpatterns = [
@@ -11,6 +12,11 @@ urlpatterns = [
     path("register/", views.register, name="register"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
+    path(
+        "engines/<str:engine_id>/<str:mode>/<str:action>/",
+        engine_runtime_control,
+        name="engine-runtime-control",
+    ),
     path("engines/<str:engine_id>/", views.engine_detail, name="engine-detail"),
     path("simulation/", views.simulation, name="simulation"),
     path("simulation/start/", views.simulation_start, name="simulation-start"),

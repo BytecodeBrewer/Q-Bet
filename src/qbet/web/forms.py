@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
@@ -50,8 +51,8 @@ class RoutingConfigurationForm(forms.Form):
         widget=forms.RadioSelect,
     )
 
-    def clean(self) -> dict[str, object]:
-        cleaned = super().clean()
+    def clean(self) -> dict[str, Any]:
+        cleaned = super().clean() or {}
         allowed = {*self.fields, "csrfmiddlewaretoken"}
         unexpected = set(self.data) - allowed
         if unexpected:

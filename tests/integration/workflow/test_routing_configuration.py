@@ -52,8 +52,9 @@ class StoredRoutingDispatchTests(TestCase):
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
         coordinator = ModeDispatchCoordinator()
+        request = _bonus_request("bonus-routing-1")
         first = coordinator.schedule(
-            _bonus_request("bonus-routing-1"),
+            request,
             owner="owner",
             correlation_id=CORRELATION_ID,
             scheduled_for=NOW,
@@ -75,7 +76,7 @@ class StoredRoutingDispatchTests(TestCase):
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
         repeat = coordinator.schedule(
-            _bonus_request("bonus-routing-1"),
+            request,
             owner="owner",
             correlation_id=CORRELATION_ID,
             scheduled_for=NOW,
