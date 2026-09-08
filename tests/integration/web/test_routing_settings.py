@@ -29,7 +29,13 @@ class RoutingSettingsTests(TestCase):
 
         self.client.force_login(self.user)
         normal_user = self.client.get("/admin-area/gui-settings/")
+        normal_user_write = self.client.post(
+            "/admin-area/gui-settings/",
+            {"bonus": "both", "sports_capital": "both"},
+        )
         self.assertEqual(normal_user.status_code, 302)
+        self.assertEqual(normal_user_write.status_code, 302)
+        self.assertIsNone(RoutingConfigurationRepository().load())
 
         self.client.force_login(self.staff)
         response = self.client.get("/admin-area/gui-settings/")
@@ -105,3 +111,28 @@ class RoutingSettingsTests(TestCase):
             status_code=503,
         )
         self.assertNotContains(response, "database detail", status_code=503)
+
+    def test_save_failure_preserves_previous_configuration_and_hides_internal_detail(self) -> None:
+        repository = RoutingConfigurationRepository()
+        original = repository.save(
+            RoutingConfiguration(sports_capital=EngineModes(execution=True))
+        )
+        self.client.force_login(self.staff)
+
+        with patch(
+            "qbet.web.routing_settings.RoutingConfigurationRepository.save",
+            side_effect=RoutingConfigurationPersistenceError("database detail"),
+        ):
+            response = self.client.post(
+                "/admin-area/gui-settings/",
+                {"bonus": "both", "sports_capital": "both"},
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertContains(
+            response,
+            "routing configuration could not be saved",
+            status_code=503,
+        )
+        self.assertNotContains(response, "database detail", status_code=503)
+        self.assertEqual(repository.load(), original)
