@@ -22,6 +22,7 @@ urlpatterns = [
         name="report-export",
     ),
     path("monitoring/", views.monitoring, name="monitoring"),
+    path("monitoring/export/<str:export_format>/", views.monitoring_export, name="monitoring-export"),
     path("admin-area/", views.admin_area, name="admin-area"),
     path("admin-area/gui-settings/", views.admin_gui_settings, name="admin-gui-settings"),
     path(

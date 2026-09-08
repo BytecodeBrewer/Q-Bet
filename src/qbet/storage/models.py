@@ -104,3 +104,16 @@ class ModeWorkQueueRow(models.Model):
     class Meta:
         db_table = "qbet_mode_work_queue"
         ordering = ("scheduled_for", "work_id")
+
+
+class MonitoringRecordRow(models.Model):
+    """Append-only, redacted technical activity for the administrator Monitoring plane."""
+
+    id = models.BigAutoField(primary_key=True)
+    correlation_id = models.UUIDField(db_index=True)
+    occurred_at = models.DateTimeField(db_index=True)
+    payload = models.JSONField()
+
+    class Meta:
+        db_table = "qbet_monitoring_records"
+        ordering = ("occurred_at", "id")
