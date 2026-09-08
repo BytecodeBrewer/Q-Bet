@@ -117,7 +117,7 @@ class ModeDispatchCoordinator:
                     ),
                 )
             )
-            self._record_workflow(processing, workflow_result)
+            self._record_workflow(processing, workflow_result, occurred_at=now)
             if workflow_result.request_handler_result is not None:
                 self._record_event(
                     processing,
@@ -269,9 +269,16 @@ class ModeDispatchCoordinator:
             return "authoritative_execution_state_conflict"
         return "mode_execution_failed"
 
-    def _record_workflow(self, item: QueuedWorkItem, workflow_result) -> None:
+    def _record_workflow(
+        self,
+        item: QueuedWorkItem,
+        workflow_result,
+        *,
+        occurred_at: datetime | None = None,
+    ) -> None:
         """Persist only safe transition metadata for the administrator read model."""
 
+        event_time = occurred_at or datetime.now(UTC)
         for transition in workflow_result.transitions:
             level = (
                 MonitoringLevel.ERROR
@@ -283,7 +290,7 @@ class ModeDispatchCoordinator:
             self._monitoring_writer.append(
                 MonitoringRecord(
                     correlation_id=workflow_result.correlation_id,
-                    occurred_at=datetime.now(UTC),
+                    occurred_at=event_time,
                     engine=item.work.engine,
                     mode=item.work.mode.value,
                     stage=transition.stage.value,
@@ -407,7 +414,7 @@ class ModeDispatchCoordinator:
         )
 
         for workflow_result in result.workflow_results:
-            self._record_workflow(item, workflow_result)
+            self._record_workflow(item, workflow_result, occurred_at=now)
 
         self._record_event(
             item,
