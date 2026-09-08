@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Protocol
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field, model_validator
+from pydantic import AwareDatetime, model_validator
 
 from qbet.domain.models import DomainModel
 from qbet.monitoring.models import MonitoringRecord
@@ -22,7 +22,6 @@ class MonitoringQuery(DomainModel):
     start: AwareDatetime
     end: AwareDatetime
     correlation_id: UUID | None = None
-    limit: int = Field(default=5000, ge=1, le=5000)
 
     @model_validator(mode="after")
     def validates_range(self) -> "MonitoringQuery":
@@ -35,6 +34,7 @@ class MonitoringQuery(DomainModel):
 
 class CompactMonitoringProcess(DomainModel):
     correlation_id: UUID
+    work_id: str | None = None
     engine: str
     mode: str | None = None
     status: str
@@ -55,10 +55,41 @@ class MonitoringService:
         return self._reader.list_records(query)
 
     def compact(self, query: MonitoringQuery) -> tuple[CompactMonitoringProcess, ...]:
-        grouped: dict[UUID, list[MonitoringRecord]] = {}
+        by_correlation_mode: dict[tuple[UUID, str | None], list[MonitoringRecord]] = {}
         for record in self.extended(query):
-            grouped.setdefault(record.correlation_id, []).append(record)
-        return tuple(self._compact(records) for _, records in sorted(grouped.items(), key=lambda item: item[0].hex))
+            mode = str(record.mode) if record.mode is not None else None
+            by_correlation_mode.setdefault((record.correlation_id, mode), []).append(record)
+
+        grouped: list[tuple[tuple[UUID, str | None, str | None], list[MonitoringRecord]]] = []
+        for (correlation_id, mode), records in by_correlation_mode.items():
+            work_ids = {
+                str(record.references["work_id"])
+                for record in records
+                if record.references.get("work_id") is not None
+            }
+            if len(work_ids) <= 1:
+                work_id = next(iter(work_ids), None)
+                grouped.append(((correlation_id, mode, work_id), records))
+                continue
+
+            by_work: dict[str | None, list[MonitoringRecord]] = {}
+            for record in records:
+                raw_work_id = record.references.get("work_id")
+                work_id = str(raw_work_id) if raw_work_id is not None else None
+                by_work.setdefault(work_id, []).append(record)
+            grouped.extend(
+                ((correlation_id, mode, work_id), work_records)
+                for work_id, work_records in by_work.items()
+            )
+
+        grouped.sort(
+            key=lambda item: (
+                item[0][0].hex,
+                item[0][1] or "",
+                item[0][2] or "",
+            )
+        )
+        return tuple(self._compact(records) for _, records in grouped)
 
     @staticmethod
     def _compact(records: list[MonitoringRecord]) -> CompactMonitoringProcess:
@@ -72,8 +103,25 @@ class MonitoringService:
             ),
             None,
         )
+        work_id = next(
+            (
+                str(record.references["work_id"])
+                for record in reversed(ordered)
+                if record.references.get("work_id") is not None
+            ),
+            None,
+        )
+        latest_reason_code = next(
+            (
+                str(record.reason_code)
+                for record in reversed(ordered)
+                if record.reason_code is not None
+            ),
+            None,
+        )
         return CompactMonitoringProcess(
             correlation_id=latest.correlation_id,
+            work_id=work_id,
             engine=str(latest.engine),
             mode=str(latest.mode) if latest.mode is not None else None,
             status=str(latest.status),
@@ -85,5 +133,5 @@ class MonitoringService:
             opportunity_id=opportunity_id,
             warning_count=sum(record.level.value == "warning" for record in ordered),
             error_count=sum(record.level.value == "error" for record in ordered),
-            latest_reason_code=str(latest.reason_code) if latest.reason_code else None,
+            latest_reason_code=latest_reason_code,
         )

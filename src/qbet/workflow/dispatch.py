@@ -30,7 +30,7 @@ from qbet.storage.ledger import (
     ModeWorkQueueRepository,
     PortfolioLedgerRepository,
 )
-from qbet.storage.monitoring import PostgresMonitoringRepository
+from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.workflow.models import (
     WorkflowDecision,
@@ -93,133 +93,116 @@ class ModeDispatchCoordinator:
     def dispatch_due(self, *, now: datetime, owner: str) -> tuple[QueuedWorkItem, ...]:
         processed: list[QueuedWorkItem] = []
         for processing in self._queue_repository.claim_due(now):
-            if now >= processing.expires_at:
-                processed.append(
-                    self._save_queue(processing.transition(WorkState.EXPIRED, now=now))
-                )
-                continue
+            try:
+                with transaction.atomic():
+                    outcome = self._dispatch_claimed(processing, now=now, owner=owner)
+            except Exception as error:
+                outcome = self._fail_after_error(processing, now=now, error=error)
+            processed.append(outcome)
+        return tuple(processed)
 
-            workflow_result = WorkflowOrchestrator(
-                mode_request_handlers=self._mode_request_handlers
-            ).process(
-                WorkflowRequest(
-                    id=str(processing.work.id),
-                    opportunity_id=processing.work.opportunity_id,
-                    mode=processing.work.mode,
-                    correlation_id=processing.work.correlation_id,
-                    stages=(
-                        WorkflowStage.DATA_AGGREGATION,
-                        WorkflowStage.ENGINE_PREPARATION,
-                        WorkflowStage.CALCULATION,
-                        WorkflowStage.DOMAIN_RISK,
-                        WorkflowStage.LIQUIDITY_CHECK,
-                        WorkflowStage.DISPATCH,
-                    ),
+    def _dispatch_claimed(
+        self,
+        processing: QueuedWorkItem,
+        *,
+        now: datetime,
+        owner: str,
+    ) -> QueuedWorkItem:
+        if now >= processing.expires_at:
+            return self._save_queue(processing.transition(WorkState.EXPIRED, now=now))
+
+        workflow_result = WorkflowOrchestrator(
+            mode_request_handlers=self._mode_request_handlers
+        ).process(
+            WorkflowRequest(
+                id=str(processing.work.id),
+                opportunity_id=processing.work.opportunity_id,
+                mode=processing.work.mode,
+                correlation_id=processing.work.correlation_id,
+                stages=(
+                    WorkflowStage.DATA_AGGREGATION,
+                    WorkflowStage.ENGINE_PREPARATION,
+                    WorkflowStage.CALCULATION,
+                    WorkflowStage.DOMAIN_RISK,
+                    WorkflowStage.LIQUIDITY_CHECK,
+                    WorkflowStage.DISPATCH,
+                ),
+            )
+        )
+        self._record_workflow(processing, workflow_result, occurred_at=now)
+        if workflow_result.request_handler_result is not None:
+            self._record_event(
+                processing,
+                stage="request_handler",
+                event_type="result",
+                status=workflow_result.request_handler_result.status.value,
+                reason_code=workflow_result.request_handler_result.reason_code,
+                occurred_at=now,
+                references={"subprocess_id": str(workflow_result.request_id)},
+            )
+
+        if workflow_result.final_decision is WorkflowDecision.RECHECK:
+            return self._save_queue(
+                processing.transition(
+                    WorkState.RECHECK,
+                    now=now,
+                    reason="revalidation_recheck",
                 )
             )
-            self._record_workflow(processing, workflow_result, occurred_at=now)
-            if workflow_result.request_handler_result is not None:
-                self._record_event(
-                    processing,
-                    stage="request_handler",
-                    event_type="result",
-                    status=workflow_result.request_handler_result.status.value,
-                    reason_code=workflow_result.request_handler_result.reason_code,
-                    occurred_at=now,
+        if workflow_result.final_decision is WorkflowDecision.REJECT:
+            return self._save_queue(
+                processing.transition(
+                    WorkState.CANCELLED,
+                    now=now,
+                    reason="revalidation_rejected",
                 )
+            )
 
-            if workflow_result.final_decision is WorkflowDecision.RECHECK:
-                processed.append(
-                    self._save_queue(
-                        processing.transition(
-                            WorkState.RECHECK,
-                            now=now,
-                            reason="revalidation_recheck",
-                        )
-                    )
+        handler_result = workflow_result.request_handler_result
+        if (
+            handler_result is not None
+            and handler_result.status is ResultStatus.NOT_YET_AVAILABLE
+        ):
+            return self._save_queue(
+                processing.transition(
+                    WorkState.RECHECK,
+                    now=now,
+                    reason="result_not_yet_available",
                 )
-                continue
-            if workflow_result.final_decision is WorkflowDecision.REJECT:
-                processed.append(
-                    self._save_queue(
-                        processing.transition(
-                            WorkState.CANCELLED,
-                            now=now,
-                            reason="revalidation_rejected",
-                        )
-                    )
+            )
+        if handler_result is not None and handler_result.status is ResultStatus.PARTIAL:
+            return self._save_queue(
+                processing.transition(
+                    WorkState.RECHECK,
+                    now=now,
+                    reason="result_partial",
                 )
-                continue
+            )
+        if (
+            handler_result is not None
+            and handler_result.status is ResultStatus.CANCELLED
+        ):
+            return self._save_queue(
+                processing.transition(
+                    WorkState.CANCELLED,
+                    now=now,
+                    reason="result_cancelled",
+                )
+            )
+        if handler_result is not None and handler_result.status is not ResultStatus.SUCCESS:
+            return self._save_queue(
+                processing.transition(
+                    WorkState.FAILED,
+                    now=now,
+                    reason="result_unavailable",
+                )
+            )
 
-            handler_result = workflow_result.request_handler_result
-            if (
-                handler_result is not None
-                and handler_result.status is ResultStatus.NOT_YET_AVAILABLE
-            ):
-                processed.append(
-                    self._save_queue(
-                        processing.transition(
-                            WorkState.RECHECK,
-                            now=now,
-                            reason="result_not_yet_available",
-                        )
-                    )
-                )
-                continue
-            if handler_result is not None and handler_result.status is ResultStatus.PARTIAL:
-                processed.append(
-                    self._save_queue(
-                        processing.transition(
-                            WorkState.RECHECK,
-                            now=now,
-                            reason="result_partial",
-                        )
-                    )
-                )
-                continue
-            if (
-                handler_result is not None
-                and handler_result.status is ResultStatus.CANCELLED
-            ):
-                processed.append(
-                    self._save_queue(
-                        processing.transition(
-                            WorkState.CANCELLED,
-                            now=now,
-                            reason="result_cancelled",
-                        )
-                    )
-                )
-                continue
-            if handler_result is not None and handler_result.status is not ResultStatus.SUCCESS:
-                processed.append(
-                    self._save_queue(
-                        processing.transition(
-                            WorkState.FAILED,
-                            now=now,
-                            reason="result_unavailable",
-                        )
-                    )
-                )
-                continue
-
-            try:
-                processed.append(
-                    self._complete_mode_atomically(
-                        processing,
-                        now=now,
-                        owner=owner,
-                    )
-                )
-            except Exception as error:
-                processed.append(
-                    self._fail_mode_atomically(
-                        processing,
-                        now=now,
-                        reason_code=self._safe_failure_reason(error),
-                    )
-                )
-        return tuple(processed)
+        return self._complete_mode_atomically(
+            processing,
+            now=now,
+            owner=owner,
+        )
 
     def _complete_mode_atomically(
         self,
@@ -236,6 +219,31 @@ class ModeDispatchCoordinator:
             else:
                 self._run_execution(item, now=now, owner=owner)
             return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
+
+    def _fail_after_error(
+        self,
+        item: QueuedWorkItem,
+        *,
+        now: datetime,
+        error: Exception,
+    ) -> QueuedWorkItem:
+        """Fail a claimed item even when the Monitoring writer itself is unavailable."""
+
+        reason_code = self._safe_failure_reason(error)
+        try:
+            return self._fail_mode_atomically(
+                item,
+                now=now,
+                reason_code=reason_code,
+            )
+        except Exception:
+            return self._queue_repository.save(
+                item.transition(
+                    WorkState.FAILED,
+                    now=now,
+                    reason=reason_code,
+                )
+            )
 
     def _fail_mode_atomically(
         self,
@@ -267,6 +275,8 @@ class ModeDispatchCoordinator:
             return "authoritative_execution_state_unavailable"
         if isinstance(error, AuthoritativeStateConflict):
             return "authoritative_execution_state_conflict"
+        if isinstance(error, MonitoringPersistenceError):
+            return "monitoring_persistence_unavailable"
         return "mode_execution_failed"
 
     def _record_workflow(
@@ -300,6 +310,7 @@ class ModeDispatchCoordinator:
                     level=level,
                     references={
                         "work_id": str(item.work.id),
+                        "subprocess_id": str(workflow_result.request_id),
                         "opportunity_id": item.work.opportunity_id,
                     },
                 )

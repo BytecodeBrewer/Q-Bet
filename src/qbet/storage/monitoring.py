@@ -9,6 +9,10 @@ from qbet.monitoring.service import MonitoringQuery
 from qbet.storage.models import MonitoringRecordRow
 
 
+class MonitoringPersistenceError(OSError):
+    """Raised when the durable Monitoring source cannot be read or written."""
+
+
 class PostgresMonitoringRepository:
     def append(self, record: MonitoringRecord) -> MonitoringRecord:
         try:
@@ -18,7 +22,7 @@ class PostgresMonitoringRepository:
                 payload=record.model_dump(mode="json"),
             )
         except DatabaseError as error:
-            raise OSError("monitoring persistence is unavailable") from error
+            raise MonitoringPersistenceError("monitoring persistence is unavailable") from error
         return record
 
     def list_records(self, query: MonitoringQuery) -> tuple[MonitoringRecord, ...]:
@@ -29,7 +33,9 @@ class PostgresMonitoringRepository:
             )
             if query.correlation_id is not None:
                 rows = rows.filter(correlation_id=query.correlation_id)
-            payloads = tuple(rows.order_by("occurred_at", "id").values_list("payload", flat=True)[: query.limit])
+            payloads = tuple(
+                rows.order_by("occurred_at", "id").values_list("payload", flat=True)
+            )
         except DatabaseError as error:
-            raise OSError("monitoring history is unavailable") from error
+            raise MonitoringPersistenceError("monitoring history is unavailable") from error
         return tuple(MonitoringRecord.model_validate(payload) for payload in payloads)

@@ -76,7 +76,6 @@ class WorkflowOrchestrator:
     ) -> None:
         self._stage_handlers = dict(stage_handlers or {})
         self._liquidity_checker = liquidity_checker
-        # This ticket defines the refresh seam; later workflow stages invoke it explicitly.
         self._request_handler = request_handler
         self._mode_request_handlers = mode_request_handlers
         self._routing_configuration = routing_configuration
@@ -154,6 +153,7 @@ class WorkflowOrchestrator:
                 )
         return WorkflowResult(
             correlation_id=correlation_id,
+            request_id=request.id,
             mode=request.mode,
             final_decision=final_decision,
             transitions=tuple(transitions),
