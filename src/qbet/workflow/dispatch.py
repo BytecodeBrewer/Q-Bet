@@ -153,10 +153,29 @@ class ModeDispatchCoordinator:
                     )
                 )
                 continue
-            if processing.work.mode is WorkflowMode.SIMULATION:
-                self._run_simulation(processing)
-            else:
-                self._run_execution(processing, now=now, owner=owner)
+            try:
+                if processing.work.mode is WorkflowMode.SIMULATION:
+                    self._run_simulation(processing)
+                else:
+                    self._run_execution(processing, now=now, owner=owner)
+            except Exception as error:
+                # Retain a safe failure boundary without storing exception text or stack data.
+                self._record_event(
+                    processing,
+                    stage=processing.work.mode.value,
+                    event_type="lifecycle_error",
+                    status="failed",
+                    reason_code="mode_execution_failed",
+                    references={"error_type": type(error).__name__},
+                )
+                processed.append(
+                    self._save_queue(
+                        processing.transition(
+                            WorkState.FAILED, now=now, reason="mode_execution_failed"
+                        )
+                    )
+                )
+                continue
             processed.append(self._save_queue(processing.transition(WorkState.COMPLETED, now=now)))
         return tuple(processed)
 
@@ -261,6 +280,8 @@ class ModeDispatchCoordinator:
             item, stage="simulation", event_type="lifecycle", status=result.simulation_result.status.value,
             references={"report_id": str(runner.last_report.run_id)} if runner.last_report else {},
         )
+        if runner.last_ledger is not None:
+            self._record_ledger_transitions(item, runner.last_ledger, dispatch_prefix=str(result.correlation_id))
 
     def _run_execution(self, item: QueuedWorkItem, *, now: datetime, owner: str) -> None:
         capital, payout = valuation(item.request)
@@ -280,8 +301,53 @@ class ModeDispatchCoordinator:
             ledger_writer=ledger_repository,
             execution_writer=ExecutionRecordRepository(),
         ).decide(ExecutionRecord(proposal=proposal), ledger, actor=owner, owner=owner, approve=True, now=now)
-        self._record_event(
-            item, stage="execution", event_type="lifecycle", status=record.state.value,
-            reason_code=record.error,
-            references={"execution_id": str(item.work.id), "ledger_mode": ledger.balance.mode},
-        )
+        references = {"execution_id": str(item.work.id), "ledger_mode": ledger.balance.mode}
+        for state in record.transitions:
+            self._record_event(
+                item,
+                stage="execution",
+                event_type="lifecycle_transition",
+                status=state.value,
+                reason_code=record.error if state is record.state else None,
+                references=references,
+            )
+        self._record_ledger_transitions(item, ledger, dispatch_id=str(item.work.id))
+        if record.result is not None:
+            self._record_event(
+                item,
+                stage="settlement",
+                event_type="result",
+                status=record.result.status,
+                reason_code=record.error,
+                references={**references, "settlement_id": str(record.result.dispatch_id)},
+            )
+
+    def _record_ledger_transitions(
+        self,
+        item: QueuedWorkItem,
+        ledger: PortfolioLedger,
+        *,
+        dispatch_id: str | None = None,
+        dispatch_prefix: str | None = None,
+    ) -> None:
+        """Project already-applied ledger commands into the Monitoring event stream."""
+
+        for command in ledger.commands.values():
+            if dispatch_id is not None and command.dispatch_id != dispatch_id:
+                continue
+            if dispatch_prefix is not None and not command.dispatch_id.startswith(dispatch_prefix):
+                continue
+            position = ledger.positions.get(command.dispatch_id)
+            self._record_event(
+                item,
+                stage="settlement" if command.operation.value in {"settle", "fail"} else "ledger",
+                event_type="capital_transition",
+                status=position.state if position is not None else command.operation.value,
+                reason_code=command.operation.value,
+                references={
+                    "ledger_command_id": command.id,
+                    "dispatch_id": command.dispatch_id,
+                    "capital_amount": str(command.amount),
+                    "ledger_position_state": position.state if position is not None else "unknown",
+                },
+            )
