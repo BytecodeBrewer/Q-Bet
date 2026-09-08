@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+from html.parser import HTMLParser
+from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
 from django.contrib.auth import get_user_model
@@ -6,6 +8,19 @@ from django.test import TestCase
 
 from qbet.monitoring import MonitoringLevel, MonitoringRecord
 from qbet.storage.monitoring import PostgresMonitoringRepository
+
+
+class _HrefCollector(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.hrefs: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a":
+            return
+        href = dict(attrs).get("href")
+        if href is not None:
+            self.hrefs.append(href)
 
 
 class MonitoringExportTests(TestCase):
@@ -54,6 +69,15 @@ class MonitoringExportTests(TestCase):
             "end": "2026-09-07T11:00:00+00:00",
         }
 
+    @staticmethod
+    def _rendered_links(response) -> list[tuple[str, dict[str, list[str]]]]:
+        parser = _HrefCollector()
+        parser.feed(response.content.decode())
+        return [
+            (urlsplit(href).path, parse_qs(urlsplit(href).query))
+            for href in parser.hrefs
+        ]
+
     def test_staff_can_view_compact_and_extended_monitoring_with_diagnostics(self) -> None:
         self.client.force_login(self.staff)
 
@@ -86,12 +110,28 @@ class MonitoringExportTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "match-1")
         self.assertNotContains(response, "match-2")
-        query_parameters = response.context["monitoring_query_parameters"]
-        self.assertIn("correlation=12345678-1234-5678-1234-567812345678", query_parameters)
-        self.assertIn("start=2026-09-07T09%3A00%3A00%2B00%3A00", query_parameters)
-        self.assertIn("end=2026-09-07T11%3A00%3A00%2B00%3A00", query_parameters)
-        self.assertContains(response, "monitoring/export/csv/?view=extended")
-        self.assertContains(response, "monitoring/export/json/?view=extended")
+
+        expected_filters = {
+            "correlation": [str(self.correlation_id)],
+            "start": [self._range_params()["start"]],
+            "end": [self._range_params()["end"]],
+        }
+        rendered_links = self._rendered_links(response)
+        expected_targets = (
+            ("", "compact"),
+            ("", "extended"),
+            ("/monitoring/export/csv/", "extended"),
+            ("/monitoring/export/json/", "extended"),
+        )
+        for path, view in expected_targets:
+            with self.subTest(path=path, view=view):
+                query = next(
+                    query
+                    for link_path, query in rendered_links
+                    if link_path == path and query.get("view") == [view]
+                )
+                for name, expected in expected_filters.items():
+                    self.assertEqual(query.get(name), expected)
 
         csv_export = self.client.get("/monitoring/export/csv/", params)
         json_export = self.client.get("/monitoring/export/json/", params)
