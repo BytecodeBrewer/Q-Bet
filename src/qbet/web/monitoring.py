@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import Final
+from typing import Final, cast
 from uuid import UUID
 
 from qbet.layers.logging import SimulationLogRecord, SimulationLogRecordType
@@ -16,7 +16,9 @@ from qbet.reporting import (
 )
 from qbet.simulation import SimulationStatus
 from qbet.storage import SimulationReportReader
-from qbet.workflow import WorkflowDecision, WorkflowStage
+from qbet.workflow import WorkflowDecision, WorkflowMode, WorkflowStage
+from qbet.workflow.readiness import Phase2PipelineReadiness
+from qbet.workflow.routing import RoutingConfiguration, V1Engine, engine_modes
 
 _REPORT_LIMIT: Final = 50
 _V1_ENGINES: Final = (
@@ -84,6 +86,7 @@ class MonitoringSummary:
     involved_capital: Decimal | None = None
     warning_count: int = 0
     error_count: int = 0
+    active_engines: int = 0
 
 
 @dataclass(frozen=True)
@@ -115,35 +118,100 @@ class ReportDetailLookup:
     message: str | None = None
 
 
-def execution_snapshot() -> MonitoringSnapshot:
-    """Return the honest live/execution view until a live state source is connected."""
-
-    workflow_stages = tuple(
+def _runtime_stages(
+    engine_id: str,
+    mode: WorkflowMode,
+    *,
+    active: bool,
+    available: bool,
+) -> tuple[MonitoringWorkflowStage, ...]:
+    names = {stage: name for stage, name in _WORKFLOW_STAGES}
+    if not available:
+        return tuple(
+            MonitoringWorkflowStage(name=name, status="red", detail="Unavailable")
+            for _, name in _WORKFLOW_STAGES
+        )
+    if not active:
+        return tuple(
+            MonitoringWorkflowStage(name=name, status="gray", detail="Inactive")
+            for _, name in _WORKFLOW_STAGES
+        )
+    readiness = Phase2PipelineReadiness().snapshot(cast(V1Engine, engine_id), mode)
+    return tuple(
         MonitoringWorkflowStage(
-            name=name,
-            status="gray",
-            detail="No live execution state is connected.",
+            name=names[item.stage],
+            status="green" if item.ready else "red",
+            detail="Ready" if item.ready else (item.reason or "Unavailable"),
         )
-        for _, name in _WORKFLOW_STAGES
+        for item in readiness
     )
-    engines = tuple(
-        MonitoringEngineStatus(
-            name=name,
-            engine_id=engine_id,
-            status="gray",
-            detail="No live execution activity is connected yet.",
-            mode="live",
-            live_state="unavailable",
-            workflow_stages=workflow_stages,
+
+
+def execution_snapshot(
+    configuration: RoutingConfiguration | None = None,
+    *,
+    configuration_available: bool = True,
+) -> MonitoringSnapshot:
+    """Return current execution runtime readiness without inventing live market activity."""
+
+    engines: list[MonitoringEngineStatus] = []
+    for name, engine_id in _V1_ENGINES:
+        if configuration is None:
+            active = False
+            status = "gray"
+            detail = "No live execution activity is connected yet."
+            live_state = "unavailable"
+            stages = tuple(
+                MonitoringWorkflowStage(
+                    name=stage_name,
+                    status="gray",
+                    detail="No live execution state is connected.",
+                )
+                for _, stage_name in _WORKFLOW_STAGES
+            )
+        else:
+            active = configuration_available and engine_modes(
+                configuration, cast(V1Engine, engine_id)
+            ).execution
+            status = "red" if not configuration_available else "green" if active else "gray"
+            detail = (
+                "Control unavailable."
+                if not configuration_available
+                else "Ready."
+                if active
+                else "Inactive."
+            )
+            live_state = (
+                "error"
+                if not configuration_available
+                else "ready"
+                if active
+                else "inactive"
+            )
+            stages = _runtime_stages(
+                engine_id,
+                WorkflowMode.EXECUTION,
+                active=active,
+                available=configuration_available,
+            )
+        engines.append(
+            MonitoringEngineStatus(
+                name=name,
+                engine_id=engine_id,
+                status=status,
+                detail=detail,
+                active=active,
+                mode="execution" if configuration is not None else "live",
+                live_state=live_state,
+                workflow_stages=stages,
+            )
         )
-        for name, engine_id in _V1_ENGINES
-    )
     return MonitoringSnapshot(
-        engines=engines,
+        engines=tuple(engines),
         reports=(),
         latest_alert=None,
         history_available=False,
-        summary=MonitoringSummary(),
+        summary=MonitoringSummary(active_engines=sum(engine.active for engine in engines)),
         capital_coverage=MonitoringCapitalCoverage(
             status="gray",
             amount=None,
@@ -158,10 +226,21 @@ class MonitoringService:
     def __init__(self, report_store: SimulationReportReader | None = None) -> None:
         self._report_store = report_store
 
-    def snapshot(self) -> MonitoringSnapshot:
+    def snapshot(
+        self,
+        *,
+        runtime_configuration: RoutingConfiguration | None = None,
+        runtime_available: bool = True,
+    ) -> MonitoringSnapshot:
         reports, history_available = self._recent_reports()
         records_by_run = self._records_by_run(reports) if history_available else {}
-        engines = self._engine_statuses(reports, records_by_run, history_available)
+        engines = self._engine_statuses(
+            reports,
+            records_by_run,
+            history_available,
+            runtime_configuration=runtime_configuration,
+            runtime_available=runtime_available,
+        )
         summaries = tuple(self._summary_from_report(report) for report in reports)
         summary = MonitoringSummary(
             active_matches=sum(engine.running_matches for engine in engines),
@@ -179,6 +258,7 @@ class MonitoringService:
             else None,
             warning_count=sum(engine.warning_count for engine in engines),
             error_count=sum(engine.error_count for engine in engines),
+            active_engines=sum(engine.active for engine in engines),
         )
         return MonitoringSnapshot(
             engines=engines,
@@ -265,6 +345,9 @@ class MonitoringService:
         reports: tuple[SimulationReport, ...],
         records_by_run: dict[UUID, tuple[SimulationLogRecord, ...]],
         history_available: bool,
+        *,
+        runtime_configuration: RoutingConfiguration | None,
+        runtime_available: bool,
     ) -> tuple[MonitoringEngineStatus, ...]:
         statuses: list[MonitoringEngineStatus] = []
         for name, engine_id in _V1_ENGINES:
@@ -281,18 +364,46 @@ class MonitoringService:
             error_count = sum(
                 record.record_type is SimulationLogRecordType.ERROR for record in engine_records
             )
-            status, detail = MonitoringService._status_for(
-                latest, history_available=history_available
-            )
+
+            if runtime_configuration is None:
+                status, detail = MonitoringService._status_for(
+                    latest, history_available=history_available
+                )
+                active = latest is not None and latest.status is SimulationStatus.RUNNING
+                live_state = "unavailable"
+                workflow_stages = MonitoringService._workflow_stages(engine_records)
+            else:
+                active = runtime_available and engine_modes(
+                    runtime_configuration, cast(V1Engine, engine_id)
+                ).simulation
+                if not runtime_available:
+                    status, detail, live_state = "red", "Control unavailable.", "error"
+                elif not active:
+                    status, detail, live_state = "gray", "Inactive.", "inactive"
+                elif error_count:
+                    status, detail, live_state = "red", "Error.", "error"
+                elif warning_count:
+                    status, detail, live_state = "red", "Warning.", "warning"
+                elif latest is not None and latest.status is SimulationStatus.RUNNING:
+                    status, detail, live_state = "green", "Running.", "ready"
+                else:
+                    status, detail, live_state = "green", "Ready.", "ready"
+                workflow_stages = MonitoringService._workflow_stages(
+                    engine_records,
+                    engine_id=engine_id,
+                    runtime_active=active,
+                    runtime_available=runtime_available,
+                )
+
             statuses.append(
                 MonitoringEngineStatus(
                     name=name,
                     status=status,
                     detail=detail,
                     engine_id=engine_id,
-                    active=latest is not None and latest.status is SimulationStatus.RUNNING,
-                    mode="simulation" if latest is not None else "simulation",
-                    live_state="unavailable",
+                    active=active,
+                    mode="simulation",
+                    live_state=live_state,
                     running_matches=sum(
                         report.status is SimulationStatus.RUNNING for report in engine_reports
                     ),
@@ -304,7 +415,7 @@ class MonitoringService:
                     warning_count=warning_count,
                     error_count=error_count,
                     latest_report_id=latest.run_id if latest is not None else None,
-                    workflow_stages=MonitoringService._workflow_stages(engine_records),
+                    workflow_stages=workflow_stages,
                 )
             )
         return tuple(statuses)
@@ -324,23 +435,43 @@ class MonitoringService:
     @staticmethod
     def _workflow_stages(
         records: tuple[SimulationLogRecord, ...],
+        *,
+        engine_id: str | None = None,
+        runtime_active: bool | None = None,
+        runtime_available: bool = True,
     ) -> tuple[MonitoringWorkflowStage, ...]:
+        if runtime_active is not None and engine_id is not None:
+            base = _runtime_stages(
+                engine_id,
+                WorkflowMode.SIMULATION,
+                active=runtime_active,
+                available=runtime_available,
+            )
+            if not runtime_available or not runtime_active:
+                return base
+        else:
+            base = ()
+
         transitions = {
             str(record.payload.get("stage")): record
             for record in records
             if record.record_type is SimulationLogRecordType.WORKFLOW_TRANSITION
         }
         stages: list[MonitoringWorkflowStage] = []
+        base_by_name = {stage.name: stage for stage in base}
         for stage, name in _WORKFLOW_STAGES:
             record = transitions.get(stage.value)
             if record is None:
-                stages.append(
-                    MonitoringWorkflowStage(
-                        name=name,
-                        status="gray",
-                        detail="No recorded workflow transition.",
+                if name in base_by_name:
+                    stages.append(base_by_name[name])
+                else:
+                    stages.append(
+                        MonitoringWorkflowStage(
+                            name=name,
+                            status="gray",
+                            detail="No recorded workflow transition.",
+                        )
                     )
-                )
                 continue
             decision = str(record.payload.get("decision", "allow"))
             status = {

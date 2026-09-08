@@ -3,6 +3,8 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from qbet.web import views
+from qbet.web.engine_runtime import engine_runtime_control
+from qbet.web.routing_settings import routing_settings
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -10,6 +12,11 @@ urlpatterns = [
     path("register/", views.register, name="register"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
+    path(
+        "engines/<str:engine_id>/<str:mode>/<str:action>/",
+        engine_runtime_control,
+        name="engine-runtime-control",
+    ),
     path("engines/<str:engine_id>/", views.engine_detail, name="engine-detail"),
     path("simulation/", views.simulation, name="simulation"),
     path("simulation/start/", views.simulation_start, name="simulation-start"),
@@ -24,7 +31,7 @@ urlpatterns = [
     path("monitoring/", views.monitoring, name="monitoring"),
     path("monitoring/export/<str:export_format>/", views.monitoring_export, name="monitoring-export"),
     path("admin-area/", views.admin_area, name="admin-area"),
-    path("admin-area/gui-settings/", views.admin_gui_settings, name="admin-gui-settings"),
+    path("admin-area/gui-settings/", routing_settings, name="admin-gui-settings"),
     path(
         "admin-area/gui-settings/simulation/",
         views.admin_simulation_availability,

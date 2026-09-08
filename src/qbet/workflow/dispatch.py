@@ -29,6 +29,7 @@ from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
     PortfolioLedgerRepository,
+    RoutingConfigurationRepository,
 )
 from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
@@ -40,7 +41,8 @@ from qbet.workflow.models import (
 )
 from qbet.workflow.orchestrator import WorkflowOrchestrator
 from qbet.workflow.queue import QueuedWorkItem, WorkState
-from qbet.workflow.routing import RoutingConfiguration, V1Engine, resolve_routes
+from qbet.workflow.readiness import PipelineReadinessProvider, Phase2PipelineReadiness
+from qbet.workflow.routing import RoutingConfiguration, V1Engine
 
 
 class ModeDispatchCoordinator:
@@ -48,16 +50,28 @@ class ModeDispatchCoordinator:
 
     def __init__(
         self,
-        configuration: RoutingConfiguration,
+        configuration: RoutingConfiguration | None = None,
         *,
+        routing_configuration_loader: Callable[[], RoutingConfiguration | None] | None = None,
         queue_repository: ModeWorkQueueRepository | None = None,
         mode_request_handlers: ModeRequestHandlers | None = None,
         monitoring_writer: PostgresMonitoringRepository | None = None,
+        readiness_provider: PipelineReadinessProvider | None = None,
     ) -> None:
-        self._configuration = configuration
+        if configuration is not None and routing_configuration_loader is not None:
+            raise ValueError(
+                "routing configuration and routing configuration loader are mutually exclusive"
+            )
+        if configuration is None and routing_configuration_loader is None:
+            routing_configuration_loader = RoutingConfigurationRepository().load
+        self._routing_orchestrator = WorkflowOrchestrator(
+            routing_configuration=configuration,
+            routing_configuration_loader=routing_configuration_loader,
+        )
         self._queue_repository = queue_repository or ModeWorkQueueRepository()
         self._mode_request_handlers = mode_request_handlers
         self._monitoring_writer = monitoring_writer or PostgresMonitoringRepository()
+        self._readiness_provider = readiness_provider or Phase2PipelineReadiness()
 
     def schedule(
         self,
@@ -71,8 +85,7 @@ class ModeDispatchCoordinator:
         engine: V1Engine = (
             "bonus" if isinstance(request, BonusEngineRequest) else "sports_capital"
         )
-        routes = resolve_routes(
-            self._configuration,
+        routes = self._routing_orchestrator.route(
             engine,
             request.opportunity_id,
             correlation_id,
@@ -110,6 +123,31 @@ class ModeDispatchCoordinator:
     ) -> QueuedWorkItem:
         if now >= processing.expires_at:
             return self._save_queue(processing.transition(WorkState.EXPIRED, now=now))
+
+        readiness = self._readiness_provider.snapshot(
+            processing.work.engine,
+            processing.work.mode,
+        )
+        blocked = None
+        for stage in readiness:
+            self._record_event(
+                processing,
+                stage=stage.stage.value,
+                event_type="readiness",
+                status="ready" if stage.ready else "not_ready",
+                reason_code=stage.reason,
+                occurred_at=now,
+            )
+            if blocked is None and not stage.ready:
+                blocked = stage
+        if blocked is not None:
+            return self._save_queue(
+                processing.transition(
+                    WorkState.RECHECK,
+                    now=now,
+                    reason=f"pipeline_not_ready:{blocked.stage.value}",
+                )
+            )
 
         workflow_result = WorkflowOrchestrator(
             mode_request_handlers=self._mode_request_handlers
@@ -351,7 +389,7 @@ class ModeDispatchCoordinator:
             MonitoringLevel.ERROR
             if status in {"failed", "cancelled", "rejected"}
             else MonitoringLevel.WARNING
-            if status in {"recheck", "partial"}
+            if status in {"recheck", "partial", "not_ready"}
             else MonitoringLevel.INFO
         )
         self._monitoring_writer.append(

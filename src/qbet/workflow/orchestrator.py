@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from uuid import UUID
 
 from qbet.layers import SimulationLogContext, SimulationLogRecordType
@@ -21,6 +21,9 @@ from qbet.workflow.protocol import (
     RequestHandler,
     WorkflowStageHandler,
 )
+from qbet.workflow.routing import RoutedWorkItem, RoutingConfiguration, V1Engine, resolve_routes
+
+RoutingConfigurationLoader = Callable[[], RoutingConfiguration | None]
 
 
 class StaticStageHandler:
@@ -48,11 +51,20 @@ class StaticLiquidityChecker:
 
 
 class WorkflowOrchestrator:
-    def route(self, engine, opportunity_id, correlation_id, owner):
-        from qbet.workflow.routing import RoutingConfiguration
-
+    def route(
+        self,
+        engine: V1Engine,
+        opportunity_id: str,
+        correlation_id: UUID,
+        owner: str,
+    ) -> tuple[RoutedWorkItem, ...]:
+        configuration = (
+            self._routing_configuration_loader()
+            if self._routing_configuration_loader is not None
+            else self._routing_configuration
+        )
         return self.route_opportunity(
-            self._routing_configuration or RoutingConfiguration(),
+            configuration or RoutingConfiguration(),
             engine,
             opportunity_id,
             correlation_id,
@@ -60,9 +72,13 @@ class WorkflowOrchestrator:
         )
 
     @staticmethod
-    def route_opportunity(configuration, engine, opportunity_id, correlation_id, owner):
-        from qbet.workflow.routing import resolve_routes
-
+    def route_opportunity(
+        configuration: RoutingConfiguration,
+        engine: V1Engine,
+        opportunity_id: str,
+        correlation_id: UUID,
+        owner: str,
+    ) -> tuple[RoutedWorkItem, ...]:
         return resolve_routes(configuration, engine, opportunity_id, correlation_id, owner)
 
     def __init__(
@@ -72,13 +88,19 @@ class WorkflowOrchestrator:
         liquidity_checker: LiquidityChecker | None = None,
         request_handler: RequestHandler | None = None,
         mode_request_handlers: ModeRequestHandlers | None = None,
-        routing_configuration=None,
+        routing_configuration: RoutingConfiguration | None = None,
+        routing_configuration_loader: RoutingConfigurationLoader | None = None,
     ) -> None:
+        if routing_configuration is not None and routing_configuration_loader is not None:
+            raise ValueError(
+                "routing configuration and routing configuration loader are mutually exclusive"
+            )
         self._stage_handlers = dict(stage_handlers or {})
         self._liquidity_checker = liquidity_checker
         self._request_handler = request_handler
         self._mode_request_handlers = mode_request_handlers
         self._routing_configuration = routing_configuration
+        self._routing_configuration_loader = routing_configuration_loader
 
     def process(
         self,
