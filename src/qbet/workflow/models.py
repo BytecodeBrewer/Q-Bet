@@ -41,7 +41,7 @@ class WorkflowStageDecision(DomainModel):
     reason: str | None = None
 
     @model_validator(mode="after")
-    def requires_reason(self) -> WorkflowStageDecision:
+    def requires_reason(self) -> "WorkflowStageDecision":
         if self.decision is not WorkflowDecision.ALLOW and not self.reason:
             raise ValueError("rejected or recheck decisions require a reason")
         return self
@@ -60,7 +60,7 @@ class WorkflowRequest(DomainModel):
         return self.opportunity_id or self.id
 
     @model_validator(mode="after")
-    def validates_route(self) -> WorkflowRequest:
+    def validates_route(self) -> "WorkflowRequest":
         if len(set(self.stages)) != len(self.stages):
             raise ValueError("workflow stages must not contain duplicates")
         stage_positions = [list(WorkflowStage).index(stage) for stage in self.stages]
@@ -96,6 +96,7 @@ class WorkflowTransition(DomainModel):
 
 class WorkflowResult(DomainModel):
     correlation_id: UUID
+    request_id: Identifier
     mode: WorkflowMode
     final_decision: WorkflowDecision
     transitions: tuple[WorkflowTransition, ...]
