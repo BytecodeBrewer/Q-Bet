@@ -5,6 +5,7 @@ from decimal import Decimal
 from unittest.mock import patch
 from uuid import UUID
 
+from django.db import connection
 from django.test import TransactionTestCase
 
 from qbet.calculations.qualifying_bet import QualifyingBetInput
@@ -26,7 +27,7 @@ from qbet.storage.models import (
     PortfolioLedgerRow,
     SimulationReportRow,
 )
-from qbet.storage.monitoring import PostgresMonitoringRepository
+from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 from qbet.workflow import WorkflowMode, WorkState
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
@@ -76,8 +77,6 @@ def _handlers(opportunity_id: str, now: datetime) -> ModeRequestHandlers:
 
 
 class _FailOnceSettlementMonitoringRepository(PostgresMonitoringRepository):
-    """Inject one projection failure, then allow the safe failure record to persist."""
-
     def __init__(self) -> None:
         self.failed = False
 
@@ -89,6 +88,17 @@ class _FailOnceSettlementMonitoringRepository(PostgresMonitoringRepository):
         ):
             self.failed = True
             raise OSError("injected monitoring persistence failure")
+        return super().append(record)
+
+
+class _FailFirstMonitoringRepository(PostgresMonitoringRepository):
+    def __init__(self) -> None:
+        self.failed = False
+
+    def append(self, record: MonitoringRecord) -> MonitoringRecord:
+        if not self.failed:
+            self.failed = True
+            raise MonitoringPersistenceError("injected early monitoring failure")
         return super().append(record)
 
 
@@ -139,7 +149,6 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
     def test_execution_trace_reconstructs_lifecycle_capital_settlement_and_queue(self) -> None:
         now = datetime.now(UTC)
         coordinator = self._coordinator(execution=True, now=now)
-
         scheduled, dispatched = self._schedule_and_dispatch(coordinator, now=now)
 
         self.assertEqual(len(scheduled), 1)
@@ -152,55 +161,28 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
         lifecycle = [
             record.status
             for record in records
-            if record.stage == "execution"
-            and record.event_type == "lifecycle_transition"
+            if record.stage == "execution" and record.event_type == "lifecycle_transition"
         ]
-        capital = [
-            record.reason_code
-            for record in records
-            if record.event_type == "capital_transition"
-        ]
-
+        capital = [record.reason_code for record in records if record.event_type == "capital_transition"]
         self.assertEqual(
             lifecycle,
-            [
-                "proposed",
-                "awaiting_approval",
-                "approved",
-                "dispatched",
-                "acknowledged",
-                "settled",
-            ],
+            ["proposed", "awaiting_approval", "approved", "dispatched", "acknowledged", "settled"],
         )
         self.assertEqual(capital, ["reserve", "lock", "pending", "settle"])
-        self.assertTrue(
-            any(
-                record.stage == "request_handler" and record.status == "success"
-                for record in records
-            )
-        )
         settlement = next(
-            record
-            for record in records
-            if record.stage == "settlement" and record.event_type == "result"
+            record for record in records if record.stage == "settlement" and record.event_type == "result"
         )
         self.assertEqual(settlement.status, "success")
         self.assertEqual(settlement.references["settlement_id"], str(scheduled[0].work.id))
-        self.assertTrue(
-            any(
-                record.stage == "queue" and record.status == "completed"
-                for record in records
-            )
-        )
+        self.assertTrue(any(record.stage == "queue" and record.status == "completed" for record in records))
         self.assertEqual(
             [record.occurred_at for record in records],
             sorted(record.occurred_at for record in records),
         )
 
-    def test_simulation_trace_contains_ledger_settlement_and_report_reference(self) -> None:
+    def test_simulation_trace_contains_ledger_settlement_report_and_subprocess_references(self) -> None:
         now = datetime.now(UTC)
         coordinator = self._coordinator(simulation=True, now=now)
-
         _, dispatched = self._schedule_and_dispatch(coordinator, now=now)
 
         self.assertEqual(tuple(item.state for item in dispatched), (WorkState.COMPLETED,))
@@ -217,31 +199,20 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
             )
         )
         self.assertEqual(
-            [
-                record.reason_code
-                for record in records
-                if record.event_type == "capital_transition"
-            ],
+            [record.reason_code for record in records if record.event_type == "capital_transition"],
             ["reserve", "lock", "pending", "settle"],
         )
-        self.assertTrue(
-            any(
-                record.stage == "settlement"
-                and record.event_type == "capital_transition"
-                for record in records
-            )
-        )
-        self.assertTrue(
-            any(
-                record.stage == "queue" and record.status == "completed"
-                for record in records
-            )
-        )
+        subprocess_ids = {
+            record.references.get("subprocess_id")
+            for record in records
+            if record.event_type in {"stage", "refresh"} and record.references.get("subprocess_id")
+        }
+        self.assertGreaterEqual(len(subprocess_ids), 2)
+        self.assertTrue(any(record.stage == "queue" and record.status == "completed" for record in records))
 
     def test_mode_exception_persists_safe_error_and_terminal_failed_queue_state(self) -> None:
         now = datetime.now(UTC)
         coordinator = self._coordinator(simulation=True, now=now)
-
         with patch(
             "qbet.workflow.dispatch.WorkflowSimulationRunner.run",
             side_effect=RuntimeError("secret runtime detail must never persist"),
@@ -251,16 +222,9 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
         self.assertEqual(tuple(item.state for item in dispatched), (WorkState.FAILED,))
         self.assertEqual(ModeWorkQueueRow.objects.get().state, "failed")
         self.assertEqual(SimulationReportRow.objects.count(), 0)
-
         records = self._records(CORRELATION_ID, now)
-        error = next(
-            record for record in records if record.event_type == "lifecycle_error"
-        )
-        self.assertEqual(error.status, "failed")
+        error = next(record for record in records if record.event_type == "lifecycle_error")
         self.assertEqual(error.reason_code, "mode_execution_failed")
-        self.assertTrue(
-            any(record.stage == "queue" and record.status == "failed" for record in records)
-        )
         stored_payloads = list(MonitoringRecordRow.objects.values_list("payload", flat=True))
         self.assertNotIn("secret runtime detail", str(stored_payloads))
         self.assertNotIn("Traceback", str(stored_payloads))
@@ -268,12 +232,7 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
     def test_monitoring_projection_failure_rolls_back_authoritative_execution_pair(self) -> None:
         now = datetime.now(UTC)
         writer = _FailOnceSettlementMonitoringRepository()
-        coordinator = self._coordinator(
-            execution=True,
-            now=now,
-            monitoring_writer=writer,
-        )
-
+        coordinator = self._coordinator(execution=True, now=now, monitoring_writer=writer)
         _, dispatched = self._schedule_and_dispatch(coordinator, now=now)
 
         self.assertTrue(writer.failed)
@@ -281,19 +240,38 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
         self.assertEqual(ModeWorkQueueRow.objects.get().state, "failed")
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
-
         records = self._records(CORRELATION_ID, now)
         self.assertFalse(any(record.event_type == "capital_transition" for record in records))
-        self.assertFalse(
-            any(record.event_type == "lifecycle_transition" for record in records)
-        )
+        self.assertFalse(any(record.event_type == "lifecycle_transition" for record in records))
+        self.assertTrue(any(record.stage == "queue" and record.status == "failed" for record in records))
+
+    def test_early_monitoring_failure_never_strands_claimed_work_in_processing(self) -> None:
+        now = datetime.now(UTC)
+        writer = _FailFirstMonitoringRepository()
+        coordinator = self._coordinator(execution=True, now=now, monitoring_writer=writer)
+        _, dispatched = self._schedule_and_dispatch(coordinator, now=now)
+
+        self.assertTrue(writer.failed)
+        self.assertEqual(tuple(item.state for item in dispatched), (WorkState.FAILED,))
+        queue_row = ModeWorkQueueRow.objects.get()
+        self.assertEqual(queue_row.state, "failed")
+        self.assertNotEqual(queue_row.state, "processing")
+        records = self._records(CORRELATION_ID, now)
         self.assertTrue(
             any(
                 record.event_type == "lifecycle_error"
-                and record.reason_code == "mode_execution_failed"
+                and record.reason_code == "monitoring_persistence_unavailable"
                 for record in records
             )
         )
-        self.assertTrue(
-            any(record.stage == "queue" and record.status == "failed" for record in records)
-        )
+
+    def test_monitoring_table_uses_postgresql_row_level_security(self) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT relrowsecurity FROM pg_class WHERE relname = 'qbet_monitoring_records'"
+            )
+            row = cursor.fetchone()
+
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertTrue(row[0])

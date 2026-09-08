@@ -25,9 +25,7 @@ class _HrefCollector(HTMLParser):
 
 class MonitoringExportTests(TestCase):
     def setUp(self) -> None:
-        self.staff = get_user_model().objects.create_user(
-            "staff", password="test", is_staff=True
-        )
+        self.staff = get_user_model().objects.create_user("staff", password="test", is_staff=True)
         self.user = get_user_model().objects.create_user("user", password="test")
         self.correlation_id = UUID("12345678-1234-5678-1234-567812345678")
         PostgresMonitoringRepository().append(
@@ -64,32 +62,26 @@ class MonitoringExportTests(TestCase):
 
     @staticmethod
     def _range_params() -> dict[str, str]:
-        return {
-            "start": "2026-09-07T09:00:00+00:00",
-            "end": "2026-09-07T11:00:00+00:00",
-        }
+        return {"start": "2026-09-07T09:00:00+00:00", "end": "2026-09-07T11:00:00+00:00"}
 
     @staticmethod
     def _rendered_links(response) -> list[tuple[str, dict[str, list[str]]]]:
         parser = _HrefCollector()
         parser.feed(response.content.decode())
-        return [
-            (urlsplit(href).path, parse_qs(urlsplit(href).query))
-            for href in parser.hrefs
-        ]
+        return [(urlsplit(href).path, parse_qs(urlsplit(href).query)) for href in parser.hrefs]
 
     def test_staff_can_view_compact_and_extended_monitoring_with_diagnostics(self) -> None:
         self.client.force_login(self.staff)
-
         compact = self.client.get("/monitoring/", self._range_params())
-        extended = self.client.get(
-            "/monitoring/",
-            {"view": "extended", **self._range_params()},
-        )
+        extended = self.client.get("/monitoring/", {"view": "extended", **self._range_params()})
 
         self.assertContains(compact, "sports_capital")
         self.assertContains(compact, "match-1")
         self.assertContains(compact, "provider_delayed")
+        self.assertContains(compact, 'name="start"')
+        self.assertContains(compact, 'name="end"')
+        self.assertContains(compact, 'name="correlation"')
+        self.assertContains(compact, "Maximum range: 31 days")
         self.assertContains(extended, "liquidity_check")
         self.assertContains(extended, "warning")
         self.assertContains(extended, "25 ms")
@@ -99,17 +91,13 @@ class MonitoringExportTests(TestCase):
 
     def test_selected_range_and_correlation_survive_view_switch_and_exports(self) -> None:
         self.client.force_login(self.staff)
-        params = {
-            "view": "extended",
-            "correlation": str(self.correlation_id),
-            **self._range_params(),
-        }
-
+        params = {"view": "extended", "correlation": str(self.correlation_id), **self._range_params()}
         response = self.client.get("/monitoring/", params)
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "match-1")
         self.assertNotContains(response, "match-2")
+        self.assertContains(response, str(self.correlation_id))
 
         expected_filters = {
             "correlation": [str(self.correlation_id)],
@@ -135,7 +123,6 @@ class MonitoringExportTests(TestCase):
 
         csv_export = self.client.get("/monitoring/export/csv/", params)
         json_export = self.client.get("/monitoring/export/json/", params)
-
         self.assertEqual(csv_export.status_code, 200)
         self.assertEqual(json_export.status_code, 200)
         self.assertIn("match-1", csv_export.content.decode())
@@ -146,11 +133,7 @@ class MonitoringExportTests(TestCase):
 
     def test_empty_period_returns_clear_page_and_valid_empty_exports(self) -> None:
         self.client.force_login(self.staff)
-        params = {
-            "start": "2026-09-08T09:00:00+00:00",
-            "end": "2026-09-08T10:00:00+00:00",
-        }
-
+        params = {"start": "2026-09-08T09:00:00+00:00", "end": "2026-09-08T10:00:00+00:00"}
         page = self.client.get("/monitoring/", params)
         csv_export = self.client.get("/monitoring/export/csv/", params)
         json_export = self.client.get("/monitoring/export/json/", params)
@@ -170,14 +153,10 @@ class MonitoringExportTests(TestCase):
             {"start": "2026-09-07T09:00:00", "end": "2026-09-07T11:00:00+00:00"},
             {"correlation": "not-a-uuid", **self._range_params()},
         )
-
         for query in invalid_queries:
             with self.subTest(query=query):
                 self.assertEqual(self.client.get("/monitoring/", query).status_code, 404)
-                self.assertEqual(
-                    self.client.get("/monitoring/export/json/", query).status_code,
-                    404,
-                )
+                self.assertEqual(self.client.get("/monitoring/export/json/", query).status_code, 404)
 
     def test_normal_user_cannot_read_or_export_monitoring(self) -> None:
         self.client.force_login(self.user)
