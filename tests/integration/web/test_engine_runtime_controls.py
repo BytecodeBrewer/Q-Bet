@@ -18,8 +18,8 @@ class EngineRuntimeControlTests(TestCase):
             is_staff=True,
         )
 
-    def test_execution_start_and_stop_only_toggle_requested_engine_mode(self) -> None:
-        self.client.force_login(self.user)
+    def test_staff_execution_start_and_stop_only_toggle_requested_engine_mode(self) -> None:
+        self.client.force_login(self.staff)
 
         started = self.client.post("/engines/bonus/execution/start/")
         self.assertRedirects(started, "/dashboard/")
@@ -49,6 +49,21 @@ class EngineRuntimeControlTests(TestCase):
         self.assertContains(dashboard, 'aria-label="Start BonusEngine execution"')
         self.assertContains(dashboard, 'title="Inactive"')
 
+    def test_normal_user_cannot_toggle_execution_runtime_or_see_controls(self) -> None:
+        self.client.force_login(self.user)
+
+        dashboard = self.client.get("/dashboard/")
+        self.assertNotContains(dashboard, 'aria-label="Start BonusEngine execution"')
+        self.assertNotContains(dashboard, 'aria-label="Stop BonusEngine execution"')
+
+        response = self.client.post("/engines/bonus/execution/start/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIsNone(RoutingConfigurationRepository().load())
+        self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
+        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
+        self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
+
     def test_normal_user_cannot_toggle_simulation_runtime(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.user)
@@ -60,9 +75,8 @@ class EngineRuntimeControlTests(TestCase):
 
     def test_staff_simulation_toggle_preserves_execution_sibling_mode(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
-        self.client.force_login(self.user)
-        self.client.post("/engines/bonus/execution/start/")
         self.client.force_login(self.staff)
+        self.client.post("/engines/bonus/execution/start/")
 
         started = self.client.post("/engines/bonus/simulation/start/")
         self.assertRedirects(started, "/dashboard/")

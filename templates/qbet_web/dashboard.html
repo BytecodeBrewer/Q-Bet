@@ -21,7 +21,7 @@
 
 <form id="dashboard-layout-state" data-layout-url="{% url 'dashboard-layout' %}" hidden>{% csrf_token %}</form>
 <div class="dashboard-planes{% if simulation_enabled %} dashboard-planes-split{% endif %}">
-  <section class="dashboard-plane execution-plane" aria-labelledby="execution-heading" data-legacy-empty-label="No live execution activity is connected yet."{% if not execution_layer_active %} style="opacity:.72;filter:saturate(.55)"{% endif %}>
+  <section class="dashboard-plane execution-plane" aria-labelledby="execution-heading"{% if not execution_layer_active %} style="opacity:.72;filter:saturate(.55)"{% endif %}>
     <div class="plane-heading">
       <div>
         <span class="plane-kicker">Customer plane</span>
@@ -58,7 +58,7 @@
         <article class="engine-card dashboard-engine-card draggable-card" data-engine-widget="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}"{% if not engine.active %} style="opacity:.64;filter:saturate(.45)"{% endif %}>
           <div class="drag-row">
             <span class="drag-handle" draggable="true" data-drag-handle tabindex="0" role="button" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move {{ engine.name }}">⋮⋮</span>
-            <form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'execution' 'stop' %}">{% csrf_token %}{% if engine.active %}<button class="text-button" type="submit" title="Stop" aria-label="Stop {{ engine.name }} execution">■</button>{% else %}<button class="text-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'execution' 'start' %}" title="Start" aria-label="Start {{ engine.name }} execution">▶</button>{% endif %}</form>
+            {% if user.is_staff %}<form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'execution' 'stop' %}">{% csrf_token %}{% if engine.active %}<button class="text-button" type="submit" title="Stop" aria-label="Stop {{ engine.name }} execution">■</button>{% else %}<button class="text-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'execution' 'start' %}" title="Start" aria-label="Start {{ engine.name }} execution">▶</button>{% endif %}</form>{% endif %}
           </div>
           <a class="engine-link" href="{% url 'engine-detail' engine.engine_id %}">
             <div class="card-heading engine-card-heading">
@@ -114,7 +114,7 @@
         </article>
       </section>
 
-      <section class="simulation-control-panel" data-legacy-action-label="Start deterministic sandbox run">
+      <section class="simulation-control-panel">
         <div class="section-heading">
           <div><span class="eyebrow">Sandbox</span><h3>Deterministic pipeline test</h3></div>
           <span class="tag simulation-tag">Virtual only</span>

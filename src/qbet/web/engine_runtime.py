@@ -1,4 +1,4 @@
-"""Authenticated runtime start/stop controls for the two Phase-2 engines."""
+"""Administrator-only runtime start/stop controls for the two Phase-2 engines."""
 
 from __future__ import annotations
 
@@ -29,6 +29,8 @@ def engine_runtime_control(
 ) -> HttpResponse:
     """Toggle runtime eligibility only; this never creates work or moves capital."""
 
+    if not bool(getattr(request.user, "is_staff", False)):
+        raise Http404("Engine control is not available.")
     if engine_id not in V1_ENGINES:
         raise Http404("Engine not found.")
     try:
@@ -39,8 +41,6 @@ def engine_runtime_control(
         raise Http404("Action not found.")
 
     if workflow_mode is WorkflowMode.SIMULATION:
-        if not bool(getattr(request.user, "is_staff", False)):
-            raise Http404("Simulation control is not available.")
         if action == "start" and not SimulationControlService().availability().enabled:
             messages.error(request, "Simulation is disabled.")
             return redirect("dashboard")
