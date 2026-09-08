@@ -163,18 +163,39 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
             for record in records
             if record.stage == "execution" and record.event_type == "lifecycle_transition"
         ]
-        capital = [record.reason_code for record in records if record.event_type == "capital_transition"]
+        capital = [
+            record.reason_code
+            for record in records
+            if record.event_type == "capital_transition"
+        ]
         self.assertEqual(
             lifecycle,
-            ["proposed", "awaiting_approval", "approved", "dispatched", "acknowledged", "settled"],
+            [
+                "proposed",
+                "awaiting_approval",
+                "approved",
+                "dispatched",
+                "acknowledged",
+                "settled",
+            ],
         )
         self.assertEqual(capital, ["reserve", "lock", "pending", "settle"])
         settlement = next(
-            record for record in records if record.stage == "settlement" and record.event_type == "result"
+            record
+            for record in records
+            if record.stage == "settlement" and record.event_type == "result"
         )
         self.assertEqual(settlement.status, "success")
-        self.assertEqual(settlement.references["settlement_id"], str(scheduled[0].work.id))
-        self.assertTrue(any(record.stage == "queue" and record.status == "completed" for record in records))
+        self.assertEqual(
+            settlement.references["settlement_id"],
+            str(scheduled[0].work.id),
+        )
+        self.assertTrue(
+            any(
+                record.stage == "queue" and record.status == "completed"
+                for record in records
+            )
+        )
         self.assertEqual(
             [record.occurred_at for record in records],
             sorted(record.occurred_at for record in records),
@@ -199,16 +220,26 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
             )
         )
         self.assertEqual(
-            [record.reason_code for record in records if record.event_type == "capital_transition"],
+            [
+                record.reason_code
+                for record in records
+                if record.event_type == "capital_transition"
+            ],
             ["reserve", "lock", "pending", "settle"],
         )
         subprocess_ids = {
             record.references.get("subprocess_id")
             for record in records
-            if record.event_type in {"stage", "refresh"} and record.references.get("subprocess_id")
+            if record.event_type in {"stage", "refresh"}
+            and record.references.get("subprocess_id")
         }
         self.assertGreaterEqual(len(subprocess_ids), 2)
-        self.assertTrue(any(record.stage == "queue" and record.status == "completed" for record in records))
+        self.assertTrue(
+            any(
+                record.stage == "queue" and record.status == "completed"
+                for record in records
+            )
+        )
 
     def test_mode_exception_persists_safe_error_and_terminal_failed_queue_state(self) -> None:
         now = datetime.now(UTC)
@@ -223,32 +254,67 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
         self.assertEqual(ModeWorkQueueRow.objects.get().state, "failed")
         self.assertEqual(SimulationReportRow.objects.count(), 0)
         records = self._records(CORRELATION_ID, now)
-        error = next(record for record in records if record.event_type == "lifecycle_error")
+        error = next(
+            record for record in records if record.event_type == "lifecycle_error"
+        )
         self.assertEqual(error.reason_code, "mode_execution_failed")
-        stored_payloads = list(MonitoringRecordRow.objects.values_list("payload", flat=True))
+        stored_payloads = list(
+            MonitoringRecordRow.objects.values_list("payload", flat=True)
+        )
         self.assertNotIn("secret runtime detail", str(stored_payloads))
         self.assertNotIn("Traceback", str(stored_payloads))
 
-    def test_monitoring_projection_failure_rolls_back_authoritative_execution_pair(self) -> None:
+    def test_monitoring_projection_failure_preserves_authoritative_execution_pair(self) -> None:
         now = datetime.now(UTC)
         writer = _FailOnceSettlementMonitoringRepository()
-        coordinator = self._coordinator(execution=True, now=now, monitoring_writer=writer)
-        _, dispatched = self._schedule_and_dispatch(coordinator, now=now)
+        coordinator = self._coordinator(
+            execution=True,
+            now=now,
+            monitoring_writer=writer,
+        )
+        scheduled, dispatched = self._schedule_and_dispatch(coordinator, now=now)
 
         self.assertTrue(writer.failed)
         self.assertEqual(tuple(item.state for item in dispatched), (WorkState.FAILED,))
         self.assertEqual(ModeWorkQueueRow.objects.get().state, "failed")
-        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
-        self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
+
+        # Execution checkpoints are authoritative before Monitoring projection.
+        # A later diagnostic failure must not erase already committed execution state.
+        record_row = ExecutionRecordRow.objects.get()
+        ledger_row = PortfolioLedgerRow.objects.get(mode="execution")
+        self.assertEqual(record_row.state, "settled")
+        self.assertEqual(record_row.payload["state"], "settled")
+        self.assertEqual(len(ledger_row.payload["commands"]), 4)
+        self.assertEqual(
+            ledger_row.payload["positions"][str(scheduled[0].work.id)]["state"],
+            "settled",
+        )
+
         records = self._records(CORRELATION_ID, now)
-        self.assertFalse(any(record.event_type == "capital_transition" for record in records))
-        self.assertFalse(any(record.event_type == "lifecycle_transition" for record in records))
-        self.assertTrue(any(record.stage == "queue" and record.status == "failed" for record in records))
+        capital = [
+            record.reason_code
+            for record in records
+            if record.event_type == "capital_transition"
+        ]
+        self.assertEqual(capital, ["reserve", "lock", "pending"])
+        self.assertTrue(
+            any(record.event_type == "lifecycle_transition" for record in records)
+        )
+        self.assertTrue(
+            any(
+                record.stage == "queue" and record.status == "failed"
+                for record in records
+            )
+        )
 
     def test_early_monitoring_failure_never_strands_claimed_work_in_processing(self) -> None:
         now = datetime.now(UTC)
         writer = _FailFirstMonitoringRepository()
-        coordinator = self._coordinator(execution=True, now=now, monitoring_writer=writer)
+        coordinator = self._coordinator(
+            execution=True,
+            now=now,
+            monitoring_writer=writer,
+        )
         _, dispatched = self._schedule_and_dispatch(coordinator, now=now)
 
         self.assertTrue(writer.failed)

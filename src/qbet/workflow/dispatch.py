@@ -107,8 +107,9 @@ class ModeDispatchCoordinator:
         processed: list[QueuedWorkItem] = []
         for processing in self._queue_repository.claim_due(now):
             try:
-                with transaction.atomic():
-                    outcome = self._dispatch_claimed(processing, now=now, owner=owner)
+                # Execution checkpoints must commit before adapter side effects. Do not
+                # wrap an entire claimed item in one outer transaction.
+                outcome = self._dispatch_claimed(processing, now=now, owner=owner)
             except Exception as error:
                 outcome = self._fail_after_error(processing, now=now, error=error)
             processed.append(outcome)
@@ -249,13 +250,14 @@ class ModeDispatchCoordinator:
         now: datetime,
         owner: str,
     ) -> QueuedWorkItem:
-        """Commit mode state, Monitoring projection, and terminal queue state together."""
+        """Finish one mode without spanning execution side effects with a DB transaction."""
+
+        if item.work.mode is WorkflowMode.EXECUTION:
+            self._run_execution(item, now=now, owner=owner)
+            return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
 
         with transaction.atomic():
-            if item.work.mode is WorkflowMode.SIMULATION:
-                self._run_simulation(item, now=now)
-            else:
-                self._run_execution(item, now=now, owner=owner)
+            self._run_simulation(item, now=now)
             return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
 
     def _fail_after_error(
@@ -508,17 +510,15 @@ class ModeDispatchCoordinator:
             ExecutionRecord(proposal=proposal),
             initial_ledger,
         )
-        updated_record, updated_ledger = ExecutionService().decide(
+        persisted_record, persisted_ledger = ExecutionService(
+            state_writer=state_repository
+        ).decide(
             record,
             ledger,
             actor=owner,
             owner=owner,
             approve=True,
             now=now,
-        )
-        persisted_record, persisted_ledger = state_repository.persist(
-            updated_record,
-            updated_ledger,
         )
 
         references = {
