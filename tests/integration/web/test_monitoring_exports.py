@@ -81,7 +81,7 @@ class MonitoringExportTests(TestCase):
         self.assertContains(compact, 'name="start"')
         self.assertContains(compact, 'name="end"')
         self.assertContains(compact, 'name="correlation"')
-        self.assertContains(compact, "Maximum range: 31 days")
+        self.assertContains(compact, 'aria-label="Monitoring filters"')
         self.assertContains(extended, "liquidity_check")
         self.assertContains(extended, "warning")
         self.assertContains(extended, "25 ms")
