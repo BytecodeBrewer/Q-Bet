@@ -1,53 +1,122 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-<section class="page-heading"><h1>Q-Bet monitoring</h1><p>Read-only technical workflow evidence for administrators.</p></section>
-<section class="filter-bar">
-  <form method="get" aria-label="Monitoring filters">
-    <input type="hidden" name="view" value="{{ monitoring_view }}">
-    <label>Start (ISO-8601)<input type="text" name="start" value="{% if request.GET.start %}{{ request.GET.start }}{% else %}{{ monitoring_start|date:'c' }}{% endif %}" required></label>
-    <label>End (ISO-8601)<input type="text" name="end" value="{% if request.GET.end %}{{ request.GET.end }}{% else %}{{ monitoring_end|date:'c' }}{% endif %}" required></label>
-    <label>Correlation (optional)<input type="text" name="correlation" value="{{ request.GET.correlation }}" placeholder="UUID"></label>
-    <button type="submit">Apply filters</button>
-  </form>
-  <p class="muted">Maximum range: 31 days. Use timezone-aware ISO-8601 timestamps.</p>
-  <nav aria-label="Monitoring view and export actions">
-    <a href="?view=compact{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}"{% if monitoring_view == 'compact' %} aria-current="page"{% endif %}>Compact</a>
-    <a href="?view=extended{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}"{% if monitoring_view == 'extended' %} aria-current="page"{% endif %}>Extended</a>
-    <a href="{% url 'monitoring-export' 'csv' %}?view={{ monitoring_view }}{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}">CSV export</a>
-    <a href="{% url 'monitoring-export' 'json' %}?view={{ monitoring_view }}{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}">JSON export</a>
-  </nav>
+<section class="page-heading monitoring-heading">
+  <span class="eyebrow">Administrator diagnostics</span>
+  <h1>Monitoring</h1>
+  <p>Technical runtime readiness and workflow evidence for authorized staff.</p>
 </section>
 
-<section class="detail-panel">
-  <div class="section-heading"><h2>Runtime readiness</h2>{% if not routing_available %}<span class="status status-red" title="Error" aria-label="Error"></span>{% endif %}</div>
-  <h3>Execution</h3>
-  <div class="engine-grid">
-    {% for engine in execution_runtime.engines %}
-      <article class="surface-subtle" data-runtime-engine="execution:{{ engine.engine_id }}"{% if not engine.active %} style="opacity:.66;filter:saturate(.45)"{% endif %}>
-        <div class="card-heading"><strong>{{ engine.name }}</strong><span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.status == 'amber' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.status == 'amber' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span></div>
-        <div class="engine-secondary-metrics">
-          {% for stage in engine.workflow_stages %}<span title="{{ stage.detail }}"><span class="status status-{{ stage.status }}" aria-hidden="true"></span>{{ stage.name }}</span>{% endfor %}
-        </div>
-      </article>
-    {% endfor %}
+<section class="monitoring-toolbar surface-panel">
+  <div class="filter-bar">
+    <form method="get" aria-label="Monitoring filters">
+      <input type="hidden" name="view" value="{{ monitoring_view }}">
+      <label>Start (ISO-8601)<input type="text" name="start" value="{% if request.GET.start %}{{ request.GET.start }}{% else %}{{ monitoring_start|date:'c' }}{% endif %}" required></label>
+      <label>End (ISO-8601)<input type="text" name="end" value="{% if request.GET.end %}{{ request.GET.end }}{% else %}{{ monitoring_end|date:'c' }}{% endif %}" required></label>
+      <label>Correlation (optional)<input type="text" name="correlation" value="{{ request.GET.correlation }}" placeholder="UUID"></label>
+      <button type="submit">Apply filters</button>
+    </form>
+    <nav aria-label="Monitoring view and export actions">
+      <a href="?view=compact{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}"{% if monitoring_view == 'compact' %} aria-current="page"{% endif %}>Compact</a>
+      <a href="?view=extended{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}"{% if monitoring_view == 'extended' %} aria-current="page"{% endif %}>Extended</a>
+      <a href="{% url 'monitoring-export' 'csv' %}?view={{ monitoring_view }}{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}">CSV export</a>
+      <a href="{% url 'monitoring-export' 'json' %}?view={{ monitoring_view }}{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}">JSON export</a>
+    </nav>
+  </div>
+</section>
+
+{% if monitoring_records.available == False %}
+  <section class="monitoring-history-state" role="status">
+    <span class="status status-red" aria-hidden="true"></span>
+    <p><strong>Monitoring history unavailable</strong>{{ monitoring_records.message|default:"The durable monitoring source cannot be read right now." }}</p>
+  </section>
+{% endif %}
+
+<section class="runtime-readiness-panel detail-panel" aria-labelledby="runtime-readiness-heading">
+  <div class="section-heading">
+    <div><span class="eyebrow">Runtime control</span><h2 id="runtime-readiness-heading">Readiness</h2></div>
+    {% if not routing_available %}<span class="status status-red" title="Error" aria-label="Error"></span>{% endif %}
   </div>
 
-  {% if simulation_enabled %}
-    <h3 style="margin-top:18px">Simulation</h3>
+  <div class="runtime-plane-block">
+    <div class="runtime-plane-heading"><h3>Execution</h3><span class="tag neutral-tag">Execution</span></div>
     <div class="engine-grid">
-      {% for engine in simulation_runtime.engines %}
-        <article class="surface-subtle" data-runtime-engine="simulation:{{ engine.engine_id }}"{% if not engine.active %} style="opacity:.66;filter:saturate(.45)"{% endif %}>
-          <div class="card-heading"><strong>{{ engine.name }}</strong><span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.status == 'amber' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.status == 'amber' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span></div>
-          <div class="engine-secondary-metrics">
-            {% for stage in engine.workflow_stages %}<span title="{{ stage.detail }}"><span class="status status-{{ stage.status }}" aria-hidden="true"></span>{{ stage.name }}</span>{% endfor %}
+      {% for engine in execution_runtime.engines %}
+        <article class="surface-subtle readiness-card{% if not engine.active %} is-inactive{% endif %}" data-runtime-engine="execution:{{ engine.engine_id }}">
+          <div class="card-heading">
+            <strong>{{ engine.name }}</strong>
+            <span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span>
+          </div>
+          <div class="readiness-track" aria-label="{{ engine.name }} execution readiness">
+            {% for stage in engine.workflow_stages %}
+              <span class="readiness-stage is-{{ stage.status }}" title="{{ stage.detail }}"><span class="readiness-node" aria-hidden="true"></span><span>{{ stage.name }}</span></span>
+            {% endfor %}
           </div>
         </article>
       {% endfor %}
     </div>
+  </div>
+
+  {% if simulation_enabled %}
+    <div class="runtime-plane-block">
+      <div class="runtime-plane-heading"><h3>Simulation</h3><span class="tag simulation-tag">Simulation</span></div>
+      <div class="engine-grid">
+        {% for engine in simulation_runtime.engines %}
+          <article class="surface-subtle readiness-card{% if not engine.active %} is-inactive{% endif %}" data-runtime-engine="simulation:{{ engine.engine_id }}">
+            <div class="card-heading">
+              <strong>{{ engine.name }}</strong>
+              <span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span>
+            </div>
+            <div class="readiness-track" aria-label="{{ engine.name }} simulation readiness">
+              {% for stage in engine.workflow_stages %}
+                <span class="readiness-stage is-{{ stage.status }}" title="{{ stage.detail }}"><span class="readiness-node" aria-hidden="true"></span><span>{{ stage.name }}</span></span>
+              {% endfor %}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    </div>
   {% endif %}
 </section>
 
-<section><h2>Workflow traces</h2>{% if monitoring_records %}<table><thead>{% if monitoring_view == 'compact' %}<tr><th>Process</th><th>Work item</th><th>Match</th><th>Engine</th><th>Mode</th><th>Status</th><th>Started / finished</th><th>Duration</th><th>Warnings / errors</th><th>Latest decision</th></tr>{% else %}<tr><th>Time</th><th>Process</th><th>Engine</th><th>Mode</th><th>Stage</th><th>Event</th><th>Status</th><th>Level</th><th>Reason</th><th>Duration</th><th>References</th></tr>{% endif %}</thead><tbody>{% for record in monitoring_records %}{% if monitoring_view == 'compact' %}<tr><td>{{ record.correlation_id }}</td><td>{{ record.work_id }}</td><td>{{ record.opportunity_id }}</td><td>{{ record.engine }}</td><td>{{ record.mode }}</td><td>{{ record.status }}</td><td>{{ record.started_at }} / {{ record.finished_at }}</td><td>{{ record.duration_ms }} ms</td><td>{{ record.warning_count }} / {{ record.error_count }}</td><td>{{ record.latest_reason_code }}</td></tr>{% else %}<tr><td>{{ record.occurred_at }}</td><td>{{ record.correlation_id }}</td><td>{{ record.engine }}</td><td>{{ record.mode }}</td><td>{{ record.stage }}</td><td>{{ record.event_type }}</td><td>{{ record.status }}</td><td>{{ record.level }}</td><td>{{ record.reason_code }}</td><td>{{ record.duration_ms }} ms</td><td>{{ record.references }}</td></tr>{% endif %}{% endfor %}</tbody></table>{% else %}<p class="empty-state">No monitoring records exist in this period.</p>{% endif %}</section>
+<section class="monitoring-section" aria-labelledby="workflow-traces-heading">
+  <div class="section-heading section-heading-spacious"><div><span class="eyebrow">Correlated events</span><h2 id="workflow-traces-heading">Workflow traces</h2></div></div>
+  {% if monitoring_records %}
+    <div class="monitoring-table-wrap">
+      <table>
+        <thead>
+          {% if monitoring_view == 'compact' %}
+            <tr><th>Process</th><th>Work item</th><th>Match</th><th>Engine</th><th>Mode</th><th>Status</th><th>Started / finished</th><th>Duration</th><th>Warnings / errors</th><th>Latest decision</th></tr>
+          {% else %}
+            <tr><th>Time</th><th>Process</th><th>Engine</th><th>Mode</th><th>Stage</th><th>Event</th><th>Status</th><th>Level</th><th>Reason</th><th>Duration</th><th>References</th></tr>
+          {% endif %}
+        </thead>
+        <tbody>
+          {% for record in monitoring_records %}
+            {% if monitoring_view == 'compact' %}
+              <tr><td>{{ record.correlation_id }}</td><td>{{ record.work_id }}</td><td>{{ record.opportunity_id }}</td><td>{{ record.engine }}</td><td>{{ record.mode }}</td><td>{{ record.status }}</td><td>{{ record.started_at }} / {{ record.finished_at }}</td><td>{{ record.duration_ms }} ms</td><td>{{ record.warning_count }} / {{ record.error_count }}</td><td>{{ record.latest_reason_code }}</td></tr>
+            {% else %}
+              <tr><td>{{ record.occurred_at }}</td><td>{{ record.correlation_id }}</td><td>{{ record.engine }}</td><td>{{ record.mode }}</td><td>{{ record.stage }}</td><td>{{ record.event_type }}</td><td>{{ record.status }}</td><td>{{ record.level }}</td><td>{{ record.reason_code }}</td><td>{{ record.duration_ms }} ms</td><td>{{ record.references }}</td></tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% elif monitoring_records.available == False %}
+    <div class="monitoring-empty">Workflow history cannot be read from the durable monitoring source right now.</div>
+  {% else %}
+    <div class="monitoring-empty">No monitoring records exist in this period.</div>
+  {% endif %}
+</section>
 
-<section><h2>Recent simulations</h2>{% if monitoring.latest_alert %}<p class="monitoring-alert"><span class="status status-{{ monitoring.latest_alert.level }}"></span>{{ monitoring.latest_alert.summary }}</p>{% endif %}{% if monitoring.reports %}<table><thead><tr><th>Engine</th><th>Run status</th><th>Progress</th><th>Capital</th><th>Profit/loss</th><th>Generated</th></tr></thead><tbody>{% for report in monitoring.reports %}<tr><td>{{ report.engine }}</td><td>{{ report.status }}</td><td>{{ report.progress }}</td><td>{{ report.current_capital }}</td><td>{{ report.profit_loss }}</td><td>{{ report.generated_at }}</td></tr>{% endfor %}</tbody></table>{% elif monitoring.history_available %}<p>No simulation reports are available yet.</p>{% else %}<p>Simulation history is not configured.</p>{% endif %}</section>
+<section class="monitoring-section" aria-labelledby="simulation-history-heading">
+  <div class="section-heading section-heading-spacious"><div><span class="eyebrow">Simulation evidence</span><h2 id="simulation-history-heading">Recent simulations</h2></div></div>
+  {% if monitoring.latest_alert %}<p class="monitoring-alert"><span class="status status-{{ monitoring.latest_alert.level }}"></span>{{ monitoring.latest_alert.summary }}</p>{% endif %}
+  {% if monitoring.reports %}
+    <div class="monitoring-table-wrap"><table><thead><tr><th>Engine</th><th>Run status</th><th>Progress</th><th>Capital</th><th>Profit/loss</th><th>Generated</th></tr></thead><tbody>{% for report in monitoring.reports %}<tr><td>{{ report.engine }}</td><td>{{ report.status }}</td><td>{{ report.progress }}</td><td>{{ report.current_capital }}</td><td>{{ report.profit_loss }}</td><td>{{ report.generated_at }}</td></tr>{% endfor %}</tbody></table></div>
+  {% elif monitoring.history_available %}
+    <div class="monitoring-empty">No simulation reports are available yet.</div>
+  {% else %}
+    <div class="monitoring-empty">Simulation history is not configured or currently unavailable.</div>
+  {% endif %}
+</section>
 {% endblock %}
