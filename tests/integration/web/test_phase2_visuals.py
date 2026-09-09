@@ -40,12 +40,17 @@ class Phase2VisualIntegrationTests(TestCase):
             response,
             'data-flow-station="execution" transform="translate(780 278)"',
         )
-        self.assertContains(response, 'class="flow-packet flow-packet-simulation" r="6" visibility="hidden"')
-        self.assertContains(response, 'class="flow-packet flow-packet-execution" r="6" visibility="hidden"')
-        self.assertContains(response, '<set attributeName="visibility" to="visible" begin="3.7s"/>')
-        self.assertContains(response, '<set attributeName="visibility" to="visible" begin="4.8s"/>')
+        self.assertContains(
+            response,
+            'begin="0s;flow-motion-simulation.end+1.2s"',
+        )
+        self.assertContains(response, 'begin="flow-motion-main.end"', count=4)
+        self.assertContains(response, 'dur="2.2s"', count=2)
         self.assertContains(response, "H780")
         self.assertNotContains(response, "H816")
+        self.assertNotContains(response, 'repeatCount="indefinite"')
+        self.assertNotContains(response, 'begin="3.7s"')
+        self.assertNotContains(response, 'begin="4.8s"')
         self.assertContains(response, "qbet_web/home.js")
         self.assertContains(response, "Sign in")
         self.assertContains(response, "Create account")
@@ -65,9 +70,11 @@ class Phase2VisualIntegrationTests(TestCase):
             "qbet_web",
             "phase2_visual.css",
         ).read_text(encoding="utf-8")
-        self.assertIn('addEventListener("repeatEvent", scheduleMainCycle)', home_script)
-        self.assertIn('wireMotionCycle("flow-motion-simulation", "simulation"', home_script)
-        self.assertIn('wireMotionCycle("flow-motion-execution", "execution"', home_script)
+        self.assertIn('addEventListener("beginEvent"', home_script)
+        self.assertIn('addEventListener("endEvent"', home_script)
+        self.assertIn('pulseStation("protect")', home_script)
+        self.assertIn('pulseStation("simulation")', home_script)
+        self.assertIn('pulseStation("execution")', home_script)
         self.assertIn("is-packet-hit", home_script)
         self.assertIn(".flow-station.is-packet-hit circle", visual_styles)
         self.assertIn(".flow-station text { font-size: 26px; }", visual_styles)
@@ -105,12 +112,33 @@ class Phase2VisualIntegrationTests(TestCase):
             "qbet_web",
             "dashboard.js",
         ).read_text(encoding="utf-8")
-        self.assertIn("target.card.offsetTop - draggedCard.offsetTop", dashboard_script)
-        self.assertIn("target.card.offsetHeight, draggedCard.offsetHeight", dashboard_script)
-        self.assertNotIn(
-            "const draggedRect = draggedCard.getBoundingClientRect();",
+        self.assertIn("const DRAG_START_DISTANCE = 10;", dashboard_script)
+        self.assertIn("const REORDER_HYSTERESIS = 10;", dashboard_script)
+        self.assertIn('dragAxis = isSingleColumn(grid) ? "y" : "free";', dashboard_script)
+        self.assertIn('draggedCard.style.transition = "none";', dashboard_script)
+        self.assertIn(
+            "layoutCompensationY += draggedBefore.top - draggedAfter.top;",
             dashboard_script,
         )
+        self.assertIn("function isSingleColumn(grid)", dashboard_script)
+
+    def test_root_canvas_uses_selected_theme_for_mobile_viewport(self) -> None:
+        base_template = Path(
+            settings.BASE_DIR,
+            "templates",
+            "qbet_web",
+            "base.html",
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            '<html lang="en" data-theme="{{ preferences.theme|default:\'light\' }}">',
+            base_template,
+        )
+        self.assertIn(
+            'html[data-theme="dark"] { background: #202a32; color-scheme: dark; }',
+            base_template,
+        )
+        self.assertIn("body { min-height: 100dvh; }", base_template)
 
     def test_staff_monitoring_degrades_to_explicit_unavailable_state(self) -> None:
         self.client.force_login(self.staff)
