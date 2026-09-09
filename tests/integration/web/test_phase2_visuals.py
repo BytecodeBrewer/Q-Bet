@@ -89,6 +89,19 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertNotIn('draggable="true"', content)
         self.assertIn("data-drag-handle", content)
 
+        dashboard_script = Path(
+            settings.BASE_DIR,
+            "static",
+            "qbet_web",
+            "dashboard.js",
+        ).read_text(encoding="utf-8")
+        self.assertIn("target.card.offsetTop - draggedCard.offsetTop", dashboard_script)
+        self.assertIn("target.card.offsetHeight, draggedCard.offsetHeight", dashboard_script)
+        self.assertNotIn(
+            "const draggedRect = draggedCard.getBoundingClientRect();",
+            dashboard_script,
+        )
+
     def test_staff_monitoring_degrades_to_explicit_unavailable_state(self) -> None:
         self.client.force_login(self.staff)
         unavailable = MonitoringService(_UnavailableReader())
