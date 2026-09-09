@@ -65,10 +65,12 @@
       <circle class="flow-packet flow-packet-main" r="7">
         <animateMotion id="flow-motion-main" dur="5.4s" repeatCount="indefinite" path="M92 195 H245 H398 H552"/>
       </circle>
-      <circle class="flow-packet flow-packet-simulation" r="6">
+      <circle class="flow-packet flow-packet-simulation" r="6" visibility="hidden">
+        <set attributeName="visibility" to="visible" begin="3.7s"/>
         <animateMotion id="flow-motion-simulation" begin="3.7s" dur="2.6s" repeatCount="indefinite" path="M552 195 C650 195 655 112 752 112 H816"/>
       </circle>
-      <circle class="flow-packet flow-packet-execution" r="6">
+      <circle class="flow-packet flow-packet-execution" r="6" visibility="hidden">
+        <set attributeName="visibility" to="visible" begin="4.8s"/>
         <animateMotion id="flow-motion-execution" begin="4.8s" dur="2.9s" repeatCount="indefinite" path="M552 195 C650 195 655 278 752 278 H816"/>
       </circle>
     </svg>
