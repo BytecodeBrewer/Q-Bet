@@ -1,98 +1,115 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-<section class="home-hero surface-panel">
-  <div class="hero-copy">
-    <span class="eyebrow">Operational workspace</span>
-    <h1>Q-Bet</h1>
-    <p class="hero-lead">A compact view of the portfolio before you move into execution, simulation, reporting, or administration.</p>
+<section class="product-hero" aria-labelledby="home-heading">
+  <div class="product-hero-copy">
+    <span class="eyebrow">Deterministic opportunity workflow</span>
+    <h1 id="home-heading">Turn market opportunities into controlled decisions.</h1>
+    <p class="product-hero-lead">Q-Bet evaluates sports opportunities through a protected, deterministic flow before anything reaches Simulation or controlled Execution.</p>
     <div class="hero-actions">
       {% if user.is_authenticated %}
-        <a class="button-link" href="{% url 'dashboard' %}">Open dashboard</a>
+        <a class="button-link" href="{% url 'dashboard' %}">Open Dashboard</a>
         <a class="secondary-link" href="{% url 'presentation-settings' %}">Presentation settings</a>
       {% else %}
         <a class="button-link" href="{% url 'login' %}">Sign in</a>
         <a class="secondary-link" href="{% url 'register' %}">Create account</a>
       {% endif %}
     </div>
+    <ul class="hero-facts" aria-label="Q-Bet product capabilities">
+      <li><strong>2</strong><span>deterministic sports engines</span></li>
+      <li><strong>Simulation</strong><span>isolated virtual workflow</span></li>
+      <li><strong>Controlled</strong><span>execution boundary</span></li>
+    </ul>
   </div>
-  <div class="home-pulse" aria-label="Current execution overview">
-    <span class="eyebrow">Current state</span>
-    <div class="pulse-value">
-      {% if monitoring.summary.error_count or monitoring.summary.warning_count %}
-        <span class="status status-red" aria-hidden="true"></span><strong>Attention</strong>
-      {% elif monitoring.summary.active_matches %}
-        <span class="status status-green" aria-hidden="true"></span><strong>Active</strong>
-      {% else %}
-        <span class="status status-gray" aria-hidden="true"></span><strong>Idle</strong>
-      {% endif %}
-    </div>
-    <p class="muted">Execution status is shown at product level. Detailed diagnostics remain restricted to authorized staff.</p>
+
+  <div class="home-flow-shell" aria-label="Q-Bet protected opportunity flow">
+    <svg class="home-flow-map" viewBox="0 0 900 390" role="img" aria-labelledby="home-flow-title home-flow-desc">
+      <title id="home-flow-title">Q-Bet opportunity flow</title>
+      <desc id="home-flow-desc">Data moves through preparation, evaluation and protection checks before branching to Simulation or a controlled action.</desc>
+      <defs>
+        <linearGradient id="flowLine" x1="0" x2="1">
+          <stop offset="0" stop-color="currentColor" stop-opacity=".28"/>
+          <stop offset="1" stop-color="currentColor" stop-opacity=".72"/>
+        </linearGradient>
+      </defs>
+
+      <path class="flow-connector" d="M92 195 H245 H398 H552"/>
+      <path class="flow-connector flow-branch" d="M552 195 C650 195 655 112 752 112 H816"/>
+      <path class="flow-connector flow-branch" d="M552 195 C650 195 655 278 752 278 H816"/>
+
+      <g class="flow-station flow-station-1" transform="translate(92 195)">
+        <circle r="34"/>
+        <text x="0" y="62" text-anchor="middle">Data arrives</text>
+      </g>
+      <g class="flow-station flow-station-2" transform="translate(245 195)">
+        <circle r="34"/>
+        <text x="0" y="62" text-anchor="middle">Prepare</text>
+      </g>
+      <g class="flow-station flow-station-3" transform="translate(398 195)">
+        <circle r="34"/>
+        <text x="0" y="62" text-anchor="middle">Evaluate</text>
+      </g>
+      <g class="flow-station flow-station-4" transform="translate(552 195)">
+        <circle r="34"/>
+        <text x="0" y="62" text-anchor="middle">Protect</text>
+      </g>
+      <g class="flow-station flow-station-output" transform="translate(816 112)">
+        <circle r="32"/>
+        <text x="0" y="58" text-anchor="middle">Simulation</text>
+      </g>
+      <g class="flow-station flow-station-output" transform="translate(816 278)">
+        <circle r="32"/>
+        <text x="0" y="58" text-anchor="middle">Controlled action</text>
+      </g>
+
+      <circle class="flow-packet flow-packet-main" r="7">
+        <animateMotion dur="5.4s" repeatCount="indefinite" path="M92 195 H245 H398 H552"/>
+      </circle>
+      <circle class="flow-packet flow-packet-simulation" r="6">
+        <animateMotion begin="3.7s" dur="2.6s" repeatCount="indefinite" path="M552 195 C650 195 655 112 752 112 H816"/>
+      </circle>
+      <circle class="flow-packet flow-packet-execution" r="6">
+        <animateMotion begin="4.8s" dur="2.9s" repeatCount="indefinite" path="M552 195 C650 195 655 278 752 278 H816"/>
+      </circle>
+    </svg>
   </div>
 </section>
 
-<section class="home-summary" aria-labelledby="portfolio-summary-heading">
+<section class="product-principles" aria-labelledby="principles-heading">
   <div class="section-heading section-heading-spacious">
     <div>
-      <span class="eyebrow">Portfolio snapshot</span>
-      <h2 id="portfolio-summary-heading">At a glance</h2>
+      <span class="eyebrow">Built for controlled flow</span>
+      <h2 id="principles-heading">From signal to decision, without shortcuts.</h2>
     </div>
   </div>
-  <div class="summary-grid home-summary-grid">
-    <article class="summary-item summary-item-primary"><span>Engines</span><strong>{{ monitoring.engines|length }}</strong><small>v1 portfolio</small></article>
-    <article class="summary-item"><span>Active matches</span><strong>{{ monitoring.summary.active_matches }}</strong><small>execution</small></article>
-    <article class="summary-item"><span>Pending matches</span><strong>{{ monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
-    <article class="summary-item"><span>Warnings / errors</span><strong>{{ monitoring.summary.warning_count }} / {{ monitoring.summary.error_count }}</strong><small>current product state</small></article>
+  <div class="product-principle-grid">
+    <article>
+      <span class="principle-index">01</span>
+      <h3>Prepare the opportunity</h3>
+      <p>Incoming market data is normalized and shaped into an engine-ready opportunity before calculation starts.</p>
+    </article>
+    <article>
+      <span class="principle-index">02</span>
+      <h3>Evaluate deterministically</h3>
+      <p>Bonus and sports-capital strategies use explicit inputs, precise calculations and reproducible decisions.</p>
+    </article>
+    <article>
+      <span class="principle-index">03</span>
+      <h3>Protect the path</h3>
+      <p>Risk and capital checks sit between a positive calculation and any downstream Simulation or controlled action.</p>
+    </article>
   </div>
 </section>
 
-<section class="home-engines" aria-labelledby="engine-overview-heading">
-  <div class="section-heading section-heading-spacious">
-    <div>
-      <span class="eyebrow">Engine overview</span>
-      <h2 id="engine-overview-heading">Current engines</h2>
-    </div>
-    <div class="status-legend" aria-label="Engine status legend">
-      <span><span class="status status-gray" aria-hidden="true"></span>Inactive</span>
-      <span><span class="status status-green" aria-hidden="true"></span>Healthy</span>
-      <span><span class="status status-red" aria-hidden="true"></span>Attention</span>
-    </div>
-  </div>
-  <div class="engine-grid home-engine-grid">
-    {% for engine in monitoring.engines %}
-      <article class="engine-card home-engine-card">
-        <div class="card-heading">
-          <div>
-            <span class="engine-state-label">
-              <span class="status status-{{ engine.status }}" aria-hidden="true"></span>
-              {% if engine.status == 'green' %}Healthy{% elif engine.status == 'red' %}Attention{% else %}Inactive{% endif %}
-            </span>
-            <h3>{{ engine.name }}</h3>
-          </div>
-          {% if user.is_authenticated %}<a class="compact-link" href="{% url 'engine-detail' engine.engine_id %}">Details</a>{% endif %}
-        </div>
-        <p>{{ engine.detail }}</p>
-        <div class="engine-card-footer">
-          <span>{{ engine.running_matches }} active</span>
-          <span>{{ engine.pending_matches }} pending</span>
-        </div>
-      </article>
-    {% endfor %}
-  </div>
-</section>
-
-{% if user.is_authenticated and user.is_staff %}
-<section class="operator-shortcuts surface-panel" aria-labelledby="operator-shortcuts-heading">
+<section class="product-cta surface-panel" aria-labelledby="home-cta-heading">
   <div>
-    <span class="eyebrow">Staff workspace</span>
-    <h2 id="operator-shortcuts-heading">Operator shortcuts</h2>
-    <p class="muted">Diagnostics and administration stay separate from the customer-facing product surfaces.</p>
+    <span class="eyebrow">Q-Bet workspace</span>
+    <h2 id="home-cta-heading">The operational detail starts after sign-in.</h2>
+    <p class="muted">Runtime status, engine controls, reports and technical Monitoring stay inside the authenticated product surface.</p>
   </div>
-  <div class="shortcut-grid">
-    <a href="{% url 'report-history' %}"><strong>Reports</strong><span>Review persisted simulation output.</span></a>
-    <a href="{% url 'monitoring' %}"><strong>Monitoring</strong><span>Inspect technical system state.</span></a>
-    <a href="{% url 'admin-area' %}"><strong>Q-Bet Admin</strong><span>Open product administration controls.</span></a>
-    <a href="{% url 'admin:index' %}"><strong>Django Admin</strong><span>Manage users and permissions.</span></a>
-  </div>
+  {% if user.is_authenticated %}
+    <a class="button-link" href="{% url 'dashboard' %}">Go to Dashboard</a>
+  {% else %}
+    <a class="button-link" href="{% url 'register' %}">Create account</a>
+  {% endif %}
 </section>
-{% endif %}
 {% endblock %}

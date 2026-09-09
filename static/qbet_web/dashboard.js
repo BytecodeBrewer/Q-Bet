@@ -10,30 +10,65 @@
     return;
   }
 
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
   document.querySelectorAll("[data-widget-grid]").forEach((grid) => {
     let draggedCard = null;
+    let activeHandle = null;
+    let activePointerId = null;
 
     grid.querySelectorAll("[data-drag-handle]").forEach((handle) => {
-      handle.addEventListener("dragstart", (event) => {
-        draggedCard = handle.closest("[data-widget-id]");
-        if (!draggedCard) {
+      handle.addEventListener("pointerdown", (event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) {
           return;
         }
-        draggedCard.classList.add("is-dragging");
-        if (event.dataTransfer) {
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData("text/plain", draggedCard.dataset.widgetId || "");
+        const card = handle.closest("[data-widget-id]");
+        if (!card || card.parentElement !== grid) {
+          return;
         }
+
+        event.preventDefault();
+        draggedCard = card;
+        activeHandle = handle;
+        activePointerId = event.pointerId;
+        handle.setPointerCapture(event.pointerId);
+        grid.classList.add("is-reordering");
+        card.classList.add("is-dragging");
       });
 
-      handle.addEventListener("dragend", () => {
-        if (!draggedCard) {
+      handle.addEventListener("pointermove", (event) => {
+        if (
+          !draggedCard ||
+          activeHandle !== handle ||
+          activePointerId !== event.pointerId
+        ) {
           return;
         }
+        event.preventDefault();
+        moveCardTowardPointer(grid, draggedCard, event.clientX, event.clientY);
+      });
+
+      const finishPointerDrag = (event) => {
+        if (
+          !draggedCard ||
+          activeHandle !== handle ||
+          activePointerId !== event.pointerId
+        ) {
+          return;
+        }
+        if (handle.hasPointerCapture(event.pointerId)) {
+          handle.releasePointerCapture(event.pointerId);
+        }
         draggedCard.classList.remove("is-dragging");
+        grid.classList.remove("is-reordering");
         persistOrder(grid);
         draggedCard = null;
-      });
+        activeHandle = null;
+        activePointerId = null;
+      };
+
+      handle.addEventListener("pointerup", finishPointerDrag);
+      handle.addEventListener("pointercancel", finishPointerDrag);
 
       handle.addEventListener("keydown", (event) => {
         const card = handle.closest("[data-widget-id]");
@@ -55,36 +90,103 @@
           return;
         }
 
+        const before = capturePositions(grid);
         if (previousKeys.has(event.key)) {
           grid.insertBefore(card, sibling);
         } else {
           grid.insertBefore(sibling, card);
         }
+        animateReflow(grid, before, card);
         persistOrder(grid);
       });
     });
-
-    grid.addEventListener("dragover", (event) => {
-      if (!draggedCard) {
-        return;
-      }
-      event.preventDefault();
-      const target = event.target.closest("[data-widget-id]");
-      if (!target || target === draggedCard || target.parentElement !== grid) {
-        return;
-      }
-
-      const targetRect = target.getBoundingClientRect();
-      const draggedRect = draggedCard.getBoundingClientRect();
-      const isSameRow =
-        Math.abs(targetRect.top - draggedRect.top) <
-        Math.min(targetRect.height, draggedRect.height) / 2;
-      const insertAfter = isSameRow
-        ? event.clientX > targetRect.left + targetRect.width / 2
-        : event.clientY > targetRect.top + targetRect.height / 2;
-      grid.insertBefore(draggedCard, insertAfter ? target.nextSibling : target);
-    });
   });
+
+  function moveCardTowardPointer(grid, draggedCard, clientX, clientY) {
+    const candidates = Array.from(grid.querySelectorAll("[data-widget-id]"))
+      .filter((card) => card !== draggedCard);
+    if (!candidates.length) {
+      return;
+    }
+
+    const target = candidates.reduce((closest, candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const distance = Math.hypot(clientX - centerX, clientY - centerY);
+      return !closest || distance < closest.distance
+        ? { card: candidate, rect, distance }
+        : closest;
+    }, null);
+
+    if (!target) {
+      return;
+    }
+
+    const withinTarget =
+      clientX >= target.rect.left - 24 &&
+      clientX <= target.rect.right + 24 &&
+      clientY >= target.rect.top - 24 &&
+      clientY <= target.rect.bottom + 24;
+    if (!withinTarget) {
+      return;
+    }
+
+    const draggedRect = draggedCard.getBoundingClientRect();
+    const sameRow =
+      Math.abs(target.rect.top - draggedRect.top) <
+      Math.min(target.rect.height, draggedRect.height) / 2;
+    const insertAfter = sameRow
+      ? clientX > target.rect.left + target.rect.width / 2
+      : clientY > target.rect.top + target.rect.height / 2;
+
+    const reference = insertAfter ? target.card.nextSibling : target.card;
+    if (reference === draggedCard || (!reference && draggedCard === grid.lastElementChild)) {
+      return;
+    }
+
+    const before = capturePositions(grid);
+    grid.insertBefore(draggedCard, reference);
+    animateReflow(grid, before, draggedCard);
+  }
+
+  function capturePositions(grid) {
+    return new Map(
+      Array.from(grid.querySelectorAll("[data-widget-id]"))
+        .map((card) => [card, card.getBoundingClientRect()])
+    );
+  }
+
+  function animateReflow(grid, before, draggedCard) {
+    if (reduceMotion.matches) {
+      return;
+    }
+    grid.querySelectorAll("[data-widget-id]").forEach((card) => {
+      if (card === draggedCard) {
+        return;
+      }
+      const previous = before.get(card);
+      if (!previous) {
+        return;
+      }
+      const current = card.getBoundingClientRect();
+      const deltaX = previous.left - current.left;
+      const deltaY = previous.top - current.top;
+      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
+        return;
+      }
+      card.animate(
+        [
+          { transform: `translate(${deltaX}px, ${deltaY}px)` },
+          { transform: "translate(0, 0)" },
+        ],
+        {
+          duration: 190,
+          easing: "cubic-bezier(.2,.8,.2,1)",
+        },
+      );
+    });
+  }
 
   async function persistOrder(grid) {
     const body = new URLSearchParams();
