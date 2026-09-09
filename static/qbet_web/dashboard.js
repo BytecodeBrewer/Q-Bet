@@ -11,15 +11,19 @@
   }
 
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const DRAG_START_DISTANCE = 10;
+  const REORDER_HYSTERESIS = 10;
 
   document.querySelectorAll("[data-widget-grid]").forEach((grid) => {
     let draggedCard = null;
     let activeHandle = null;
     let activePointerId = null;
-    let pointerOffsetX = 0;
-    let pointerOffsetY = 0;
-    let dragTranslateX = 0;
-    let dragTranslateY = 0;
+    let dragStarted = false;
+    let dragAxis = "free";
+    let startClientX = 0;
+    let startClientY = 0;
+    let layoutCompensationX = 0;
+    let layoutCompensationY = 0;
 
     grid.querySelectorAll("[data-drag-handle]").forEach((handle) => {
       handle.addEventListener("pointerdown", (event) => {
@@ -32,19 +36,16 @@
         }
 
         event.preventDefault();
-        const rect = card.getBoundingClientRect();
         draggedCard = card;
         activeHandle = handle;
         activePointerId = event.pointerId;
-        pointerOffsetX = event.clientX - rect.left;
-        pointerOffsetY = event.clientY - rect.top;
-        dragTranslateX = 0;
-        dragTranslateY = 0;
-        card.style.setProperty("--drag-x", "0px");
-        card.style.setProperty("--drag-y", "0px");
+        dragStarted = false;
+        dragAxis = isSingleColumn(grid) ? "y" : "free";
+        startClientX = event.clientX;
+        startClientY = event.clientY;
+        layoutCompensationX = 0;
+        layoutCompensationY = 0;
         handle.setPointerCapture(event.pointerId);
-        grid.classList.add("is-reordering");
-        card.classList.add("is-dragging");
       });
 
       handle.addEventListener("pointermove", (event) => {
@@ -55,10 +56,32 @@
         ) {
           return;
         }
+
         event.preventDefault();
+        const deltaX = event.clientX - startClientX;
+        const deltaY = event.clientY - startClientY;
+
+        if (!dragStarted) {
+          if (Math.hypot(deltaX, deltaY) < DRAG_START_DISTANCE) {
+            return;
+          }
+          dragStarted = true;
+          grid.classList.add("is-reordering");
+          draggedCard.classList.add("is-dragging");
+          draggedCard.style.transition = "none";
+        }
+
         positionDraggedCard(draggedCard, event.clientX, event.clientY);
-        moveCardTowardPointer(grid, draggedCard, event.clientX, event.clientY);
-        positionDraggedCard(draggedCard, event.clientX, event.clientY);
+        const reordered = moveCardTowardPointer(
+          grid,
+          draggedCard,
+          event.clientX,
+          event.clientY,
+          dragAxis,
+        );
+        if (reordered) {
+          positionDraggedCard(draggedCard, event.clientX, event.clientY);
+        }
       });
 
       const finishPointerDrag = (event) => {
@@ -72,16 +95,25 @@
         if (handle.hasPointerCapture(event.pointerId)) {
           handle.releasePointerCapture(event.pointerId);
         }
-        draggedCard.classList.remove("is-dragging");
-        draggedCard.style.removeProperty("--drag-x");
-        draggedCard.style.removeProperty("--drag-y");
-        grid.classList.remove("is-reordering");
-        persistOrder(grid);
+
+        if (dragStarted) {
+          draggedCard.classList.remove("is-dragging");
+          draggedCard.style.removeProperty("--drag-x");
+          draggedCard.style.removeProperty("--drag-y");
+          draggedCard.style.removeProperty("transition");
+          grid.classList.remove("is-reordering");
+          persistOrder(grid);
+        }
+
         draggedCard = null;
         activeHandle = null;
         activePointerId = null;
-        dragTranslateX = 0;
-        dragTranslateY = 0;
+        dragStarted = false;
+        dragAxis = "free";
+        startClientX = 0;
+        startClientY = 0;
+        layoutCompensationX = 0;
+        layoutCompensationY = 0;
       };
 
       handle.addEventListener("pointerup", finishPointerDrag);
@@ -119,70 +151,132 @@
     });
 
     function positionDraggedCard(card, clientX, clientY) {
-      const rect = card.getBoundingClientRect();
-      const layoutLeft = rect.left - dragTranslateX;
-      const layoutTop = rect.top - dragTranslateY;
-      dragTranslateX = clientX - pointerOffsetX - layoutLeft;
-      dragTranslateY = clientY - pointerOffsetY - layoutTop;
-      card.style.setProperty("--drag-x", `${dragTranslateX}px`);
-      card.style.setProperty("--drag-y", `${dragTranslateY}px`);
+      const pointerDeltaX = clientX - startClientX;
+      const pointerDeltaY = clientY - startClientY;
+      const translateX = dragAxis === "y" ? 0 : pointerDeltaX + layoutCompensationX;
+      const translateY = pointerDeltaY + layoutCompensationY;
+      card.style.setProperty("--drag-x", `${translateX}px`);
+      card.style.setProperty("--drag-y", `${translateY}px`);
+    }
+
+    function moveCardTowardPointer(
+      activeGrid,
+      card,
+      clientX,
+      clientY,
+      axis,
+    ) {
+      const orderedCards = Array.from(
+        activeGrid.querySelectorAll("[data-widget-id]"),
+      );
+      const currentIndex = orderedCards.indexOf(card);
+      const candidates = orderedCards.filter((candidate) => candidate !== card);
+      if (currentIndex < 0 || !candidates.length) {
+        return false;
+      }
+
+      const target = candidates.reduce((closest, candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const distance = axis === "y"
+          ? Math.abs(clientY - centerY)
+          : Math.hypot(clientX - centerX, clientY - centerY);
+        return !closest || distance < closest.distance
+          ? { card: candidate, rect, distance }
+          : closest;
+      }, null);
+
+      if (!target) {
+        return false;
+      }
+
+      const targetIndex = orderedCards.indexOf(target.card);
+      if (targetIndex < 0) {
+        return false;
+      }
+
+      let reference = null;
+      if (axis === "y") {
+        const targetCenterY = target.rect.top + target.rect.height / 2;
+        if (targetIndex < currentIndex) {
+          if (clientY > targetCenterY - REORDER_HYSTERESIS) {
+            return false;
+          }
+          reference = target.card;
+        } else {
+          if (clientY < targetCenterY + REORDER_HYSTERESIS) {
+            return false;
+          }
+          reference = target.card.nextElementSibling;
+        }
+      } else {
+        const sameRow =
+          Math.abs(target.card.offsetTop - card.offsetTop) <
+          Math.min(target.card.offsetHeight, card.offsetHeight) / 2;
+        const movingBackward = targetIndex < currentIndex;
+        if (sameRow) {
+          const targetCenterX = target.rect.left + target.rect.width / 2;
+          if (movingBackward) {
+            if (clientX > targetCenterX - REORDER_HYSTERESIS) {
+              return false;
+            }
+            reference = target.card;
+          } else {
+            if (clientX < targetCenterX + REORDER_HYSTERESIS) {
+              return false;
+            }
+            reference = target.card.nextElementSibling;
+          }
+        } else {
+          const targetCenterY = target.rect.top + target.rect.height / 2;
+          if (movingBackward) {
+            if (clientY > targetCenterY - REORDER_HYSTERESIS) {
+              return false;
+            }
+            reference = target.card;
+          } else {
+            if (clientY < targetCenterY + REORDER_HYSTERESIS) {
+              return false;
+            }
+            reference = target.card.nextElementSibling;
+          }
+        }
+      }
+
+      if (
+        reference === card ||
+        (!reference && card === activeGrid.lastElementChild)
+      ) {
+        return false;
+      }
+
+      const before = capturePositions(activeGrid);
+      const draggedBefore = card.getBoundingClientRect();
+      activeGrid.insertBefore(card, reference);
+      const draggedAfter = card.getBoundingClientRect();
+      layoutCompensationX += draggedBefore.left - draggedAfter.left;
+      layoutCompensationY += draggedBefore.top - draggedAfter.top;
+      animateReflow(activeGrid, before, card);
+      return true;
     }
   });
 
-  function moveCardTowardPointer(grid, draggedCard, clientX, clientY) {
-    const candidates = Array.from(grid.querySelectorAll("[data-widget-id]"))
-      .filter((card) => card !== draggedCard);
-    if (!candidates.length) {
-      return;
+  function isSingleColumn(grid) {
+    const cards = Array.from(grid.querySelectorAll("[data-widget-id]"));
+    if (cards.length < 2) {
+      return true;
     }
-
-    const target = candidates.reduce((closest, candidate) => {
-      const rect = candidate.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      const distance = Math.hypot(clientX - centerX, clientY - centerY);
-      return !closest || distance < closest.distance
-        ? { card: candidate, rect, distance }
-        : closest;
-    }, null);
-
-    if (!target) {
-      return;
-    }
-
-    const withinTarget =
-      clientX >= target.rect.left - 24 &&
-      clientX <= target.rect.right + 24 &&
-      clientY >= target.rect.top - 24 &&
-      clientY <= target.rect.bottom + 24;
-    if (!withinTarget) {
-      return;
-    }
-
-    // offsetTop/offsetHeight describe layout geometry and ignore the CSS transform
-    // used to keep the dragged card under the pointer. That keeps vertical reordering
-    // correct in single-column and narrow layouts.
-    const sameRow =
-      Math.abs(target.card.offsetTop - draggedCard.offsetTop) <
-      Math.min(target.card.offsetHeight, draggedCard.offsetHeight) / 2;
-    const insertAfter = sameRow
-      ? clientX > target.rect.left + target.rect.width / 2
-      : clientY > target.rect.top + target.rect.height / 2;
-
-    const reference = insertAfter ? target.card.nextSibling : target.card;
-    if (reference === draggedCard || (!reference && draggedCard === grid.lastElementChild)) {
-      return;
-    }
-
-    const before = capturePositions(grid);
-    grid.insertBefore(draggedCard, reference);
-    animateReflow(grid, before, draggedCard);
+    const firstTop = cards[0].offsetTop;
+    return !cards.slice(1).some(
+      (card) => Math.abs(card.offsetTop - firstTop) < card.offsetHeight / 2,
+    );
   }
 
   function capturePositions(grid) {
     return new Map(
       Array.from(grid.querySelectorAll("[data-widget-id]"))
-        .map((card) => [card, card.getBoundingClientRect()])
+        .map((card) => [card, card.getBoundingClientRect()]),
     );
   }
 
