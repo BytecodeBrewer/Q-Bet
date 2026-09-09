@@ -159,10 +159,12 @@
       return;
     }
 
-    const draggedRect = draggedCard.getBoundingClientRect();
+    // offsetTop/offsetHeight describe layout geometry and ignore the CSS transform
+    // used to keep the dragged card under the pointer. That keeps vertical reordering
+    // correct in single-column and narrow layouts.
     const sameRow =
-      Math.abs(target.rect.top - draggedRect.top) <
-      Math.min(target.rect.height, draggedRect.height) / 2;
+      Math.abs(target.card.offsetTop - draggedCard.offsetTop) <
+      Math.min(target.card.offsetHeight, draggedCard.offsetHeight) / 2;
     const insertAfter = sameRow
       ? clientX > target.rect.left + target.rect.width / 2
       : clientY > target.rect.top + target.rect.height / 2;
