@@ -36,30 +36,31 @@
     timers.add(timer);
   }
 
-  function scheduleMainCycle() {
-    schedulePulse("data", 0);
-    schedulePulse("prepare", 1800);
-    schedulePulse("evaluate", 3590);
-    schedulePulse("protect", 5220);
-  }
-
-  function wireMotionCycle(motionId, stationName, arrivalDelayMs) {
-    const motion = flow.querySelector(`#${motionId}`);
-    if (!motion) {
-      return;
-    }
-
-    const scheduleArrival = () => schedulePulse(stationName, arrivalDelayMs);
-    motion.addEventListener("beginEvent", scheduleArrival);
-    motion.addEventListener("repeatEvent", scheduleArrival);
+  function scheduleMainStations() {
+    pulseStation("data");
+    schedulePulse("prepare", 1400);
+    schedulePulse("evaluate", 2800);
   }
 
   const mainMotion = flow.querySelector("#flow-motion-main");
+  const simulationMotion = flow.querySelector("#flow-motion-simulation");
+  const executionMotion = flow.querySelector("#flow-motion-execution");
+
+  let observedInitialMainBegin = false;
   if (mainMotion) {
-    mainMotion.addEventListener("repeatEvent", scheduleMainCycle);
+    mainMotion.addEventListener("beginEvent", () => {
+      observedInitialMainBegin = true;
+      scheduleMainStations();
+    });
+    mainMotion.addEventListener("endEvent", () => pulseStation("protect"));
   }
 
-  scheduleMainCycle();
-  wireMotionCycle("flow-motion-simulation", "simulation", 2380);
-  wireMotionCycle("flow-motion-execution", "execution", 2680);
+  simulationMotion?.addEventListener("endEvent", () => pulseStation("simulation"));
+  executionMotion?.addEventListener("endEvent", () => pulseStation("execution"));
+
+  window.setTimeout(() => {
+    if (!observedInitialMainBegin) {
+      scheduleMainStations();
+    }
+  }, 60);
 })();
