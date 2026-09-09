@@ -16,6 +16,10 @@
     let draggedCard = null;
     let activeHandle = null;
     let activePointerId = null;
+    let pointerOffsetX = 0;
+    let pointerOffsetY = 0;
+    let dragTranslateX = 0;
+    let dragTranslateY = 0;
 
     grid.querySelectorAll("[data-drag-handle]").forEach((handle) => {
       handle.addEventListener("pointerdown", (event) => {
@@ -28,9 +32,16 @@
         }
 
         event.preventDefault();
+        const rect = card.getBoundingClientRect();
         draggedCard = card;
         activeHandle = handle;
         activePointerId = event.pointerId;
+        pointerOffsetX = event.clientX - rect.left;
+        pointerOffsetY = event.clientY - rect.top;
+        dragTranslateX = 0;
+        dragTranslateY = 0;
+        card.style.setProperty("--drag-x", "0px");
+        card.style.setProperty("--drag-y", "0px");
         handle.setPointerCapture(event.pointerId);
         grid.classList.add("is-reordering");
         card.classList.add("is-dragging");
@@ -45,7 +56,9 @@
           return;
         }
         event.preventDefault();
+        positionDraggedCard(draggedCard, event.clientX, event.clientY);
         moveCardTowardPointer(grid, draggedCard, event.clientX, event.clientY);
+        positionDraggedCard(draggedCard, event.clientX, event.clientY);
       });
 
       const finishPointerDrag = (event) => {
@@ -60,11 +73,15 @@
           handle.releasePointerCapture(event.pointerId);
         }
         draggedCard.classList.remove("is-dragging");
+        draggedCard.style.removeProperty("--drag-x");
+        draggedCard.style.removeProperty("--drag-y");
         grid.classList.remove("is-reordering");
         persistOrder(grid);
         draggedCard = null;
         activeHandle = null;
         activePointerId = null;
+        dragTranslateX = 0;
+        dragTranslateY = 0;
       };
 
       handle.addEventListener("pointerup", finishPointerDrag);
@@ -100,6 +117,16 @@
         persistOrder(grid);
       });
     });
+
+    function positionDraggedCard(card, clientX, clientY) {
+      const rect = card.getBoundingClientRect();
+      const layoutLeft = rect.left - dragTranslateX;
+      const layoutTop = rect.top - dragTranslateY;
+      dragTranslateX = clientX - pointerOffsetX - layoutLeft;
+      dragTranslateY = clientY - pointerOffsetY - layoutTop;
+      card.style.setProperty("--drag-x", `${dragTranslateX}px`);
+      card.style.setProperty("--drag-y", `${dragTranslateY}px`);
+    }
   });
 
   function moveCardTowardPointer(grid, draggedCard, clientX, clientY) {

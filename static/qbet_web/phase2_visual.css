@@ -124,7 +124,7 @@
   filter: none !important;
   border-style: solid !important;
   border-color: color-mix(in srgb, var(--primary) 58%, var(--border));
-  transform: translateY(-5px) scale(1.018);
+  transform: translate(var(--drag-x, 0px), calc(var(--drag-y, 0px) - 5px)) scale(1.018);
   box-shadow: 0 24px 56px rgba(23, 33, 43, .18);
   z-index: 10;
 }
@@ -193,5 +193,5 @@
   .engine-runtime-button,
   .drag-handle,
   .draggable-card { transition: none !important; }
-  .draggable-card.is-dragging { transform: none; }
+  .draggable-card.is-dragging { transform: translate(var(--drag-x, 0px), var(--drag-y, 0px)); }
 }
