@@ -32,10 +32,20 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertContains(response, "<animateMotion", count=3)
         self.assertContains(response, 'id="flow-motion-main"')
         self.assertContains(response, 'data-flow-station="protect"')
+        self.assertContains(
+            response,
+            'data-flow-station="simulation" transform="translate(780 112)"',
+        )
+        self.assertContains(
+            response,
+            'data-flow-station="execution" transform="translate(780 278)"',
+        )
         self.assertContains(response, 'class="flow-packet flow-packet-simulation" r="6" visibility="hidden"')
         self.assertContains(response, 'class="flow-packet flow-packet-execution" r="6" visibility="hidden"')
         self.assertContains(response, '<set attributeName="visibility" to="visible" begin="3.7s"/>')
         self.assertContains(response, '<set attributeName="visibility" to="visible" begin="4.8s"/>')
+        self.assertContains(response, "H780")
+        self.assertNotContains(response, "H816")
         self.assertContains(response, "qbet_web/home.js")
         self.assertContains(response, "Sign in")
         self.assertContains(response, "Create account")
