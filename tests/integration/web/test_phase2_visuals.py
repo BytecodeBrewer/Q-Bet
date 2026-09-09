@@ -32,6 +32,10 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertContains(response, "<animateMotion", count=3)
         self.assertContains(response, 'id="flow-motion-main"')
         self.assertContains(response, 'data-flow-station="protect"')
+        self.assertContains(response, 'class="flow-packet flow-packet-simulation" r="6" visibility="hidden"')
+        self.assertContains(response, 'class="flow-packet flow-packet-execution" r="6" visibility="hidden"')
+        self.assertContains(response, '<set attributeName="visibility" to="visible" begin="3.7s"/>')
+        self.assertContains(response, '<set attributeName="visibility" to="visible" begin="4.8s"/>')
         self.assertContains(response, "qbet_web/home.js")
         self.assertContains(response, "Sign in")
         self.assertContains(response, "Create account")
@@ -56,6 +60,8 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertIn('wireMotionCycle("flow-motion-execution", "execution"', home_script)
         self.assertIn("is-packet-hit", home_script)
         self.assertIn(".flow-station.is-packet-hit circle", visual_styles)
+        self.assertIn(".flow-station text { font-size: 26px; }", visual_styles)
+        self.assertIn(".flow-station-output text { font-size: 22px; }", visual_styles)
         self.assertNotIn("station-breathe", visual_styles)
 
     def test_authenticated_home_stays_presentation_first_and_links_to_dashboard(self) -> None:
