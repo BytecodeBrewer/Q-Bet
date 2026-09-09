@@ -1,5 +1,7 @@
+from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase
 
@@ -28,6 +30,9 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertContains(response, "Turn market opportunities into controlled decisions.")
         self.assertContains(response, "Q-Bet opportunity flow")
         self.assertContains(response, "<animateMotion", count=3)
+        self.assertContains(response, 'id="flow-motion-main"')
+        self.assertContains(response, 'data-flow-station="protect"')
+        self.assertContains(response, "qbet_web/home.js")
         self.assertContains(response, "Sign in")
         self.assertContains(response, "Create account")
         self.assertContains(response, "phase2_visual.css")
@@ -36,6 +41,22 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertNotContains(response, "Warnings / errors")
         self.assertNotContains(response, "Current state")
         self.assertNotContains(response, "Operator shortcuts")
+
+        home_script = Path(settings.BASE_DIR, "static", "qbet_web", "home.js").read_text(
+            encoding="utf-8"
+        )
+        visual_styles = Path(
+            settings.BASE_DIR,
+            "static",
+            "qbet_web",
+            "phase2_visual.css",
+        ).read_text(encoding="utf-8")
+        self.assertIn('addEventListener("repeatEvent", scheduleMainCycle)', home_script)
+        self.assertIn('wireMotionCycle("flow-motion-simulation", "simulation"', home_script)
+        self.assertIn('wireMotionCycle("flow-motion-execution", "execution"', home_script)
+        self.assertIn("is-packet-hit", home_script)
+        self.assertIn(".flow-station.is-packet-hit circle", visual_styles)
+        self.assertNotIn("station-breathe", visual_styles)
 
     def test_authenticated_home_stays_presentation_first_and_links_to_dashboard(self) -> None:
         self.client.force_login(self.user)

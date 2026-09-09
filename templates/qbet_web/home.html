@@ -1,4 +1,5 @@
 {% extends "qbet_web/base.html" %}
+{% load static %}
 {% block content %}
 <section class="product-hero" aria-labelledby="home-heading">
   <div class="product-hero-copy">
@@ -21,7 +22,7 @@
     </ul>
   </div>
 
-  <div class="home-flow-shell" aria-label="Q-Bet protected opportunity flow">
+  <div class="home-flow-shell" data-home-flow aria-label="Q-Bet protected opportunity flow">
     <svg class="home-flow-map" viewBox="0 0 900 390" role="img" aria-labelledby="home-flow-title home-flow-desc">
       <title id="home-flow-title">Q-Bet opportunity flow</title>
       <desc id="home-flow-desc">Data moves through preparation, evaluation and protection checks before branching to Simulation or a controlled action.</desc>
@@ -36,39 +37,39 @@
       <path class="flow-connector flow-branch" d="M552 195 C650 195 655 112 752 112 H816"/>
       <path class="flow-connector flow-branch" d="M552 195 C650 195 655 278 752 278 H816"/>
 
-      <g class="flow-station flow-station-1" transform="translate(92 195)">
+      <g class="flow-station flow-station-1" data-flow-station="data" transform="translate(92 195)">
         <circle r="34"/>
         <text x="0" y="62" text-anchor="middle">Data arrives</text>
       </g>
-      <g class="flow-station flow-station-2" transform="translate(245 195)">
+      <g class="flow-station flow-station-2" data-flow-station="prepare" transform="translate(245 195)">
         <circle r="34"/>
         <text x="0" y="62" text-anchor="middle">Prepare</text>
       </g>
-      <g class="flow-station flow-station-3" transform="translate(398 195)">
+      <g class="flow-station flow-station-3" data-flow-station="evaluate" transform="translate(398 195)">
         <circle r="34"/>
         <text x="0" y="62" text-anchor="middle">Evaluate</text>
       </g>
-      <g class="flow-station flow-station-4" transform="translate(552 195)">
+      <g class="flow-station flow-station-4" data-flow-station="protect" transform="translate(552 195)">
         <circle r="34"/>
         <text x="0" y="62" text-anchor="middle">Protect</text>
       </g>
-      <g class="flow-station flow-station-output" transform="translate(816 112)">
+      <g class="flow-station flow-station-output" data-flow-station="simulation" transform="translate(816 112)">
         <circle r="32"/>
         <text x="0" y="58" text-anchor="middle">Simulation</text>
       </g>
-      <g class="flow-station flow-station-output" transform="translate(816 278)">
+      <g class="flow-station flow-station-output" data-flow-station="execution" transform="translate(816 278)">
         <circle r="32"/>
         <text x="0" y="58" text-anchor="middle">Controlled action</text>
       </g>
 
       <circle class="flow-packet flow-packet-main" r="7">
-        <animateMotion dur="5.4s" repeatCount="indefinite" path="M92 195 H245 H398 H552"/>
+        <animateMotion id="flow-motion-main" dur="5.4s" repeatCount="indefinite" path="M92 195 H245 H398 H552"/>
       </circle>
       <circle class="flow-packet flow-packet-simulation" r="6">
-        <animateMotion begin="3.7s" dur="2.6s" repeatCount="indefinite" path="M552 195 C650 195 655 112 752 112 H816"/>
+        <animateMotion id="flow-motion-simulation" begin="3.7s" dur="2.6s" repeatCount="indefinite" path="M552 195 C650 195 655 112 752 112 H816"/>
       </circle>
       <circle class="flow-packet flow-packet-execution" r="6">
-        <animateMotion begin="4.8s" dur="2.9s" repeatCount="indefinite" path="M552 195 C650 195 655 278 752 278 H816"/>
+        <animateMotion id="flow-motion-execution" begin="4.8s" dur="2.9s" repeatCount="indefinite" path="M552 195 C650 195 655 278 752 278 H816"/>
       </circle>
     </svg>
   </div>
@@ -112,4 +113,5 @@
     <a class="button-link" href="{% url 'register' %}">Create account</a>
   {% endif %}
 </section>
+<script src="{% static 'qbet_web/home.js' %}"></script>
 {% endblock %}

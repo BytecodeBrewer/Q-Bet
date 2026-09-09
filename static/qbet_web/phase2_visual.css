@@ -56,18 +56,24 @@
 .home-flow-map { position: relative; z-index: 1; display: block; width: 100%; height: 100%; min-height: 430px; color: var(--primary); }
 .flow-connector { fill: none; stroke: url(#flowLine); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
 .flow-branch { stroke-width: 3; }
-.flow-station circle { fill: var(--surface); stroke: var(--primary); stroke-width: 3; filter: drop-shadow(0 9px 14px rgba(23, 33, 43, .08)); transform-box: fill-box; transform-origin: center; animation: station-breathe 5.4s ease-in-out infinite; }
-.flow-station text { fill: var(--text); font-size: 15px; font-weight: 700; }
-.flow-station-2 circle { animation-delay: .8s; }
-.flow-station-3 circle { animation-delay: 1.6s; }
-.flow-station-4 circle { animation-delay: 2.4s; }
-.flow-station-output circle { stroke: var(--admin); animation-delay: 3.3s; }
+.flow-station circle {
+  fill: var(--surface);
+  stroke: var(--primary);
+  stroke-width: 3;
+  filter: drop-shadow(0 9px 14px rgba(23, 33, 43, .08));
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.flow-station text { fill: var(--text); font-size: 15px; font-weight: 700; transition: fill .18s ease; }
+.flow-station-output circle { stroke: var(--admin); }
+.flow-station.is-packet-hit circle { animation: station-hit .46s cubic-bezier(.2,.85,.3,1); }
+.flow-station.is-packet-hit text { fill: var(--primary); }
+.flow-station-output.is-packet-hit text { fill: var(--admin); }
 .flow-packet { fill: var(--primary); filter: drop-shadow(0 0 7px color-mix(in srgb, var(--primary) 55%, transparent)); }
 .flow-packet-simulation, .flow-packet-execution { fill: var(--admin); }
-@keyframes station-breathe {
-  0%, 70%, 100% { transform: scale(1); }
-  78% { transform: scale(1.07); }
-  86% { transform: scale(1); }
+@keyframes station-hit {
+  0%, 100% { transform: scale(1); }
+  45% { transform: scale(1.12); }
 }
 
 .product-principles { margin: 18px 0 44px; }
@@ -189,7 +195,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .flow-packet { display: none; }
-  .flow-station circle { animation: none; }
+  .flow-station.is-packet-hit circle { animation: none; }
+  .flow-station text { transition: none; }
   .engine-runtime-button,
   .drag-handle,
   .draggable-card { transition: none !important; }
