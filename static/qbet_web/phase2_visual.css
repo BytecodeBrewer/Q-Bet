@@ -187,7 +187,8 @@
   .hero-facts li { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: baseline; }
   .home-flow-shell { min-height: 320px; border-radius: 18px; }
   .home-flow-map { min-height: 320px; transform: scale(.96); transform-origin: center; }
-  .flow-station text { font-size: 14px; }
+  .flow-station text { font-size: 26px; }
+  .flow-station-output text { font-size: 22px; }
   .product-cta { padding: 22px; }
   .engine-card-controls { margin-right: 0; }
   .readiness-track { padding-bottom: 8px; }
