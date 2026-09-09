@@ -79,7 +79,7 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertIn("transition-duration: .001ms", stylesheet)
         self.assertIn("@media (prefers-reduced-motion: reduce)", visual_stylesheet)
         self.assertIn(".flow-packet { display: none; }", visual_stylesheet)
-        self.assertIn(".flow-station circle { animation: none; }", visual_stylesheet)
+        self.assertIn(".flow-station.is-packet-hit circle { animation: none; }", visual_stylesheet)
 
     def test_account_boundary_requires_django_authentication(self) -> None:
         response = self.client.get("/account/")
