@@ -10,30 +10,114 @@
     return;
   }
 
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const DRAG_START_DISTANCE = 10;
+  const REORDER_HYSTERESIS = 10;
+
   document.querySelectorAll("[data-widget-grid]").forEach((grid) => {
     let draggedCard = null;
+    let activeHandle = null;
+    let activePointerId = null;
+    let dragStarted = false;
+    let dragAxis = "free";
+    let startClientX = 0;
+    let startClientY = 0;
+    let layoutCompensationX = 0;
+    let layoutCompensationY = 0;
 
     grid.querySelectorAll("[data-drag-handle]").forEach((handle) => {
-      handle.addEventListener("dragstart", (event) => {
-        draggedCard = handle.closest("[data-widget-id]");
-        if (!draggedCard) {
+      handle.addEventListener("pointerdown", (event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) {
           return;
         }
-        draggedCard.classList.add("is-dragging");
-        if (event.dataTransfer) {
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData("text/plain", draggedCard.dataset.widgetId || "");
+        const card = handle.closest("[data-widget-id]");
+        if (!card || card.parentElement !== grid) {
+          return;
+        }
+
+        event.preventDefault();
+        draggedCard = card;
+        activeHandle = handle;
+        activePointerId = event.pointerId;
+        dragStarted = false;
+        dragAxis = isSingleColumn(grid) ? "y" : "free";
+        startClientX = event.clientX;
+        startClientY = event.clientY;
+        layoutCompensationX = 0;
+        layoutCompensationY = 0;
+        handle.setPointerCapture(event.pointerId);
+      });
+
+      handle.addEventListener("pointermove", (event) => {
+        if (
+          !draggedCard ||
+          activeHandle !== handle ||
+          activePointerId !== event.pointerId
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        const deltaX = event.clientX - startClientX;
+        const deltaY = event.clientY - startClientY;
+
+        if (!dragStarted) {
+          if (Math.hypot(deltaX, deltaY) < DRAG_START_DISTANCE) {
+            return;
+          }
+          dragStarted = true;
+          grid.classList.add("is-reordering");
+          draggedCard.classList.add("is-dragging");
+          draggedCard.style.transition = "none";
+        }
+
+        positionDraggedCard(draggedCard, event.clientX, event.clientY);
+        const reordered = moveCardTowardPointer(
+          grid,
+          draggedCard,
+          event.clientX,
+          event.clientY,
+          dragAxis,
+        );
+        if (reordered) {
+          positionDraggedCard(draggedCard, event.clientX, event.clientY);
         }
       });
 
-      handle.addEventListener("dragend", () => {
-        if (!draggedCard) {
+      const finishPointerDrag = (event) => {
+        if (
+          !draggedCard ||
+          activeHandle !== handle ||
+          activePointerId !== event.pointerId
+        ) {
           return;
         }
-        draggedCard.classList.remove("is-dragging");
-        persistOrder(grid);
+        if (handle.hasPointerCapture(event.pointerId)) {
+          handle.releasePointerCapture(event.pointerId);
+        }
+
+        if (dragStarted) {
+          draggedCard.classList.remove("is-dragging");
+          draggedCard.style.removeProperty("--drag-x");
+          draggedCard.style.removeProperty("--drag-y");
+          draggedCard.style.removeProperty("transition");
+          grid.classList.remove("is-reordering");
+          persistOrder(grid);
+        }
+
         draggedCard = null;
-      });
+        activeHandle = null;
+        activePointerId = null;
+        dragStarted = false;
+        dragAxis = "free";
+        startClientX = 0;
+        startClientY = 0;
+        layoutCompensationX = 0;
+        layoutCompensationY = 0;
+      };
+
+      handle.addEventListener("pointerup", finishPointerDrag);
+      handle.addEventListener("pointercancel", finishPointerDrag);
 
       handle.addEventListener("keydown", (event) => {
         const card = handle.closest("[data-widget-id]");
@@ -55,36 +139,177 @@
           return;
         }
 
+        const before = capturePositions(grid);
         if (previousKeys.has(event.key)) {
           grid.insertBefore(card, sibling);
         } else {
           grid.insertBefore(sibling, card);
         }
+        animateReflow(grid, before, card);
         persistOrder(grid);
       });
     });
 
-    grid.addEventListener("dragover", (event) => {
-      if (!draggedCard) {
-        return;
-      }
-      event.preventDefault();
-      const target = event.target.closest("[data-widget-id]");
-      if (!target || target === draggedCard || target.parentElement !== grid) {
-        return;
+    function positionDraggedCard(card, clientX, clientY) {
+      const pointerDeltaX = clientX - startClientX;
+      const pointerDeltaY = clientY - startClientY;
+      const translateX = dragAxis === "y" ? 0 : pointerDeltaX + layoutCompensationX;
+      const translateY = pointerDeltaY + layoutCompensationY;
+      card.style.setProperty("--drag-x", `${translateX}px`);
+      card.style.setProperty("--drag-y", `${translateY}px`);
+    }
+
+    function moveCardTowardPointer(
+      activeGrid,
+      card,
+      clientX,
+      clientY,
+      axis,
+    ) {
+      const orderedCards = Array.from(
+        activeGrid.querySelectorAll("[data-widget-id]"),
+      );
+      const currentIndex = orderedCards.indexOf(card);
+      const candidates = orderedCards.filter((candidate) => candidate !== card);
+      if (currentIndex < 0 || !candidates.length) {
+        return false;
       }
 
-      const targetRect = target.getBoundingClientRect();
-      const draggedRect = draggedCard.getBoundingClientRect();
-      const isSameRow =
-        Math.abs(targetRect.top - draggedRect.top) <
-        Math.min(targetRect.height, draggedRect.height) / 2;
-      const insertAfter = isSameRow
-        ? event.clientX > targetRect.left + targetRect.width / 2
-        : event.clientY > targetRect.top + targetRect.height / 2;
-      grid.insertBefore(draggedCard, insertAfter ? target.nextSibling : target);
-    });
+      const target = candidates.reduce((closest, candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const distance = axis === "y"
+          ? Math.abs(clientY - centerY)
+          : Math.hypot(clientX - centerX, clientY - centerY);
+        return !closest || distance < closest.distance
+          ? { card: candidate, rect, distance }
+          : closest;
+      }, null);
+
+      if (!target) {
+        return false;
+      }
+
+      const targetIndex = orderedCards.indexOf(target.card);
+      if (targetIndex < 0) {
+        return false;
+      }
+
+      let reference = null;
+      if (axis === "y") {
+        const targetCenterY = target.rect.top + target.rect.height / 2;
+        if (targetIndex < currentIndex) {
+          if (clientY > targetCenterY - REORDER_HYSTERESIS) {
+            return false;
+          }
+          reference = target.card;
+        } else {
+          if (clientY < targetCenterY + REORDER_HYSTERESIS) {
+            return false;
+          }
+          reference = target.card.nextElementSibling;
+        }
+      } else {
+        const sameRow =
+          Math.abs(target.card.offsetTop - card.offsetTop) <
+          Math.min(target.card.offsetHeight, card.offsetHeight) / 2;
+        const movingBackward = targetIndex < currentIndex;
+        if (sameRow) {
+          const targetCenterX = target.rect.left + target.rect.width / 2;
+          if (movingBackward) {
+            if (clientX > targetCenterX - REORDER_HYSTERESIS) {
+              return false;
+            }
+            reference = target.card;
+          } else {
+            if (clientX < targetCenterX + REORDER_HYSTERESIS) {
+              return false;
+            }
+            reference = target.card.nextElementSibling;
+          }
+        } else {
+          const targetCenterY = target.rect.top + target.rect.height / 2;
+          if (movingBackward) {
+            if (clientY > targetCenterY - REORDER_HYSTERESIS) {
+              return false;
+            }
+            reference = target.card;
+          } else {
+            if (clientY < targetCenterY + REORDER_HYSTERESIS) {
+              return false;
+            }
+            reference = target.card.nextElementSibling;
+          }
+        }
+      }
+
+      if (
+        reference === card ||
+        (!reference && card === activeGrid.lastElementChild)
+      ) {
+        return false;
+      }
+
+      const before = capturePositions(activeGrid);
+      const draggedBefore = card.getBoundingClientRect();
+      activeGrid.insertBefore(card, reference);
+      const draggedAfter = card.getBoundingClientRect();
+      layoutCompensationX += draggedBefore.left - draggedAfter.left;
+      layoutCompensationY += draggedBefore.top - draggedAfter.top;
+      animateReflow(activeGrid, before, card);
+      return true;
+    }
   });
+
+  function isSingleColumn(grid) {
+    const cards = Array.from(grid.querySelectorAll("[data-widget-id]"));
+    if (cards.length < 2) {
+      return true;
+    }
+    const firstTop = cards[0].offsetTop;
+    return !cards.slice(1).some(
+      (card) => Math.abs(card.offsetTop - firstTop) < card.offsetHeight / 2,
+    );
+  }
+
+  function capturePositions(grid) {
+    return new Map(
+      Array.from(grid.querySelectorAll("[data-widget-id]"))
+        .map((card) => [card, card.getBoundingClientRect()]),
+    );
+  }
+
+  function animateReflow(grid, before, draggedCard) {
+    if (reduceMotion.matches) {
+      return;
+    }
+    grid.querySelectorAll("[data-widget-id]").forEach((card) => {
+      if (card === draggedCard) {
+        return;
+      }
+      const previous = before.get(card);
+      if (!previous) {
+        return;
+      }
+      const current = card.getBoundingClientRect();
+      const deltaX = previous.left - current.left;
+      const deltaY = previous.top - current.top;
+      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
+        return;
+      }
+      card.animate(
+        [
+          { transform: `translate(${deltaX}px, ${deltaY}px)` },
+          { transform: "translate(0, 0)" },
+        ],
+        {
+          duration: 190,
+          easing: "cubic-bezier(.2,.8,.2,1)",
+        },
+      );
+    });
+  }
 
   async function persistOrder(grid) {
     const body = new URLSearchParams();

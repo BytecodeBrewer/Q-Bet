@@ -1,11 +1,18 @@
 {% load static %}
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="{{ preferences.theme|default:'light' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Q-Bet{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'qbet_web/app.css' %}">
+  <link rel="stylesheet" href="{% static 'qbet_web/phase2_visual.css' %}">
+  <style>
+    html { min-height: 100%; background: #f3f5f7; }
+    html[data-theme="dark"] { background: #202a32; color-scheme: dark; }
+    html[data-theme="light"] { color-scheme: light; }
+    body { min-height: 100dvh; }
+  </style>
   <script src="{% static 'qbet_web/dashboard.js' %}" defer></script>
 </head>
 <body data-theme="{{ preferences.theme|default:'light' }}" data-font-size="{{ preferences.font_size|default:'medium' }}">
@@ -21,6 +28,7 @@
           <a class="nav-link" href="{% url 'home' %}"{% if request.resolver_match.url_name == 'home' %} aria-current="page"{% endif %}>Home</a>
           {% if user.is_authenticated %}
             <a class="nav-link" href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'engine-detail' %} aria-current="page"{% endif %}>Dashboard</a>
+            <a class="nav-link" href="{% url 'execution-approvals' %}"{% if request.resolver_match.url_name == 'execution-approvals' or request.resolver_match.url_name == 'execution-approval-decision' %} aria-current="page"{% endif %}>Approvals</a>
             {% if user.is_staff %}
               <a class="nav-link" href="{% url 'report-history' %}"{% if request.resolver_match.url_name == 'report-history' or request.resolver_match.url_name == 'report-detail' %} aria-current="page"{% endif %}>Reports</a>
             {% endif %}

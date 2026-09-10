@@ -532,6 +532,25 @@ def monitoring_export(request: HttpRequest, export_format: str) -> HttpResponse:
         if mode == "extended"
         else WORKFLOW_MONITORING_SERVICE.compact(query)
     )
+    if not values.available:
+        message = values.message or "Monitoring history is temporarily unavailable."
+        if export_format == "json":
+            return JsonResponse(
+                {
+                    "error": "monitoring_history_unavailable",
+                    "message": message,
+                },
+                status=503,
+            )
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(("error", "message"))
+        writer.writerow(("monitoring_history_unavailable", message))
+        return HttpResponse(
+            output.getvalue(),
+            content_type="text/csv; charset=utf-8",
+            status=503,
+        )
     if export_format == "json":
         return HttpResponse(
             monitoring_json_document(values), content_type="application/json; charset=utf-8"

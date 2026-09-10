@@ -29,6 +29,7 @@ from qbet.storage.models import (
 )
 from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 from qbet.workflow import WorkflowMode, WorkState
+from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
@@ -146,10 +147,29 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
         dispatched = coordinator.dispatch_due(now=now, owner="owner")
         return scheduled, dispatched
 
+    def _schedule_approve_and_dispatch(
+        self,
+        coordinator: ModeDispatchCoordinator,
+        *,
+        now: datetime,
+    ):
+        scheduled, waiting = self._schedule_and_dispatch(coordinator, now=now)
+        self.assertEqual(tuple(item.state for item in waiting), (WorkState.RECHECK,))
+        ExecutionApprovalService().decide(
+            scheduled[0].work.id,
+            actor="owner",
+            approve=True,
+            now=now,
+        )
+        dispatched = coordinator.dispatch_due(now=now, owner="owner")
+        return scheduled, waiting, dispatched
+
     def test_execution_trace_reconstructs_lifecycle_capital_settlement_and_queue(self) -> None:
         now = datetime.now(UTC)
         coordinator = self._coordinator(execution=True, now=now)
-        scheduled, dispatched = self._schedule_and_dispatch(coordinator, now=now)
+        scheduled, _, dispatched = self._schedule_approve_and_dispatch(
+            coordinator, now=now
+        )
 
         self.assertEqual(len(scheduled), 1)
         self.assertEqual(scheduled[0].work.mode, WorkflowMode.EXECUTION)
@@ -158,6 +178,14 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
         self.assertEqual(PortfolioLedgerRow.objects.get().mode, "execution")
 
         records = self._records(CORRELATION_ID, now)
+        self.assertTrue(
+            any(
+                record.stage == "execution"
+                and record.event_type == "approval_required"
+                and record.status == "awaiting_approval"
+                for record in records
+            )
+        )
         lifecycle = [
             record.status
             for record in records
@@ -170,14 +198,7 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
         ]
         self.assertEqual(
             lifecycle,
-            [
-                "proposed",
-                "awaiting_approval",
-                "approved",
-                "dispatched",
-                "acknowledged",
-                "settled",
-            ],
+            ["approved", "dispatched", "acknowledged", "settled"],
         )
         self.assertEqual(capital, ["reserve", "lock", "pending", "settle"])
         settlement = next(
@@ -272,7 +293,9 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
             now=now,
             monitoring_writer=writer,
         )
-        scheduled, dispatched = self._schedule_and_dispatch(coordinator, now=now)
+        scheduled, _, dispatched = self._schedule_approve_and_dispatch(
+            coordinator, now=now
+        )
 
         self.assertTrue(writer.failed)
         self.assertEqual(tuple(item.state for item in dispatched), (WorkState.FAILED,))

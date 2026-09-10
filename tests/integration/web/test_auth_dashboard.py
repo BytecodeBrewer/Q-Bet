@@ -91,14 +91,16 @@ class AuthenticationAndDashboardTests(TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Open dashboard")
+        self.assertContains(response, "Open Dashboard")
         self.assertContains(response, 'href="/dashboard/"')
         self.assertContains(response, 'href="/settings/presentation/"')
+        self.assertNotContains(response, "Active matches")
+        self.assertNotContains(response, "Warnings / errors")
         self.assertNotContains(response, 'href="/monitoring/"')
         self.assertNotContains(response, 'href="/admin-area/"')
         self.assertNotContains(response, 'href="/admin/"')
 
-    def test_staff_home_exposes_separate_operator_destinations(self) -> None:
+    def test_staff_home_remains_presentation_first_with_admin_navigation_in_shell(self) -> None:
         staff = User.objects.create_user(
             "staff-home",
             password="Strong-pass-123",
@@ -109,7 +111,10 @@ class AuthenticationAndDashboardTests(TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Operator shortcuts")
+        self.assertContains(response, "Open Dashboard")
+        self.assertNotContains(response, "Operator shortcuts")
+        self.assertNotContains(response, "Active matches")
+        self.assertNotContains(response, "Warnings / errors")
         self.assertContains(response, 'href="/reports/"')
         self.assertContains(response, 'href="/monitoring/"')
         self.assertContains(response, 'href="/admin-area/"')

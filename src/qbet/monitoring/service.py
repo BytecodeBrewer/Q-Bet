@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import timedelta
-from typing import Protocol
+from typing import Generic, Protocol, TypeVar
 from uuid import UUID
 
 from pydantic import AwareDatetime, model_validator
@@ -12,6 +13,26 @@ from qbet.domain.models import DomainModel
 from qbet.monitoring.models import MonitoringRecord
 
 MAX_EXPORT_RANGE = timedelta(days=31)
+T = TypeVar("T")
+
+
+class MonitoringRecords(tuple[T, ...], Generic[T]):
+    """Tuple-compatible monitoring result with an explicit read-availability signal."""
+
+    available: bool
+    message: str | None
+
+    def __new__(
+        cls,
+        values: Iterable[T] = (),
+        *,
+        available: bool = True,
+        message: str | None = None,
+    ) -> "MonitoringRecords[T]":
+        instance = super().__new__(cls, tuple(values))
+        instance.available = available
+        instance.message = message
+        return instance
 
 
 class MonitoringReader(Protocol):
@@ -51,12 +72,28 @@ class MonitoringService:
     def __init__(self, reader: MonitoringReader) -> None:
         self._reader = reader
 
-    def extended(self, query: MonitoringQuery) -> tuple[MonitoringRecord, ...]:
-        return self._reader.list_records(query)
+    def extended(self, query: MonitoringQuery) -> MonitoringRecords[MonitoringRecord]:
+        try:
+            records = self._reader.list_records(query)
+        except OSError:
+            return MonitoringRecords(
+                (),
+                available=False,
+                message="Monitoring history is temporarily unavailable.",
+            )
+        return MonitoringRecords(records)
 
-    def compact(self, query: MonitoringQuery) -> tuple[CompactMonitoringProcess, ...]:
+    def compact(self, query: MonitoringQuery) -> MonitoringRecords[CompactMonitoringProcess]:
+        extended = self.extended(query)
+        if not extended.available:
+            return MonitoringRecords(
+                (),
+                available=False,
+                message=extended.message,
+            )
+
         by_correlation_mode: dict[tuple[UUID, str | None], list[MonitoringRecord]] = {}
-        for record in self.extended(query):
+        for record in extended:
             mode = str(record.mode) if record.mode is not None else None
             by_correlation_mode.setdefault((record.correlation_id, mode), []).append(record)
 
@@ -89,7 +126,7 @@ class MonitoringService:
                 item[0][2] or "",
             )
         )
-        return tuple(self._compact(records) for _, records in grouped)
+        return MonitoringRecords(self._compact(records) for _, records in grouped)
 
     @staticmethod
     def _compact(records: list[MonitoringRecord]) -> CompactMonitoringProcess:
