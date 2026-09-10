@@ -14,7 +14,7 @@ from django.db import transaction
 from qbet.domain.ledger import PortfolioBalance
 from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
-from qbet.execution.models import ExecutionProposal, ExecutionRecord
+from qbet.execution.models import ExecutionProposal, ExecutionRecord, Lifecycle
 from qbet.execution.service import ExecutionService
 from qbet.execution.sandbox import valuation
 from qbet.ledger import PortfolioLedger
@@ -253,8 +253,72 @@ class ModeDispatchCoordinator:
         """Finish one mode without spanning execution side effects with a DB transaction."""
 
         if item.work.mode is WorkflowMode.EXECUTION:
-            self._run_execution(item, now=now, owner=owner)
-            return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
+            state_repository, record, ledger = self._execution_state(item)
+            expected_owner = record.proposal.work.owner
+            if expected_owner is not None and owner != expected_owner:
+                raise PermissionError("proposal_owner_required")
+
+            if record.state is Lifecycle.AWAITING_APPROVAL:
+                self._record_event(
+                    item,
+                    stage="execution",
+                    event_type="approval_required",
+                    status=Lifecycle.AWAITING_APPROVAL.value,
+                    reason_code="explicit_user_approval_required",
+                    occurred_at=now,
+                    references={"execution_id": str(item.work.id)},
+                )
+                return self._save_queue(
+                    item.transition(
+                        WorkState.RECHECK,
+                        now=now,
+                        reason="execution_approval_required",
+                    )
+                )
+
+            if record.state in {Lifecycle.REJECTED, Lifecycle.CANCELLED}:
+                return self._save_queue(
+                    item.transition(
+                        WorkState.CANCELLED,
+                        now=now,
+                        reason="execution_not_approved",
+                    )
+                )
+            if record.state is Lifecycle.FAILED:
+                return self._save_queue(
+                    item.transition(
+                        WorkState.FAILED,
+                        now=now,
+                        reason=record.error or "execution_failed",
+                    )
+                )
+            if record.state is Lifecycle.SETTLED:
+                return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
+
+            persisted_record = self._run_execution(
+                item,
+                state_repository=state_repository,
+                record=record,
+                ledger=ledger,
+                now=now,
+            )
+            if persisted_record.state is Lifecycle.SETTLED:
+                return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
+            if persisted_record.state in {Lifecycle.REJECTED, Lifecycle.CANCELLED}:
+                return self._save_queue(
+                    item.transition(
+                        WorkState.CANCELLED,
+                        now=now,
+                        reason=persisted_record.error or "execution_rejected",
+                    )
+                )
+            return self._save_queue(
+                item.transition(
+                    WorkState.FAILED,
+                    now=now,
+                    reason=persisted_record.error or "execution_failed",
+                )
+            )
 
         with transaction.atomic():
             self._run_simulation(item, now=now)
@@ -488,9 +552,10 @@ class ModeDispatchCoordinator:
                 occurred_at=now,
             )
 
-    def _run_execution(self, item: QueuedWorkItem, *, now: datetime, owner: str) -> None:
+    @staticmethod
+    def _execution_proposal(item: QueuedWorkItem) -> ExecutionProposal:
         capital, payout = valuation(item.request)
-        proposal = ExecutionProposal(
+        return ExecutionProposal(
             work=item.work,
             request=item.request,
             expires_at=item.expires_at,
@@ -498,6 +563,11 @@ class ModeDispatchCoordinator:
             capital_required=capital,
             payout=payout,
         )
+
+    def _execution_state(
+        self,
+        item: QueuedWorkItem,
+    ) -> tuple[ExecutionStateRepository, ExecutionRecord, PortfolioLedger]:
         state_repository = ExecutionStateRepository()
         initial_ledger = PortfolioLedger(
             balance=PortfolioBalance(
@@ -507,25 +577,33 @@ class ModeDispatchCoordinator:
             )
         )
         record, ledger = state_repository.load_or_create(
-            ExecutionRecord(proposal=proposal),
+            ExecutionRecord(proposal=self._execution_proposal(item)),
             initial_ledger,
         )
+        return state_repository, record, ledger
+
+    def _run_execution(
+        self,
+        item: QueuedWorkItem,
+        *,
+        state_repository: ExecutionStateRepository,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+        now: datetime,
+    ) -> ExecutionRecord:
+        if record.state is Lifecycle.AWAITING_APPROVAL:
+            raise ValueError("execution_approval_required")
+
+        before_transition_count = len(record.transitions)
         persisted_record, persisted_ledger = ExecutionService(
             state_writer=state_repository
-        ).decide(
-            record,
-            ledger,
-            actor=owner,
-            owner=owner,
-            approve=True,
-            now=now,
-        )
+        ).execute_approved(record, ledger, now=now)
 
         references = {
             "execution_id": str(item.work.id),
             "ledger_mode": persisted_ledger.balance.mode,
         }
-        for state in persisted_record.transitions:
+        for state in persisted_record.transitions[before_transition_count:]:
             self._record_event(
                 item,
                 stage="execution",
@@ -558,6 +636,7 @@ class ModeDispatchCoordinator:
                 },
                 occurred_at=persisted_record.result.observed_at,
             )
+        return persisted_record
 
     def _record_ledger_transitions(
         self,
