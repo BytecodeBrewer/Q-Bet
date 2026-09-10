@@ -28,29 +28,29 @@ class Phase2VisualIntegrationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Turn market opportunities into controlled decisions.")
-        self.assertContains(response, "Q-Bet opportunity flow")
-        self.assertContains(response, "<animateMotion", count=3)
-        self.assertContains(response, 'id="flow-motion-main"')
-        self.assertContains(response, 'data-flow-station="protect"')
+        self.assertContains(response, "Q-Bet opportunity pipeline")
+        self.assertContains(response, "Data Providers")
+        self.assertContains(response, "Odds APIs")
+        self.assertContains(response, "Result APIs")
+        self.assertContains(response, "Market APIs")
+        self.assertContains(response, 'data-flow-station="aggregation"')
+        self.assertContains(response, 'data-flow-station="builder"')
+        self.assertContains(response, 'data-flow-station="engine"')
+        self.assertContains(response, 'data-flow-station="risk"')
+        self.assertContains(response, 'data-flow-station="liquidity"')
+        self.assertContains(response, 'data-flow-station="ledger"')
+        self.assertContains(response, 'data-flow-station="bank"')
+        self.assertContains(response, 'data-flow-station="execution"')
+        self.assertContains(response, 'id="flow-main-path"')
+        self.assertContains(response, 'id="flow-capital-path"')
+        self.assertContains(response, "data-flow-packet", count=8)
         self.assertContains(
             response,
-            'data-flow-station="simulation" transform="translate(780 112)"',
+            'data-flow-pulse="aggregation:0,builder:.19,engine:.38,risk:.57,liquidity:.77,execution:1"',
         )
-        self.assertContains(
-            response,
-            'data-flow-station="execution" transform="translate(780 278)"',
-        )
-        self.assertContains(
-            response,
-            'begin="0s;flow-motion-simulation.end+1.2s"',
-        )
-        self.assertContains(response, 'begin="flow-motion-main.end"', count=4)
-        self.assertContains(response, 'dur="2.2s"', count=2)
-        self.assertContains(response, "H780")
-        self.assertNotContains(response, "H816")
-        self.assertNotContains(response, 'repeatCount="indefinite"')
-        self.assertNotContains(response, 'begin="3.7s"')
-        self.assertNotContains(response, 'begin="4.8s"')
+        self.assertContains(response, 'data-flow-pulse="bank:0,ledger:.42,liquidity:1"')
+        self.assertNotContains(response, "<animateMotion")
+        self.assertNotContains(response, "Simulation")
         self.assertContains(response, "qbet_web/home.js")
         self.assertContains(response, "Sign in")
         self.assertContains(response, "Create account")
@@ -70,15 +70,17 @@ class Phase2VisualIntegrationTests(TestCase):
             "qbet_web",
             "phase2_visual.css",
         ).read_text(encoding="utf-8")
-        self.assertIn('addEventListener("beginEvent"', home_script)
-        self.assertIn('addEventListener("endEvent"', home_script)
-        self.assertIn('pulseStation("protect")', home_script)
-        self.assertIn('pulseStation("simulation")', home_script)
-        self.assertIn('pulseStation("execution")', home_script)
+        self.assertIn("getPointAtLength", home_script)
+        self.assertIn("requestAnimationFrame(tick)", home_script)
+        self.assertIn("pulseCrossedCheckpoints", home_script)
+        self.assertIn('"IntersectionObserver" in window', home_script)
+        self.assertIn("reducedMotion.addEventListener", home_script)
         self.assertIn("is-packet-hit", home_script)
+        self.assertIn(".flow-provider-connector", visual_styles)
+        self.assertIn("stroke-dasharray: 5 8;", visual_styles)
+        self.assertIn(".flow-capital-connector", visual_styles)
+        self.assertIn(".flow-packet-capital", visual_styles)
         self.assertIn(".flow-station.is-packet-hit circle", visual_styles)
-        self.assertIn(".flow-station text { font-size: 26px; }", visual_styles)
-        self.assertIn(".flow-station-output text { font-size: 22px; }", visual_styles)
         self.assertNotIn("station-breathe", visual_styles)
 
     def test_authenticated_home_stays_presentation_first_and_links_to_dashboard(self) -> None:
