@@ -124,6 +124,24 @@ class ExecutionService:
             ledger,
         )
 
+    def cancel_before_dispatch(
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+        *,
+        reason: str,
+    ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        """Cancel prepared work while no adapter-side effect has occurred."""
+
+        if record.state in _TERMINAL_STATES:
+            return self._persist(record, ledger)
+        if record.state not in {Lifecycle.AWAITING_APPROVAL, Lifecycle.APPROVED}:
+            raise ValueError("execution_already_dispatched")
+        return self._persist(
+            transition(record, Lifecycle.CANCELLED, error=reason),
+            ledger,
+        )
+
     def execute_approved(
         self,
         record: ExecutionRecord,
