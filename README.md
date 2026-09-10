@@ -81,7 +81,7 @@ The existing `q-bet` Vercel project is targeted explicitly by its project/accoun
 
 Vercel must provide `QBET_DATABASE_URL` through project environment configuration. Preview and Production can use the same Supabase/PostgreSQL source of truth when that is the intended environment model. Missing `QBET_DATABASE_URL` is now a startup configuration error rather than a request-time fallback to read-only/SQLite behavior.
 
-The CI preview explicitly supplies `QBET_HOSTED_PREVIEW=true`, `QBET_DJANGO_DEBUG=false`, the Vercel host allowlist, and `QBET_DJANGO_SECRET_KEY`, and `QBET_SIMULATION_MODE_ENABLED=false`. Production may enable Simulation deliberately through `QBET_SIMULATION_MODE_ENABLED=true`; durable simulation reports and control state are stored in PostgreSQL rather than Vercel-local files.
+The CI preview explicitly supplies `QBET_HOSTED_PREVIEW=true`, `QBET_DJANGO_DEBUG=false`, the Vercel host allowlist, and `QBET_SIMULATION_MODE_ENABLED=false`. Production may enable Simulation deliberately through `QBET_SIMULATION_MODE_ENABLED=true`; durable simulation reports and control state are stored in PostgreSQL rather than Vercel-local files.
 
 The deployment job verifies the live preview with Vercel's authenticated curl command, including `/health/`, the public shell, `/accounts/login/`, and `/static/qbet_web/app.css`.
 
