@@ -5,7 +5,7 @@
   <div class="product-hero-copy">
     <span class="eyebrow">Deterministic opportunity workflow</span>
     <h1 id="home-heading">Turn market opportunities into controlled decisions.</h1>
-    <p class="product-hero-lead">Q-Bet evaluates sports opportunities through a protected, deterministic flow before anything reaches Simulation or controlled Execution.</p>
+    <p class="product-hero-lead">Q-Bet routes structured provider data through aggregation, matching, engine evaluation, risk and liquidity checks before anything reaches controlled Execution.</p>
     <div class="hero-actions">
       {% if user.is_authenticated %}
         <a class="button-link" href="{% url 'dashboard' %}">Open Dashboard</a>
@@ -17,82 +17,101 @@
     </div>
     <ul class="hero-facts" aria-label="Q-Bet product capabilities">
       <li><strong>2</strong><span>deterministic sports engines</span></li>
-      <li><strong>Simulation</strong><span>isolated virtual workflow</span></li>
+      <li><strong>API-first</strong><span>structured provider data</span></li>
       <li><strong>Controlled</strong><span>execution boundary</span></li>
     </ul>
   </div>
 
   <div class="home-flow-shell" data-home-flow aria-label="Q-Bet protected opportunity flow">
-    <svg class="home-flow-map" viewBox="0 0 900 390" role="img" aria-labelledby="home-flow-title home-flow-desc">
-      <title id="home-flow-title">Q-Bet opportunity flow</title>
-      <desc id="home-flow-desc">Data moves through preparation, evaluation and protection checks before branching to Simulation or a controlled action.</desc>
+    <svg class="home-flow-map" viewBox="0 0 1000 520" role="img" aria-labelledby="home-flow-title home-flow-desc">
+      <title id="home-flow-title">Q-Bet opportunity pipeline</title>
+      <desc id="home-flow-desc">Structured API providers feed Data Aggregation, then a Match Builder, Engine, Risk Analyzer and Liquidity Checker before controlled Execution. Portfolio Ledger and Bank state feed the liquidity boundary.</desc>
       <defs>
         <linearGradient id="flowLine" x1="0" x2="1">
           <stop offset="0" stop-color="currentColor" stop-opacity=".28"/>
           <stop offset="1" stop-color="currentColor" stop-opacity=".72"/>
         </linearGradient>
+        <linearGradient id="capitalLine" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="currentColor" stop-opacity=".3"/>
+          <stop offset="1" stop-color="currentColor" stop-opacity=".82"/>
+        </linearGradient>
       </defs>
 
-      <path class="flow-connector" d="M92 195 H245 H398 H552"/>
-      <path class="flow-connector flow-branch" d="M552 195 C650 195 655 112 720 112 H780"/>
-      <path class="flow-connector flow-branch" d="M552 195 C650 195 655 278 720 278 H780"/>
+      <text class="flow-group-label" x="48" y="58">Data Providers</text>
+      <path id="flow-provider-odds" class="flow-provider-connector" d="M56 116 C118 116 126 210 190 210"/>
+      <path id="flow-provider-results" class="flow-provider-connector" d="M56 210 H190"/>
+      <path id="flow-provider-market" class="flow-provider-connector" d="M56 304 C118 304 126 210 190 210"/>
 
-      <g class="flow-station flow-station-1" data-flow-station="data" transform="translate(92 195)">
-        <circle r="34"/>
-        <text x="0" y="62" text-anchor="middle">Data arrives</text>
+      <g class="flow-provider" transform="translate(48 116)">
+        <circle r="9"/>
+        <text x="18" y="5">Odds APIs</text>
       </g>
-      <g class="flow-station flow-station-2" data-flow-station="prepare" transform="translate(245 195)">
-        <circle r="34"/>
-        <text x="0" y="62" text-anchor="middle">Prepare</text>
+      <g class="flow-provider" transform="translate(48 210)">
+        <circle r="9"/>
+        <text x="18" y="5">Result APIs</text>
       </g>
-      <g class="flow-station flow-station-3" data-flow-station="evaluate" transform="translate(398 195)">
-        <circle r="34"/>
-        <text x="0" y="62" text-anchor="middle">Evaluate</text>
-      </g>
-      <g class="flow-station flow-station-4" data-flow-station="protect" transform="translate(552 195)">
-        <circle r="34"/>
-        <text x="0" y="62" text-anchor="middle">Protect</text>
-      </g>
-      <g class="flow-station flow-station-output" data-flow-station="simulation" transform="translate(780 112)">
-        <circle r="32"/>
-        <text x="0" y="58" text-anchor="middle">Simulation</text>
-      </g>
-      <g class="flow-station flow-station-output" data-flow-station="execution" transform="translate(780 278)">
-        <circle r="32"/>
-        <text x="0" y="58" text-anchor="middle">Controlled action</text>
+      <g class="flow-provider" transform="translate(48 304)">
+        <circle r="9"/>
+        <text x="18" y="5">Market APIs</text>
       </g>
 
-      <circle class="flow-packet flow-packet-main" r="7">
-        <animateMotion
-          id="flow-motion-main"
-          begin="0s;flow-motion-simulation.end+1.2s"
-          dur="4.2s"
-          fill="freeze"
-          path="M92 195 H245 H398 H552"
-        />
-      </circle>
-      <circle class="flow-packet flow-packet-simulation" r="6" visibility="hidden">
-        <set attributeName="visibility" to="hidden" begin="flow-motion-main.begin" dur="4.2s"/>
-        <set attributeName="visibility" to="visible" begin="flow-motion-main.end" dur="3.4s"/>
-        <animateMotion
-          id="flow-motion-simulation"
-          begin="flow-motion-main.end"
-          dur="2.2s"
-          fill="freeze"
-          path="M552 195 C650 195 655 112 720 112 H780"
-        />
-      </circle>
-      <circle class="flow-packet flow-packet-execution" r="6" visibility="hidden">
-        <set attributeName="visibility" to="hidden" begin="flow-motion-main.begin" dur="4.2s"/>
-        <set attributeName="visibility" to="visible" begin="flow-motion-main.end" dur="3.4s"/>
-        <animateMotion
-          id="flow-motion-execution"
-          begin="flow-motion-main.end"
-          dur="2.2s"
-          fill="freeze"
-          path="M552 195 C650 195 655 278 720 278 H780"
-        />
-      </circle>
+      <path id="flow-main-path" class="flow-connector" d="M190 210 H330 H470 H610 H760 H930"/>
+      <path id="flow-capital-path" class="flow-capital-connector" d="M760 446 V348 V210"/>
+
+      <g class="flow-station" data-flow-station="aggregation" transform="translate(190 210)">
+        <circle r="31"/>
+        <text x="0" y="58" text-anchor="middle">
+          <tspan x="0">Data</tspan><tspan x="0" dy="18">Aggregation</tspan>
+        </text>
+      </g>
+      <g class="flow-station" data-flow-station="builder" transform="translate(330 210)">
+        <circle r="31"/>
+        <text x="0" y="58" text-anchor="middle">
+          <tspan x="0">Match</tspan><tspan x="0" dy="18">Builder</tspan>
+        </text>
+      </g>
+      <g class="flow-station" data-flow-station="engine" transform="translate(470 210)">
+        <circle r="31"/>
+        <text x="0" y="58" text-anchor="middle">Engine</text>
+      </g>
+      <g class="flow-station" data-flow-station="risk" transform="translate(610 210)">
+        <circle r="31"/>
+        <text x="0" y="58" text-anchor="middle">
+          <tspan x="0">Risk</tspan><tspan x="0" dy="18">Analyzer</tspan>
+        </text>
+      </g>
+      <g class="flow-station flow-station-liquidity" data-flow-station="liquidity" transform="translate(760 210)">
+        <circle r="31"/>
+        <text x="0" y="58" text-anchor="middle">
+          <tspan x="0">Liquidity</tspan><tspan x="0" dy="18">Checker</tspan>
+        </text>
+      </g>
+      <g class="flow-station flow-station-output" data-flow-station="execution" transform="translate(930 210)">
+        <circle r="32"/>
+        <text x="0" y="58" text-anchor="middle">Execution</text>
+      </g>
+
+      <g class="flow-station flow-capital-station" data-flow-station="ledger" transform="translate(760 348)">
+        <circle r="28"/>
+        <text x="0" y="54" text-anchor="middle">
+          <tspan x="0">Portfolio</tspan><tspan x="0" dy="18">Ledger</tspan>
+        </text>
+      </g>
+      <g class="flow-station flow-capital-station" data-flow-station="bank" transform="translate(760 446)">
+        <circle r="25"/>
+        <text x="0" y="50" text-anchor="middle">Bank</text>
+      </g>
+
+      <circle class="flow-packet flow-packet-provider" r="5" data-flow-packet data-flow-path="flow-provider-odds" data-flow-duration="3000" data-flow-phase="0"/>
+      <circle class="flow-packet flow-packet-provider" r="5" data-flow-packet data-flow-path="flow-provider-results" data-flow-duration="3000" data-flow-phase="1000"/>
+      <circle class="flow-packet flow-packet-provider" r="5" data-flow-packet data-flow-path="flow-provider-market" data-flow-duration="3000" data-flow-phase="2000"/>
+
+      <circle class="flow-packet flow-packet-main" r="7" data-flow-packet data-flow-path="flow-main-path" data-flow-duration="8200" data-flow-phase="0" data-flow-pulse="aggregation:0,builder:.19,engine:.38,risk:.57,liquidity:.77,execution:1"/>
+      <circle class="flow-packet flow-packet-main flow-packet-secondary" r="6" data-flow-packet data-flow-path="flow-main-path" data-flow-duration="8200" data-flow-phase="2733"/>
+      <circle class="flow-packet flow-packet-main flow-packet-secondary" r="6" data-flow-packet data-flow-path="flow-main-path" data-flow-duration="8200" data-flow-phase="5466"/>
+
+      <circle class="flow-packet flow-packet-capital" r="5" data-flow-packet data-flow-path="flow-capital-path" data-flow-duration="5200" data-flow-phase="0" data-flow-pulse="bank:0,ledger:.42,liquidity:1"/>
+      <circle class="flow-packet flow-packet-capital flow-packet-secondary" r="4" data-flow-packet data-flow-path="flow-capital-path" data-flow-duration="5200" data-flow-phase="2600"/>
     </svg>
   </div>
 </section>
@@ -101,24 +120,24 @@
   <div class="section-heading section-heading-spacious">
     <div>
       <span class="eyebrow">Built for controlled flow</span>
-      <h2 id="principles-heading">From signal to decision, without shortcuts.</h2>
+      <h2 id="principles-heading">The route is activated. The safeguards stay in the path.</h2>
     </div>
   </div>
   <div class="product-principle-grid">
     <article>
       <span class="principle-index">01</span>
-      <h3>Prepare the opportunity</h3>
-      <p>Incoming market data is normalized and shaped into an engine-ready opportunity before calculation starts.</p>
+      <h3>Collect and normalize</h3>
+      <p>Structured provider APIs feed Data Aggregation before an opportunity enters an engine-specific builder.</p>
     </article>
     <article>
       <span class="principle-index">02</span>
       <h3>Evaluate deterministically</h3>
-      <p>Bonus and sports-capital strategies use explicit inputs, precise calculations and reproducible decisions.</p>
+      <p>The selected engine calculates from explicit inputs, then hands its result to the risk boundary instead of dispatching work directly.</p>
     </article>
     <article>
       <span class="principle-index">03</span>
-      <h3>Protect the path</h3>
-      <p>Risk and capital checks sit between a positive calculation and any downstream Simulation or controlled action.</p>
+      <h3>Protect capital before Execution</h3>
+      <p>Risk and liquidity checks remain between an engine result and Execution, backed by authoritative Portfolio Ledger state.</p>
     </article>
   </div>
 </section>
