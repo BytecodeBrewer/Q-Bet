@@ -23,8 +23,8 @@ from qbet.simulation import (
     WorkflowSimulationRequest,
     WorkflowSimulationRunner,
 )
-from qbet.storage.ledger import PortfolioLedgerRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
+from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
 from qbet.web.models import SimulationAvailability, SimulationRunState
 
 _ACTIVE_STATUSES = (
@@ -188,7 +188,7 @@ class SimulationControlService:
                 "Simulation control state is unavailable. Run database migrations first."
             ) from error
 
-        ledger_repository = PortfolioLedgerRepository()
+        ledger_repository = SimulationPortfolioLedgerRepository()
         initial_ledger = PortfolioLedger(
             balance=PortfolioBalance(
                 mode="simulation",
@@ -196,20 +196,24 @@ class SimulationControlService:
                 available=starting_capital,
             )
         )
+        simulation_ledger = ledger_repository.load_or_create(initial_ledger)
+        effective_config = config.model_copy(
+            update={"starting_capital": simulation_ledger.balance.available}
+        )
         runner = WorkflowSimulationRunner(
             report_store=report_store,
-            simulation_ledger=ledger_repository.save(initial_ledger),
-            ledger_writer=ledger_repository.save,
+            simulation_ledger=simulation_ledger,
+            ledger_writer=ledger_repository.merge,
         )
         self._update_run(
             run_id,
             status=SimulationRunState.Status.RUNNING,
             progress=Decimal("0"),
-            current_capital=starting_capital,
+            current_capital=simulation_ledger.balance.available,
         )
 
         try:
-            request = self._request_for(config=config, run_id=run_id)
+            request = self._request_for(config=effective_config, run_id=run_id)
             result = runner.run(
                 request,
                 on_step_completed=lambda context: self._record_progress(run_id, context),
