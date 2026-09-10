@@ -1,0 +1,52 @@
+{% extends "qbet_web/base.html" %}
+{% block title %}Execution Approvals · Q-Bet{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <span class="eyebrow">Controlled execution</span>
+  <h1>Execution approvals</h1>
+  <p>Review opportunities that are ready to continue. Approval records your decision only; Q-Bet revalidates the opportunity before any dispatch.</p>
+</section>
+
+{% if not approvals_available %}
+  <section class="surface-panel">
+    <h2>Approvals temporarily unavailable</h2>
+    <p class="muted">Q-Bet cannot read the durable approval state right now. No execution decision was changed.</p>
+  </section>
+{% elif approvals %}
+  <section class="engine-grid" aria-label="Pending execution approvals">
+    {% for approval in approvals %}
+      <article class="engine-card">
+        <div class="card-heading">
+          <div>
+            <span class="eyebrow">Pending approval</span>
+            <h2>{{ approval.engine }}</h2>
+          </div>
+          <span class="tag neutral-tag">Execution</span>
+        </div>
+        <dl class="detail-list">
+          <div><dt>Opportunity</dt><dd>{{ approval.opportunity_id }}</dd></div>
+          <div><dt>Capital required</dt><dd>{{ approval.capital_required }} {{ approval.currency }}</dd></div>
+          <div><dt>Valid until</dt><dd>{{ approval.expires_at }}</dd></div>
+        </dl>
+        <div class="hero-actions">
+          <form method="post" action="{% url 'execution-approval-decision' approval.execution_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="decision" value="approve">
+            <button class="primary" type="submit">Approve</button>
+          </form>
+          <form method="post" action="{% url 'execution-approval-decision' approval.execution_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="decision" value="reject">
+            <button type="submit">Reject</button>
+          </form>
+        </div>
+      </article>
+    {% endfor %}
+  </section>
+{% else %}
+  <section class="surface-panel">
+    <h2>No pending approvals</h2>
+    <p class="muted">There is currently no execution opportunity waiting for your decision.</p>
+  </section>
+{% endif %}
+{% endblock %}
