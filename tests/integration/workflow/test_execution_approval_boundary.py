@@ -11,7 +11,9 @@ from qbet.execution.models import ExecutionRecord, Lifecycle
 from qbet.request_handler import (
     ExecutionSandboxRequestHandler,
     ModeRequestHandlers,
+    ResultStatus,
     RevalidationOutcome,
+    SandboxResultFixture,
     SandboxRevalidationFixture,
 )
 from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepository
@@ -57,7 +59,15 @@ def _handlers(
                         None if outcome is RevalidationOutcome.VALID else "fixture_revalidation"
                     ),
                 ),
-            )
+            ),
+            result_fixtures=(
+                SandboxResultFixture(
+                    opportunity_id=opportunity_id,
+                    status=ResultStatus.SUCCESS,
+                    observed_at=NOW,
+                    result_reference="sandbox-result",
+                ),
+            ),
         )
     )
 
