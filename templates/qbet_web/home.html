@@ -39,7 +39,7 @@
 
       <text class="flow-group-label" x="48" y="58">Data Providers</text>
       <path id="flow-provider-odds" class="flow-provider-connector" d="M56 116 C118 116 126 210 190 210"/>
-      <path id="flow-provider-results" class="flow-provider-connector" d="M56 210 H190"/>
+      <path class="flow-provider-connector" d="M56 210 H190"/>
       <path id="flow-provider-market" class="flow-provider-connector" d="M56 304 C118 304 126 210 190 210"/>
 
       <g class="flow-provider" transform="translate(48 116)">
@@ -55,7 +55,8 @@
         <text x="18" y="5">Market APIs</text>
       </g>
 
-      <path id="flow-main-path" class="flow-connector" d="M190 210 H330 H470 H610 H760 H930"/>
+      <path class="flow-connector" d="M190 210 H330 H470 H610 H760 H930"/>
+      <path id="flow-main-path" class="flow-motion-guide" d="M56 210 H190 H330 H470 H610 H760 H930"/>
       <path id="flow-capital-path" class="flow-capital-connector" d="M760 446 V348 V210"/>
 
       <g class="flow-station" data-flow-station="aggregation" transform="translate(190 210)">
@@ -103,12 +104,11 @@
       </g>
 
       <circle class="flow-packet flow-packet-provider" r="5" data-flow-packet data-flow-path="flow-provider-odds" data-flow-duration="3000" data-flow-phase="0"/>
-      <circle class="flow-packet flow-packet-provider" r="5" data-flow-packet data-flow-path="flow-provider-results" data-flow-duration="3000" data-flow-phase="1000"/>
-      <circle class="flow-packet flow-packet-provider" r="5" data-flow-packet data-flow-path="flow-provider-market" data-flow-duration="3000" data-flow-phase="2000"/>
+      <circle class="flow-packet flow-packet-provider" r="5" data-flow-packet data-flow-path="flow-provider-market" data-flow-duration="3000" data-flow-phase="1500"/>
 
-      <circle class="flow-packet flow-packet-main" r="7" data-flow-packet data-flow-path="flow-main-path" data-flow-duration="8200" data-flow-phase="0" data-flow-pulse="aggregation:0,builder:.19,engine:.38,risk:.57,liquidity:.77,execution:1"/>
-      <circle class="flow-packet flow-packet-main flow-packet-secondary" r="6" data-flow-packet data-flow-path="flow-main-path" data-flow-duration="8200" data-flow-phase="2733"/>
-      <circle class="flow-packet flow-packet-main flow-packet-secondary" r="6" data-flow-packet data-flow-path="flow-main-path" data-flow-duration="8200" data-flow-phase="5466"/>
+      <circle class="flow-packet flow-packet-main" r="7" data-flow-packet data-flow-path="flow-main-path" data-flow-duration="9400" data-flow-phase="0" data-flow-pulse="aggregation:.15,builder:.31,engine:.47,risk:.63,liquidity:.81,execution:1"/>
+      <circle class="flow-packet flow-packet-main flow-packet-secondary" r="6" data-flow-packet data-flow-path="flow-main-path" data-flow-duration="9400" data-flow-phase="3133"/>
+      <circle class="flow-packet flow-packet-main flow-packet-secondary" r="6" data-flow-packet data-flow-path="flow-main-path" data-flow-duration="9400" data-flow-phase="6266"/>
 
       <circle class="flow-packet flow-packet-capital" r="5" data-flow-packet data-flow-path="flow-capital-path" data-flow-duration="5200" data-flow-phase="0" data-flow-pulse="bank:0,ledger:.42,liquidity:1"/>
       <circle class="flow-packet flow-packet-capital flow-packet-secondary" r="4" data-flow-packet data-flow-path="flow-capital-path" data-flow-duration="5200" data-flow-phase="2600"/>
