@@ -11,8 +11,10 @@ from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone
 
 from qbet.calculations import ArbitrageOffer, QualifyingBetInput, TwoWayArbitrageInput
+from qbet.domain.ledger import PortfolioBalance
 from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
+from qbet.ledger import PortfolioLedger
 from qbet.reporting import CustomerReportAmount, CustomerReportInput
 from qbet.simulation import (
     SimulationContext,
@@ -21,6 +23,7 @@ from qbet.simulation import (
     WorkflowSimulationRequest,
     WorkflowSimulationRunner,
 )
+from qbet.storage.ledger import PortfolioLedgerRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.web.models import SimulationAvailability, SimulationRunState
 
@@ -185,7 +188,19 @@ class SimulationControlService:
                 "Simulation control state is unavailable. Run database migrations first."
             ) from error
 
-        runner = WorkflowSimulationRunner(report_store=report_store)
+        ledger_repository = PortfolioLedgerRepository()
+        initial_ledger = PortfolioLedger(
+            balance=PortfolioBalance(
+                mode="simulation",
+                currency="EUR",
+                available=starting_capital,
+            )
+        )
+        runner = WorkflowSimulationRunner(
+            report_store=report_store,
+            simulation_ledger=ledger_repository.save(initial_ledger),
+            ledger_writer=ledger_repository.save,
+        )
         self._update_run(
             run_id,
             status=SimulationRunState.Status.RUNNING,
@@ -211,11 +226,19 @@ class SimulationControlService:
 
         simulation_result = result.simulation_result
         report_id = runner.last_report.run_id if runner.last_report is not None else None
+        persisted_ledger = runner.last_ledger
+        if persisted_ledger is None:
+            self._update_run(
+                run_id,
+                status=SimulationRunState.Status.FAILED,
+                error_message="Simulation ledger state is unavailable.",
+            )
+            raise SimulationControlError("Simulation ledger state is unavailable.")
         self._update_run(
             run_id,
             status=simulation_result.status.value,
             progress=simulation_result.progress,
-            current_capital=simulation_result.current_capital,
+            current_capital=persisted_ledger.balance.available,
             report_id=report_id,
             error_message="",
         )
