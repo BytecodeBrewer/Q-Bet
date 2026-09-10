@@ -20,12 +20,12 @@
 
 .home-flow-shell {
   position: relative;
-  min-height: 430px;
+  min-height: 520px;
   border: 1px solid var(--border);
   border-radius: 26px;
   background:
-    radial-gradient(circle at 18% 48%, color-mix(in srgb, var(--primary-soft) 76%, transparent), transparent 24%),
-    radial-gradient(circle at 82% 30%, color-mix(in srgb, var(--admin-soft) 72%, transparent), transparent 25%),
+    radial-gradient(circle at 18% 42%, color-mix(in srgb, var(--primary-soft) 76%, transparent), transparent 24%),
+    radial-gradient(circle at 76% 70%, color-mix(in srgb, var(--admin-soft) 72%, transparent), transparent 25%),
     var(--surface);
   box-shadow: 0 24px 70px rgba(23, 33, 43, .08);
   overflow: hidden;
@@ -43,7 +43,7 @@
     linear-gradient(var(--border) 1px, transparent 1px),
     linear-gradient(90deg, var(--border) 1px, transparent 1px);
   background-size: 42px 42px;
-  mask-image: linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
 }
 .home-flow-shell::after {
   width: 260px;
@@ -53,9 +53,26 @@
   top: -120px;
   border: 1px solid var(--border);
 }
-.home-flow-map { position: relative; z-index: 1; display: block; width: 100%; height: 100%; min-height: 430px; color: var(--primary); }
+.home-flow-map { position: relative; z-index: 1; display: block; width: 100%; height: 100%; min-height: 520px; color: var(--primary); }
 .flow-connector { fill: none; stroke: url(#flowLine); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
-.flow-branch { stroke-width: 3; }
+.flow-provider-connector {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 5 8;
+  opacity: .58;
+}
+.flow-capital-connector {
+  fill: none;
+  stroke: url(#capitalLine);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 3 7;
+}
+.flow-group-label { fill: var(--muted); font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.flow-provider circle { fill: var(--primary); opacity: .72; }
+.flow-provider text { fill: var(--muted); font-size: 13px; font-weight: 700; }
 .flow-station circle {
   fill: var(--surface);
   stroke: var(--primary);
@@ -64,13 +81,17 @@
   transform-box: fill-box;
   transform-origin: center;
 }
-.flow-station text { fill: var(--text); font-size: 15px; font-weight: 700; transition: fill .18s ease; }
+.flow-station text { fill: var(--text); font-size: 14px; font-weight: 700; transition: fill .18s ease; }
 .flow-station-output circle { stroke: var(--admin); }
+.flow-capital-station circle { stroke: var(--admin); stroke-width: 2.5; }
 .flow-station.is-packet-hit circle { animation: station-hit .46s cubic-bezier(.2,.85,.3,1); }
 .flow-station.is-packet-hit text { fill: var(--primary); }
-.flow-station-output.is-packet-hit text { fill: var(--admin); }
-.flow-packet { fill: var(--primary); filter: drop-shadow(0 0 7px color-mix(in srgb, var(--primary) 55%, transparent)); }
-.flow-packet-simulation, .flow-packet-execution { fill: var(--admin); }
+.flow-station-output.is-packet-hit text,
+.flow-capital-station.is-packet-hit text { fill: var(--admin); }
+.flow-packet { fill: var(--primary); filter: drop-shadow(0 0 7px color-mix(in srgb, var(--primary) 55%, transparent)); pointer-events: none; }
+.flow-packet-provider { opacity: .72; }
+.flow-packet-capital { fill: var(--admin); filter: drop-shadow(0 0 7px color-mix(in srgb, var(--admin) 55%, transparent)); }
+.flow-packet-secondary { opacity: .58; }
 @keyframes station-hit {
   0%, 100% { transform: scale(1); }
   45% { transform: scale(1.12); }
@@ -176,7 +197,7 @@
 
 @media (max-width: 900px) {
   .product-hero { grid-template-columns: 1fr; min-height: auto; padding-top: 26px; }
-  .home-flow-shell, .home-flow-map { min-height: 360px; }
+  .home-flow-shell, .home-flow-map { min-height: 430px; }
   .product-principle-grid { grid-template-columns: 1fr; }
   .product-cta { align-items: flex-start; flex-direction: column; }
 }
@@ -185,10 +206,12 @@
   .product-hero-copy h1 { font-size: clamp(36px, 12vw, 54px); }
   .hero-facts { grid-template-columns: 1fr; }
   .hero-facts li { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: baseline; }
-  .home-flow-shell { min-height: 320px; border-radius: 18px; }
-  .home-flow-map { min-height: 320px; transform: scale(.96); transform-origin: center; }
-  .flow-station text { font-size: 26px; }
-  .flow-station-output text { font-size: 22px; }
+  .home-flow-shell { min-height: 360px; border-radius: 18px; }
+  .home-flow-map { min-height: 360px; transform: scale(.98); transform-origin: center; }
+  .flow-group-label { font-size: 21px; }
+  .flow-provider text { font-size: 21px; }
+  .flow-station text { font-size: 23px; }
+  .flow-capital-station text { font-size: 21px; }
   .product-cta { padding: 22px; }
   .engine-card-controls { margin-right: 0; }
   .readiness-track { padding-bottom: 8px; }
