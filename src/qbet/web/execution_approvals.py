@@ -6,6 +6,7 @@ from uuid import UUID
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import DatabaseError
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST
@@ -28,7 +29,7 @@ def _context(request: HttpRequest, **values: object) -> dict[str, object]:
 def execution_approvals(request: HttpRequest) -> HttpResponse:
     try:
         approvals = _EXECUTION_APPROVALS.pending_for(request.user.get_username())
-    except AuthoritativePersistenceError:
+    except (AuthoritativePersistenceError, DatabaseError):
         return render(
             request,
             "qbet_web/execution_approvals.html",
@@ -69,7 +70,7 @@ def execution_approval_decision(
         )
     except (KeyError, PermissionError) as error:
         raise Http404("Execution approval not found.") from error
-    except (AuthoritativePersistenceError, ValueError):
+    except (AuthoritativePersistenceError, DatabaseError, ValueError):
         messages.error(
             request,
             "This execution decision could not be recorded safely. Please try again later.",
