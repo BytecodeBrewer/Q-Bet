@@ -15,7 +15,7 @@ from qbet.request_handler import (
     SandboxRevalidationFixture,
 )
 from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepository
-from qbet.storage.models import ExecutionRecordRow, PortfolioLedgerRow
+from qbet.storage.models import ExecutionRecordRow
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.queue import WorkState
@@ -151,10 +151,9 @@ class ExecutionApprovalBoundaryTests(TransactionTestCase):
         self.assertEqual(repeated.state, Lifecycle.SETTLED)
         self.assertEqual(replayed_record, record)
         self.assertEqual(len(replayed_ledger.commands), command_count)
-        self.assertEqual(
-            ModeWorkQueueRepository().load(scheduled.work.id).state,
-            WorkState.COMPLETED,
-        )
+        queue_after_replay = ModeWorkQueueRepository().load(scheduled.work.id)
+        assert queue_after_replay is not None
+        self.assertEqual(queue_after_replay.state, WorkState.COMPLETED)
 
     def test_rejection_is_terminal_without_reservation_or_dispatch(self) -> None:
         scheduled, _ = self._stage()
@@ -222,7 +221,6 @@ class ExecutionApprovalBoundaryTests(TransactionTestCase):
         record, ledger = persisted
         self.assertEqual(record.state, Lifecycle.AWAITING_APPROVAL)
         self.assertFalse(ledger.commands)
-        self.assertEqual(
-            ModeWorkQueueRepository().load(scheduled.work.id).state,
-            WorkState.RECHECK,
-        )
+        queued = ModeWorkQueueRepository().load(scheduled.work.id)
+        assert queued is not None
+        self.assertEqual(queued.state, WorkState.RECHECK)
