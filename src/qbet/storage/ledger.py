@@ -5,7 +5,7 @@ from uuid import UUID
 from django.db import DatabaseError, IntegrityError, transaction
 from pydantic import ValidationError
 
-from qbet.execution.models import ExecutionRecord
+from qbet.execution.models import ExecutionRecord, Lifecycle
 from qbet.ledger import PortfolioLedger
 from qbet.storage.models import (
     ExecutionRecordRow,
@@ -102,6 +102,29 @@ class ExecutionStateRepository:
                 "authoritative_execution_state_unavailable"
             ) from error
 
+    def load(self, record_id: UUID) -> tuple[ExecutionRecord, PortfolioLedger] | None:
+        """Restore one persisted execution together with its authoritative ledger."""
+
+        try:
+            with transaction.atomic():
+                row = (
+                    ExecutionRecordRow.objects.select_for_update()
+                    .filter(record_id=record_id)
+                    .first()
+                )
+                if row is None:
+                    return None
+                record = ExecutionRecord.model_validate(row.payload)
+                ledger_row = PortfolioLedgerRow.objects.select_for_update().get(
+                    mode=record.proposal.work.mode.value,
+                    currency=record.proposal.currency,
+                )
+                return record, PortfolioLedger.model_validate(ledger_row.payload)
+        except DatabaseError as error:
+            raise AuthoritativePersistenceError(
+                "authoritative_execution_state_unavailable"
+            ) from error
+
     def persist(
         self, record: ExecutionRecord, ledger: PortfolioLedger
     ) -> tuple[ExecutionRecord, PortfolioLedger]:
@@ -184,6 +207,13 @@ class ExecutionRecordRepository:
         if row is None:
             return None
         return ExecutionRecord.model_validate(row.payload)
+
+    def list_awaiting_approval(self, *, owner: str) -> tuple[ExecutionRecord, ...]:
+        rows = ExecutionRecordRow.objects.filter(
+            state=Lifecycle.AWAITING_APPROVAL.value
+        ).order_by("updated_at")
+        records = tuple(ExecutionRecord.model_validate(row.payload) for row in rows)
+        return tuple(record for record in records if record.proposal.work.owner == owner)
 
     @transaction.atomic
     def save_transition(self, record: ExecutionRecord) -> ExecutionRecord:
@@ -308,3 +338,19 @@ class ModeWorkQueueRepository:
             row.payload = item.model_dump(mode="json")
             row.save(update_fields=("state", "scheduled_for", "payload", "updated_at"))
             return item
+
+    def cancel(self, work_id: UUID, *, now, reason: str) -> QueuedWorkItem:
+        """Cancel approval-waiting work idempotently without dispatching it."""
+
+        with transaction.atomic():
+            row = ModeWorkQueueRow.objects.select_for_update().get(work_id=work_id)
+            item = QueuedWorkItem.model_validate(row.payload)
+            if item.state is WorkState.CANCELLED:
+                return item
+            if item.state not in {WorkState.PENDING, WorkState.RECHECK}:
+                raise ValueError("work_not_cancellable")
+            cancelled = item.transition(WorkState.CANCELLED, now=now, reason=reason)
+            row.state = cancelled.state.value
+            row.payload = cancelled.model_dump(mode="json")
+            row.save(update_fields=("state", "payload", "updated_at"))
+            return cancelled

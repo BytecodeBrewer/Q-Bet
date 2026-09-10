@@ -77,6 +77,165 @@ class ExecutionService:
             raise ValueError(decision.reason or "ledger_transition_rejected")
         return updated
 
+    def record_decision(
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+        *,
+        actor: str,
+        owner: str,
+        approve: bool,
+        now: datetime,
+    ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        """Persist a human decision without reserving capital or dispatching an adapter."""
+
+        if not actor or actor != owner:
+            raise PermissionError("proposal_owner_required")
+
+        if record.state in _TERMINAL_STATES:
+            return self._persist(record, ledger)
+        if record.state is Lifecycle.APPROVED:
+            return self._persist(record, ledger)
+        if record.state is not Lifecycle.AWAITING_APPROVAL:
+            raise ValueError("execution_not_awaiting_approval")
+
+        if not approve:
+            return self._persist(
+                transition(record, Lifecycle.REJECTED),
+                ledger,
+            )
+
+        reason = SandboxRequestHandler().validate(record.proposal, now)
+        if ledger.balance.mode != record.proposal.work.mode.value:
+            reason = "ledger_mode_mismatch"
+        if reason:
+            return self._persist(
+                transition(record, Lifecycle.REJECTED, error=reason),
+                ledger,
+            )
+
+        approval = ApprovedExecutionRequest(
+            proposal=record.proposal,
+            approved_by=actor,
+            approved_at=now,
+        )
+        return self._persist(
+            transition(record, Lifecycle.APPROVED, approval=approval),
+            ledger,
+        )
+
+    def cancel_before_dispatch(
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+        *,
+        reason: str,
+    ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        """Cancel prepared work while no adapter-side effect has occurred."""
+
+        if record.state in _TERMINAL_STATES:
+            return self._persist(record, ledger)
+        if record.state not in {Lifecycle.AWAITING_APPROVAL, Lifecycle.APPROVED}:
+            raise ValueError("execution_already_dispatched")
+        return self._persist(
+            transition(record, Lifecycle.CANCELLED, error=reason),
+            ledger,
+        )
+
+    def execute_approved(
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+        *,
+        now: datetime,
+    ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        """Resume an explicitly approved record after the workflow revalidation gate."""
+
+        if record.state in _TERMINAL_STATES:
+            return self._persist(record, ledger)
+        if record.state is Lifecycle.AWAITING_APPROVAL:
+            return self._persist(record, ledger)
+
+        if record.state is Lifecycle.APPROVED:
+            reason = SandboxRequestHandler().validate(record.proposal, now)
+            if ledger.balance.mode != record.proposal.work.mode.value:
+                reason = "ledger_mode_mismatch"
+            if reason:
+                return self._persist(
+                    transition(record, Lifecycle.REJECTED, error=reason),
+                    ledger,
+                )
+
+            reserved = self._apply(
+                record,
+                ledger,
+                LedgerOperation.RESERVE,
+                record.proposal.capital_required,
+            )
+            record, ledger = self._persist(record, reserved)
+            locked = self._apply(
+                record,
+                ledger,
+                LedgerOperation.LOCK,
+                record.proposal.capital_required,
+            )
+            record, ledger = self._persist(
+                transition(record, Lifecycle.DISPATCHED),
+                locked,
+            )
+
+        if record.state is Lifecycle.DISPATCHED:
+            approval = self._approval(record)
+            adapter = (
+                BonusSandboxAdapter()
+                if record.proposal.work.engine == "bonus"
+                else SportsCapitalSandboxAdapter()
+            )
+            try:
+                result = adapter.dispatch(approval)
+            except Exception:
+                failed_ledger = self._apply(
+                    record,
+                    ledger,
+                    LedgerOperation.FAIL,
+                    record.proposal.capital_required,
+                )
+                return self._persist(
+                    transition(
+                        record,
+                        Lifecycle.FAILED,
+                        error="sandbox_dispatch_failed",
+                    ),
+                    failed_ledger,
+                )
+
+            pending = self._apply(
+                record,
+                ledger,
+                LedgerOperation.PENDING,
+                record.proposal.capital_required,
+            )
+            record, ledger = self._persist(
+                transition(
+                    record,
+                    Lifecycle.ACKNOWLEDGED,
+                    result=result,
+                ),
+                pending,
+            )
+
+        if record.state is Lifecycle.ACKNOWLEDGED:
+            if record.result is None:
+                raise ValueError("acknowledged_execution_missing_result")
+            settled_record, settled_ledger = SettlementService().settle(
+                record,
+                ledger,
+                record.result,
+            )
+            return self._persist(settled_record, settled_ledger)
+
+        return self._persist(record, ledger)
+
     def decide(
         self,
         record: ExecutionRecord,
@@ -87,6 +246,8 @@ class ExecutionService:
         approve: bool,
         now: datetime,
     ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        """Backward-compatible one-call deterministic decision/dispatch helper."""
+
         if not actor or actor != owner:
             raise PermissionError("proposal_owner_required")
 

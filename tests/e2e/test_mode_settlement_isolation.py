@@ -51,6 +51,7 @@ from qbet.workflow import (
     WorkflowStage,
     WorkState,
 )
+from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration, resolve_routes
 
@@ -251,11 +252,31 @@ class ModeSettlementIsolationE2ETests(TransactionTestCase):
             scheduled_for=NOW,
             expires_at=NOW + timedelta(minutes=5),
         )
-        dispatched = coordinator.dispatch_due(now=NOW, owner="owner")
+        first_dispatch = coordinator.dispatch_due(now=NOW, owner="owner")
 
         self.assertEqual(len(scheduled), 2)
-        self.assertEqual({item.work.mode for item in scheduled}, {WorkflowMode.SIMULATION, WorkflowMode.EXECUTION})
-        self.assertEqual({item.state for item in dispatched}, {WorkState.COMPLETED})
+        self.assertEqual(
+            {item.work.mode for item in scheduled},
+            {WorkflowMode.SIMULATION, WorkflowMode.EXECUTION},
+        )
+        self.assertEqual(
+            {item.state for item in first_dispatch},
+            {WorkState.COMPLETED, WorkState.RECHECK},
+        )
+        execution_item = next(
+            item for item in scheduled if item.work.mode is WorkflowMode.EXECUTION
+        )
+        ExecutionApprovalService().decide(
+            execution_item.work.id,
+            actor="owner",
+            approve=True,
+            now=NOW + timedelta(seconds=1),
+        )
+        second_dispatch = coordinator.dispatch_due(
+            now=NOW + timedelta(seconds=2), owner="owner"
+        )
+        self.assertEqual(tuple(item.state for item in second_dispatch), (WorkState.COMPLETED,))
+
         persisted = tuple(ModeWorkQueueRepository().load(item.work.id) for item in scheduled)
         self.assertTrue(all(item is not None for item in persisted))
         histories = [item.history for item in persisted if item is not None]
@@ -331,7 +352,7 @@ class ModeSettlementIsolationE2ETests(TransactionTestCase):
         configuration = RoutingConfiguration(sports_capital=EngineModes(execution=True))
         first_worker = self._coordinator(configuration, request.opportunity_id)
         second_worker = self._coordinator(configuration, request.opportunity_id)
-        first_worker.schedule(
+        (scheduled,) = first_worker.schedule(
             request,
             owner="owner",
             correlation_id=CORRELATION_ID,
@@ -342,10 +363,21 @@ class ModeSettlementIsolationE2ETests(TransactionTestCase):
         first_result = first_worker.dispatch_due(now=NOW, owner="owner")
         second_result = second_worker.dispatch_due(now=NOW, owner="owner")
 
-        self.assertEqual(tuple(item.state for item in first_result), (WorkState.COMPLETED,))
+        self.assertEqual(tuple(item.state for item in first_result), (WorkState.RECHECK,))
         self.assertEqual(second_result, ())
         self.assertEqual(ExecutionRecordRow.objects.count(), 1)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 1)
+
+        ExecutionApprovalService().decide(
+            scheduled.work.id,
+            actor="owner",
+            approve=True,
+            now=NOW + timedelta(seconds=1),
+        )
+        completed = second_worker.dispatch_due(
+            now=NOW + timedelta(seconds=2), owner="owner"
+        )
+        self.assertEqual(tuple(item.state for item in completed), (WorkState.COMPLETED,))
 
     def test_async_wait_reschedule_dispatches_once_at_the_controlled_time(self) -> None:
         request = _bonus_request()
