@@ -4,6 +4,7 @@ from django.urls import path
 
 from qbet.web import views
 from qbet.web.engine_runtime import engine_runtime_control
+from qbet.web.execution_approvals import execution_approval_decision, execution_approvals
 from qbet.web.routing_settings import routing_settings
 
 urlpatterns = [
@@ -12,6 +13,12 @@ urlpatterns = [
     path("register/", views.register, name="register"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
+    path("execution/approvals/", execution_approvals, name="execution-approvals"),
+    path(
+        "execution/approvals/<uuid:execution_id>/decision/",
+        execution_approval_decision,
+        name="execution-approval-decision",
+    ),
     path(
         "engines/<str:engine_id>/<str:mode>/<str:action>/",
         engine_runtime_control,
