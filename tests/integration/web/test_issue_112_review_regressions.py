@@ -10,6 +10,14 @@ from qbet.domain.ledger import LedgerCommand, LedgerOperation, PortfolioBalance
 from qbet.engines import BonusEngineRequest
 from qbet.execution.models import Lifecycle
 from qbet.ledger import PortfolioLedger
+from qbet.request_handler import (
+    ExecutionSandboxRequestHandler,
+    ModeRequestHandlers,
+    ResultStatus,
+    SandboxResultFixture,
+    SandboxRevalidationFixture,
+    SimulationSandboxRequestHandler,
+)
 from qbet.simulation import SimulationEngine
 from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepository, RoutingConfigurationRepository
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
@@ -37,6 +45,29 @@ def _request(opportunity_id: str) -> BonusEngineRequest:
         currency="EUR",
         execution_offer_ids=("book", "exchange"),
         generated_at=NOW,
+    )
+
+
+def _handlers(opportunity_id: str) -> ModeRequestHandlers:
+    revalidation = SandboxRevalidationFixture(
+        opportunity_id=opportunity_id,
+        validated_at=NOW,
+    )
+    result = SandboxResultFixture(
+        opportunity_id=opportunity_id,
+        status=ResultStatus.SUCCESS,
+        observed_at=NOW,
+        result_reference="sandbox-result",
+    )
+    return ModeRequestHandlers(
+        simulation=SimulationSandboxRequestHandler(
+            revalidation_fixtures=(revalidation,),
+            result_fixtures=(result,),
+        ),
+        execution=ExecutionSandboxRequestHandler(
+            revalidation_fixtures=(revalidation,),
+            result_fixtures=(result,),
+        ),
     )
 
 
@@ -169,3 +200,20 @@ class Issue112ReviewRegressionTests(TestCase):
         self.assertEqual(bob_state[0].state, Lifecycle.AWAITING_APPROVAL)
         self.assertEqual(alice_state[0].proposal.work.owner, "alice")
         self.assertEqual(bob_state[0].proposal.work.owner, "bob")
+
+    def test_routed_simulation_runs_directly_with_durable_merge(self) -> None:
+        opportunity_id = "direct-routed-simulation"
+        coordinator = ModeDispatchCoordinator(
+            RoutingConfiguration(bonus=EngineModes(simulation=True)),
+            queue_repository=ModeWorkQueueRepository(),
+            mode_request_handlers=_handlers(opportunity_id),
+        )
+        (item,) = coordinator.schedule(
+            _request(opportunity_id),
+            owner="owner",
+            correlation_id=ALICE_CORRELATION,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+        )
+
+        coordinator._run_simulation(item, now=NOW)
