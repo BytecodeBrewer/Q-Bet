@@ -123,6 +123,11 @@ class ModeDispatchCoordinator:
         owner: str,
     ) -> QueuedWorkItem:
         if now >= processing.expires_at:
+            self._cancel_approved_execution(
+                processing,
+                now=now,
+                reason="execution_expired_before_dispatch",
+            )
             return self._save_queue(processing.transition(WorkState.EXPIRED, now=now))
 
         readiness = self._readiness_provider.snapshot(
@@ -181,6 +186,18 @@ class ModeDispatchCoordinator:
             )
 
         if workflow_result.final_decision is WorkflowDecision.RECHECK:
+            if self._cancel_approved_execution(
+                processing,
+                now=now,
+                reason="approved_execution_revalidation_recheck",
+            ):
+                return self._save_queue(
+                    processing.transition(
+                        WorkState.CANCELLED,
+                        now=now,
+                        reason="approved_execution_revalidation_recheck",
+                    )
+                )
             return self._save_queue(
                 processing.transition(
                     WorkState.RECHECK,
@@ -189,6 +206,11 @@ class ModeDispatchCoordinator:
                 )
             )
         if workflow_result.final_decision is WorkflowDecision.REJECT:
+            self._cancel_approved_execution(
+                processing,
+                now=now,
+                reason="revalidation_rejected",
+            )
             return self._save_queue(
                 processing.transition(
                     WorkState.CANCELLED,
@@ -221,6 +243,11 @@ class ModeDispatchCoordinator:
             handler_result is not None
             and handler_result.status is ResultStatus.CANCELLED
         ):
+            self._cancel_approved_execution(
+                processing,
+                now=now,
+                reason="result_cancelled",
+            )
             return self._save_queue(
                 processing.transition(
                     WorkState.CANCELLED,
@@ -229,6 +256,11 @@ class ModeDispatchCoordinator:
                 )
             )
         if handler_result is not None and handler_result.status is not ResultStatus.SUCCESS:
+            self._cancel_approved_execution(
+                processing,
+                now=now,
+                reason="result_unavailable",
+            )
             return self._save_queue(
                 processing.transition(
                     WorkState.FAILED,
@@ -382,6 +414,42 @@ class ModeDispatchCoordinator:
         if isinstance(error, MonitoringPersistenceError):
             return "monitoring_persistence_unavailable"
         return "mode_execution_failed"
+
+    def _cancel_approved_execution(
+        self,
+        item: QueuedWorkItem,
+        *,
+        now: datetime,
+        reason: str,
+    ) -> bool:
+        """Invalidate a recorded approval when final checks make its plan unusable."""
+
+        if item.work.mode is not WorkflowMode.EXECUTION:
+            return False
+        state_repository = ExecutionStateRepository()
+        loaded = state_repository.load(item.work.id)
+        if loaded is None:
+            return False
+        record, ledger = loaded
+        if record.state is not Lifecycle.APPROVED:
+            return False
+        cancelled, _ = ExecutionService(
+            state_writer=state_repository
+        ).cancel_before_dispatch(
+            record,
+            ledger,
+            reason=reason,
+        )
+        self._record_event(
+            item,
+            stage="execution",
+            event_type="lifecycle_transition",
+            status=cancelled.state.value,
+            reason_code=reason,
+            occurred_at=now,
+            references={"execution_id": str(item.work.id)},
+        )
+        return cancelled.state is Lifecycle.CANCELLED
 
     def _record_workflow(
         self,
