@@ -42,11 +42,12 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertContains(response, 'data-flow-station="bank"')
         self.assertContains(response, 'data-flow-station="execution"')
         self.assertContains(response, 'id="flow-main-path"')
+        self.assertContains(response, 'd="M56 210 H190 H330 H470 H610 H760 H930"')
         self.assertContains(response, 'id="flow-capital-path"')
-        self.assertContains(response, "data-flow-packet", count=8)
+        self.assertContains(response, "data-flow-packet", count=7)
         self.assertContains(
             response,
-            'data-flow-pulse="aggregation:0,builder:.19,engine:.38,risk:.57,liquidity:.77,execution:1"',
+            'data-flow-pulse="aggregation:.15,builder:.31,engine:.47,risk:.63,liquidity:.81,execution:1"',
         )
         self.assertContains(response, 'data-flow-pulse="bank:0,ledger:.42,liquidity:1"')
         self.assertNotContains(response, "<animateMotion")
