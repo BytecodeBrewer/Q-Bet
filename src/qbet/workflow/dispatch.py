@@ -28,11 +28,11 @@ from qbet.storage.ledger import (
     AuthoritativeStateConflict,
     ExecutionStateRepository,
     ModeWorkQueueRepository,
-    PortfolioLedgerRepository,
     RoutingConfigurationRepository,
 )
 from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
+from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
 from qbet.workflow.models import (
     WorkflowDecision,
     WorkflowMode,
@@ -106,10 +106,15 @@ class ModeDispatchCoordinator:
     def dispatch_due(self, *, now: datetime, owner: str) -> tuple[QueuedWorkItem, ...]:
         processed: list[QueuedWorkItem] = []
         for processing in self._queue_repository.claim_due(now):
+            persisted_owner = processing.work.owner or owner
             try:
                 # Execution checkpoints must commit before adapter side effects. Do not
                 # wrap an entire claimed item in one outer transaction.
-                outcome = self._dispatch_claimed(processing, now=now, owner=owner)
+                outcome = self._dispatch_claimed(
+                    processing,
+                    now=now,
+                    owner=persisted_owner,
+                )
             except Exception as error:
                 outcome = self._fail_after_error(processing, now=now, error=error)
             processed.append(outcome)
@@ -567,7 +572,7 @@ class ModeDispatchCoordinator:
 
     def _run_simulation(self, item: QueuedWorkItem, *, now: datetime) -> None:
         engine = SimulationEngine(item.work.engine)
-        ledger_repository = PortfolioLedgerRepository()
+        ledger_repository = SimulationPortfolioLedgerRepository()
         initial_ledger = PortfolioLedger(
             balance=PortfolioBalance(
                 mode="simulation",
@@ -575,17 +580,18 @@ class ModeDispatchCoordinator:
                 available=Decimal("100"),
             )
         )
+        simulation_ledger = ledger_repository.load_or_create(initial_ledger)
         runner = WorkflowSimulationRunner(
             report_store=PostgresSimulationReportStore(),
             mode_request_handlers=self._mode_request_handlers,
-            simulation_ledger=initial_ledger,
-            ledger_writer=ledger_repository.save,
+            simulation_ledger=simulation_ledger,
+            ledger_writer=ledger_repository.merge,
         )
         result = runner.run(
             WorkflowSimulationRequest(
                 config=SimulationRunConfig(
                     engine=engine,
-                    starting_capital=Decimal("100"),
+                    starting_capital=simulation_ledger.balance.available,
                 ),
                 opportunities=(item.request,),
                 provider_state=ProviderState(
@@ -614,7 +620,7 @@ class ModeDispatchCoordinator:
         if runner.last_ledger is not None:
             self._record_ledger_transitions(
                 item,
-                initial_ledger,
+                simulation_ledger,
                 runner.last_ledger,
                 dispatch_prefix=str(result.correlation_id),
                 occurred_at=now,
