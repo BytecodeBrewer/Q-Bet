@@ -21,12 +21,9 @@
 
 <form id="dashboard-layout-state" data-layout-url="{% url 'dashboard-layout' %}" hidden>{% csrf_token %}</form>
 <div class="dashboard-planes{% if simulation_enabled %} dashboard-planes-split{% endif %}">
-  <section class="dashboard-plane execution-plane" aria-labelledby="execution-heading"{% if not execution_layer_active %} style="opacity:.72;filter:saturate(.55)"{% endif %}>
+  <section class="dashboard-plane execution-plane{% if not execution_layer_active %} is-inactive-plane{% endif %}" aria-labelledby="execution-heading">
     <div class="plane-heading">
-      <div>
-        <span class="plane-kicker">Customer plane</span>
-        <h2 id="execution-heading">Execution</h2>
-      </div>
+      <div><span class="plane-kicker">Customer plane</span><h2 id="execution-heading">Execution</h2></div>
       <span class="tag neutral-tag">Execution</span>
     </div>
 
@@ -35,57 +32,57 @@
       <article class="summary-item"><span>Pending matches</span><strong>{{ execution_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
       <article class="summary-item"><span>Recorded capital</span><strong>{% if execution_monitoring.summary.involved_capital is not None %}{{ execution_monitoring.summary.involved_capital }}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>tracked execution state</small></article>
       <article class="summary-item incident-summary{% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %} has-incidents{% endif %}">
-        <span>Warnings / errors</span>
-        <strong>{{ execution_monitoring.summary.warning_count }} / {{ execution_monitoring.summary.error_count }}</strong>
+        <span>Warnings / errors</span><strong>{{ execution_monitoring.summary.warning_count }} / {{ execution_monitoring.summary.error_count }}</strong>
         <small>{% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %}needs attention{% else %}No known issues{% endif %}</small>
       </article>
     </section>
 
     <div class="dashboard-support-row">
-      <section class="capital-coverage" aria-label="Execution capital coverage">
-        <span class="support-label">Capital coverage</span>
-        <p><span class="status status-{{ execution_monitoring.capital_coverage.status }}" aria-hidden="true"></span>{{ execution_monitoring.capital_coverage.detail }}</p>
-      </section>
+      <section class="capital-coverage" aria-label="Execution capital coverage"><span class="support-label">Capital coverage</span><p><span class="status status-{{ execution_monitoring.capital_coverage.status }}" aria-hidden="true"></span>{{ execution_monitoring.capital_coverage.detail }}</p></section>
       <section class="recorded-activity" aria-label="Recorded execution activity"><span>Recorded activity</span><strong>{{ execution_monitoring.summary.recorded_activity }}</strong></section>
     </div>
 
-    <div class="section-heading section-heading-spacious">
-      <div><span class="eyebrow">Engine status</span><h3>V1 engines</h3></div>
-      <span class="muted reorder-hint">Drag the handles or use arrow keys to reorder.</span>
-    </div>
+    <div class="section-heading section-heading-spacious"><div><span class="eyebrow">Engine status</span><h3>V1 engines</h3></div></div>
     <div class="engine-grid dashboard-engine-grid" data-widget-grid data-plane="execution">
       {% for engine in execution_engines %}
-        <article class="engine-card dashboard-engine-card draggable-card" data-engine-widget="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}"{% if not engine.active %} style="opacity:.64;filter:saturate(.45)"{% endif %}>
-          <div class="drag-row">
-            <span class="drag-handle" draggable="true" data-drag-handle tabindex="0" role="button" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move {{ engine.name }}">⋮⋮</span>
-            {% if user.is_staff %}<form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'execution' 'stop' %}">{% csrf_token %}{% if engine.active %}<button class="text-button" type="submit" title="Stop" aria-label="Stop {{ engine.name }} execution">■</button>{% else %}<button class="text-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'execution' 'start' %}" title="Start" aria-label="Start {{ engine.name }} execution">▶</button>{% endif %}</form>{% endif %}
+        <article class="engine-card dashboard-engine-card draggable-card{% if not engine.active %} is-inactive{% endif %}" data-engine-widget="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
+          <div class="engine-card-controls">
+            {% if user.is_staff %}
+              <form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'execution' 'stop' %}">
+                {% csrf_token %}
+                {% if engine.active %}
+                  <button class="engine-runtime-button is-stop" type="submit" title="Stop" aria-label="Stop {{ engine.name }} execution"><span aria-hidden="true">■</span></button>
+                {% else %}
+                  <button class="engine-runtime-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'execution' 'start' %}" title="Start" aria-label="Start {{ engine.name }} execution"><span aria-hidden="true">▶</span></button>
+                {% endif %}
+              </form>
+            {% endif %}
+            <button class="drag-handle" type="button" data-drag-handle aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move {{ engine.name }}" title="Reorder">
+              <span class="drag-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </button>
           </div>
           <a class="engine-link" href="{% url 'engine-detail' engine.engine_id %}">
             <div class="card-heading engine-card-heading">
               <div>
                 <span class="engine-state-label">
-                  <span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.status == 'amber' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.status == 'amber' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span>
+                  <span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span>
                 </span>
                 <h3>{{ engine.name }}</h3>
               </div>
               <span class="compact-link">Open</span>
             </div>
-
             <div class="engine-priority-metrics" aria-label="{{ engine.name }} key metrics">
               <div><span>Running</span><strong>{{ engine.running_matches }}</strong></div>
               <div><span>Pending</span><strong>{{ engine.pending_matches }}</strong></div>
               <div><span>Capital</span><strong>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}—{% endif %}</strong></div>
             </div>
-
-            {% if engine.warning_count or engine.error_count %}<div class="issue-badges" aria-label="{{ engine.name }} warnings and errors">
-              {% if engine.warning_count %}<span class="issue-badge warning-badge">⚠ {{ engine.warning_count }}</span>{% endif %}
-              {% if engine.error_count %}<span class="issue-badge error-badge">! {{ engine.error_count }}</span>{% endif %}
-            </div>{% endif %}
-
-            <div class="engine-secondary-metrics">
-              <span>State <strong>{{ engine.live_state }}</strong></span>
-              <span>Total activity <strong>{{ engine.total_activity }}</strong></span>
-            </div>
+            {% if engine.warning_count or engine.error_count %}
+              <div class="issue-badges" aria-label="{{ engine.name }} warnings and errors">
+                {% if engine.warning_count %}<span class="issue-badge warning-badge">⚠ {{ engine.warning_count }}</span>{% endif %}
+                {% if engine.error_count %}<span class="issue-badge error-badge">! {{ engine.error_count }}</span>{% endif %}
+              </div>
+            {% endif %}
+            <div class="engine-secondary-metrics"><span>State <strong>{{ engine.live_state }}</strong></span><span>Total activity <strong>{{ engine.total_activity }}</strong></span></div>
           </a>
         </article>
       {% endfor %}
@@ -93,32 +90,19 @@
   </section>
 
   {% if simulation_enabled and user.is_staff %}
-    <section class="dashboard-plane simulation-plane" aria-labelledby="simulation-heading"{% if not simulation_layer_active %} style="opacity:.72;filter:saturate(.55)"{% endif %}>
-      <div class="plane-heading">
-        <div>
-          <span class="plane-kicker">Admin only</span>
-          <h2 id="simulation-heading">Simulation</h2>
-        </div>
-        <span class="tag simulation-tag">Simulation</span>
-      </div>
+    <section class="dashboard-plane simulation-plane{% if not simulation_layer_active %} is-inactive-plane{% endif %}" aria-labelledby="simulation-heading">
+      <div class="plane-heading"><div><span class="plane-kicker">Admin only</span><h2 id="simulation-heading">Simulation</h2></div><span class="tag simulation-tag">Simulation</span></div>
 
       <section class="summary-grid dashboard-summary-grid" aria-label="Simulation activity summary">
         <article class="summary-item summary-item-primary"><span>Active matches</span><strong>{{ simulation_monitoring.summary.active_matches }}</strong><small>running now</small></article>
         <article class="summary-item"><span>Pending matches</span><strong>{{ simulation_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
         <article class="summary-item"><span>Recorded runs</span><strong>{{ simulation_monitoring.summary.recorded_activity }}</strong><small>available history</small></article>
         <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{{ simulation_monitoring.summary.involved_capital }}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>simulation only</small></article>
-        <article class="summary-item incident-summary{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %} has-incidents{% endif %}">
-          <span>Warnings / errors</span>
-          <strong>{{ simulation_monitoring.summary.warning_count }} / {{ simulation_monitoring.summary.error_count }}</strong>
-          <small>{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %}needs attention{% else %}No known issues{% endif %}</small>
-        </article>
+        <article class="summary-item incident-summary{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %} has-incidents{% endif %}"><span>Warnings / errors</span><strong>{{ simulation_monitoring.summary.warning_count }} / {{ simulation_monitoring.summary.error_count }}</strong><small>{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %}needs attention{% else %}No known issues{% endif %}</small></article>
       </section>
 
       <section class="simulation-control-panel">
-        <div class="section-heading">
-          <div><span class="eyebrow">Sandbox</span><h3>Deterministic pipeline test</h3></div>
-          <span class="tag simulation-tag">Virtual only</span>
-        </div>
+        <div class="section-heading"><div><span class="eyebrow">Sandbox</span><h3>Deterministic pipeline test</h3></div><span class="tag simulation-tag">Virtual only</span></div>
         <form method="post" action="{% url 'simulation-start' %}">
           {% csrf_token %}
           {{ start_form.non_field_errors }}
@@ -131,53 +115,48 @@
         </form>
       </section>
 
-      <div class="section-heading section-heading-spacious">
-        <div><span class="eyebrow">Engine status</span><h3>Simulation engines</h3></div>
-        <a class="compact-link" href="{% url 'report-history' %}">Simulation reports</a>
-      </div>
-      <p class="muted reorder-hint">Drag the handles or use arrow keys to reorder.</p>
+      <div class="section-heading section-heading-spacious"><div><span class="eyebrow">Engine status</span><h3>Simulation engines</h3></div><a class="compact-link" href="{% url 'report-history' %}">Simulation reports</a></div>
       <div class="engine-grid dashboard-engine-grid" data-widget-grid data-plane="simulation">
         {% for engine in simulation_engines %}
-          <article class="engine-card simulation-card dashboard-engine-card draggable-card" data-simulation-engine="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}"{% if not engine.active %} style="opacity:.64;filter:saturate(.45)"{% endif %}>
-            <div class="drag-row">
-              <span class="drag-handle" draggable="true" data-drag-handle tabindex="0" role="button" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move simulated {{ engine.name }}">⋮⋮</span>
-              <form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'stop' %}">{% csrf_token %}{% if engine.active %}<button class="text-button" type="submit" title="Stop" aria-label="Stop {{ engine.name }} simulation">■</button>{% else %}<button class="text-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'start' %}" title="Start" aria-label="Start {{ engine.name }} simulation">▶</button>{% endif %}</form>
+          <article class="engine-card simulation-card dashboard-engine-card draggable-card{% if not engine.active %} is-inactive{% endif %}" data-simulation-engine="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
+            <div class="engine-card-controls">
+              <form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'stop' %}">
+                {% csrf_token %}
+                {% if engine.active %}
+                  <button class="engine-runtime-button is-stop" type="submit" title="Stop" aria-label="Stop {{ engine.name }} simulation"><span aria-hidden="true">■</span></button>
+                {% else %}
+                  <button class="engine-runtime-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'start' %}" title="Start" aria-label="Start {{ engine.name }} simulation"><span aria-hidden="true">▶</span></button>
+                {% endif %}
+              </form>
+              <button class="drag-handle" type="button" data-drag-handle aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move simulated {{ engine.name }}" title="Reorder">
+                <span class="drag-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              </button>
             </div>
             <div class="card-heading engine-card-heading">
               <div>
-                <span class="engine-state-label">
-                  <span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.status == 'amber' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.status == 'amber' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span>
-                </span>
+                <span class="engine-state-label"><span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span></span>
                 <h3>{{ engine.name }}</h3>
               </div>
               <span class="tag simulation-tag">Simulation</span>
             </div>
-
             <div class="engine-priority-metrics">
               <div><span>Running</span><strong>{{ engine.running_matches }}</strong></div>
               <div><span>Pending</span><strong>{{ engine.pending_matches }}</strong></div>
               <div><span>Virtual capital</span><strong>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}—{% endif %}</strong></div>
             </div>
-
-            {% if engine.warning_count or engine.error_count %}<div class="issue-badges" aria-label="{{ engine.name }} simulation warnings and errors">
-              {% if engine.warning_count %}<span class="issue-badge warning-badge">⚠ {{ engine.warning_count }}</span>{% endif %}
-              {% if engine.error_count %}<span class="issue-badge error-badge">! {{ engine.error_count }}</span>{% endif %}
-            </div>{% endif %}
-
-            <div class="engine-secondary-metrics">
-              <span>State <strong>{{ engine.live_state }}</strong></span>
-              <span>Progress <strong>{% if engine.latest_report_id %}{% for report in simulation_monitoring.reports %}{% if report.run_id == engine.latest_report_id %}{{ report.progress }}{% endif %}{% endfor %}{% else %}Unavailable{% endif %}</strong></span>
-            </div>
+            {% if engine.warning_count or engine.error_count %}
+              <div class="issue-badges" aria-label="{{ engine.name }} simulation warnings and errors">
+                {% if engine.warning_count %}<span class="issue-badge warning-badge">⚠ {{ engine.warning_count }}</span>{% endif %}
+                {% if engine.error_count %}<span class="issue-badge error-badge">! {{ engine.error_count }}</span>{% endif %}
+              </div>
+            {% endif %}
+            <div class="engine-secondary-metrics"><span>State <strong>{{ engine.live_state }}</strong></span><span>Progress <strong>{% if engine.latest_report_id %}{% for report in simulation_monitoring.reports %}{% if report.run_id == engine.latest_report_id %}{{ report.progress }}{% endif %}{% endfor %}{% else %}Unavailable{% endif %}</strong></span></div>
             {% if engine.latest_report_id %}<p><a class="compact-link" href="{% url 'report-detail' engine.latest_report_id %}">Open latest report</a></p>{% endif %}
           </article>
         {% endfor %}
       </div>
 
-      {% if simulation_control.runs %}
-        <section class="recent-runs surface-subtle"><h3>Recent simulation runs</h3><ul>
-          {% for run in simulation_control.runs %}<li><strong>{{ run.engine }}</strong> · {{ run.status }} · {{ run.progress }} · virtual capital {{ run.current_capital }}{% if run.report_id %} · <a href="{% url 'report-detail' run.report_id %}">report</a>{% endif %}</li>{% endfor %}
-        </ul></section>
-      {% endif %}
+      {% if simulation_control.runs %}<section class="recent-runs surface-subtle"><h3>Recent simulation runs</h3><ul>{% for run in simulation_control.runs %}<li><strong>{{ run.engine }}</strong> · {{ run.status }} · {{ run.progress }} · virtual capital {{ run.current_capital }}{% if run.report_id %} · <a href="{% url 'report-detail' run.report_id %}">report</a>{% endif %}</li>{% endfor %}</ul></section>{% endif %}
     </section>
   {% endif %}
 </div>

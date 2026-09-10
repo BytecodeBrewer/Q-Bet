@@ -75,7 +75,7 @@ class DashboardInteractionTests(TestCase):
             'aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"',
             count=4,
         )
-        self.assertContains(response, "Drag the handles or use arrow keys to reorder.")
+        self.assertContains(response, "data-drag-handle", count=4)
 
     def test_narrow_viewport_keeps_keyboard_reorder_handles_visible(self) -> None:
         stylesheet = (Path(__file__).parents[3] / "static/qbet_web/app.css").read_text(

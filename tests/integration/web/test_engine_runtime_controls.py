@@ -91,7 +91,7 @@ class EngineRuntimeControlTests(TestCase):
         self.assertContains(dashboard, "Run pipeline test")
 
         monitoring = self.client.get("/monitoring/")
-        self.assertContains(monitoring, "Runtime readiness")
+        self.assertContains(monitoring, 'id="runtime-readiness-heading"')
         self.assertContains(monitoring, 'data-runtime-engine="execution:bonus"')
         self.assertContains(monitoring, 'data-runtime-engine="simulation:bonus"')
         self.assertContains(monitoring, "Data aggregation")

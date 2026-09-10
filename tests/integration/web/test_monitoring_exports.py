@@ -1,12 +1,13 @@
 from datetime import UTC, datetime
 from html.parser import HTMLParser
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from qbet.monitoring import MonitoringLevel, MonitoringRecord
+from qbet.monitoring import MonitoringLevel, MonitoringQuery, MonitoringRecord, MonitoringService
 from qbet.storage.monitoring import PostgresMonitoringRepository
 
 
@@ -21,6 +22,12 @@ class _HrefCollector(HTMLParser):
         href = dict(attrs).get("href")
         if href is not None:
             self.hrefs.append(href)
+
+
+class _UnavailableReader:
+    def list_records(self, query: MonitoringQuery) -> tuple[MonitoringRecord, ...]:
+        del query
+        raise OSError("monitoring history is unavailable")
 
 
 class MonitoringExportTests(TestCase):
@@ -81,7 +88,7 @@ class MonitoringExportTests(TestCase):
         self.assertContains(compact, 'name="start"')
         self.assertContains(compact, 'name="end"')
         self.assertContains(compact, 'name="correlation"')
-        self.assertContains(compact, "Maximum range: 31 days")
+        self.assertContains(compact, 'aria-label="Monitoring filters"')
         self.assertContains(extended, "liquidity_check")
         self.assertContains(extended, "warning")
         self.assertContains(extended, "25 ms")
@@ -143,6 +150,28 @@ class MonitoringExportTests(TestCase):
         self.assertEqual(json_export.status_code, 200)
         self.assertEqual(json_export.json(), [])
         self.assertEqual(len(csv_export.content.decode().strip().splitlines()), 1)
+
+    def test_unavailable_history_exports_are_explicitly_unavailable(self) -> None:
+        self.client.force_login(self.staff)
+        unavailable = MonitoringService(_UnavailableReader())
+
+        with patch("qbet.web.views.WORKFLOW_MONITORING_SERVICE", unavailable):
+            json_export = self.client.get("/monitoring/export/json/", self._range_params())
+            csv_export = self.client.get("/monitoring/export/csv/", self._range_params())
+
+        self.assertEqual(json_export.status_code, 503)
+        self.assertEqual(
+            json_export.json(),
+            {
+                "error": "monitoring_history_unavailable",
+                "message": "Monitoring history is temporarily unavailable.",
+            },
+        )
+        self.assertEqual(csv_export.status_code, 503)
+        self.assertEqual(csv_export["Content-Type"], "text/csv; charset=utf-8")
+        csv_body = csv_export.content.decode()
+        self.assertIn("monitoring_history_unavailable", csv_body)
+        self.assertIn("Monitoring history is temporarily unavailable.", csv_body)
 
     def test_invalid_monitoring_filters_are_rejected_without_sensitive_detail(self) -> None:
         self.client.force_login(self.staff)
