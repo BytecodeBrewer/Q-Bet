@@ -14,6 +14,7 @@ from qbet.request_handler import (
     ExecutionSandboxRequestHandler,
     ModeRequestHandlers,
     ResultStatus,
+    RevalidationOutcome,
     SandboxResultFixture,
     SandboxRevalidationFixture,
     SimulationSandboxRequestHandler,
@@ -51,6 +52,7 @@ def _request(opportunity_id: str) -> BonusEngineRequest:
 def _handlers(opportunity_id: str) -> ModeRequestHandlers:
     revalidation = SandboxRevalidationFixture(
         opportunity_id=opportunity_id,
+        outcome=RevalidationOutcome.VALID,
         validated_at=NOW,
     )
     result = SandboxResultFixture(
