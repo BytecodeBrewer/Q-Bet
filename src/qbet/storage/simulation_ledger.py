@@ -65,7 +65,25 @@ class SimulationPortfolioLedgerRepository:
             if cursor != current:
                 row.payload = cursor.model_dump(mode="json")
                 row.save(update_fields=("payload", "updated_at"))
-            return cursor
+
+            # PostgreSQL JSONB does not preserve object key order. The runner and
+            # Monitoring projection need the newly applied command lifecycle in the
+            # same order in which this caller produced it (reserve -> lock -> pending
+            # -> settle). Keep the authoritative balance/positions from the locked
+            # merge, but return an in-process command mapping whose caller-owned
+            # commands retain that causal order. Concurrent commands are appended and
+            # remain part of the authoritative snapshot.
+            ordered_commands = {
+                command_id: cursor.commands[command_id]
+                for command_id in incoming.commands
+                if command_id in cursor.commands
+            }
+            ordered_commands.update(
+                (command_id, command)
+                for command_id, command in cursor.commands.items()
+                if command_id not in ordered_commands
+            )
+            return cursor.model_copy(update={"commands": ordered_commands})
         except PortfolioLedgerRow.DoesNotExist as error:
             raise AuthoritativePersistenceError(
                 "simulation_ledger_missing"
