@@ -15,6 +15,7 @@ from qbet.request_handler import (
     RevalidationOutcome,
     SandboxResultFixture,
     SandboxRevalidationFixture,
+    SimulationSandboxRequestHandler,
 )
 from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepository
 from qbet.storage.models import ExecutionRecordRow
@@ -49,6 +50,7 @@ def _handlers(
     outcome: RevalidationOutcome = RevalidationOutcome.VALID,
 ) -> ModeRequestHandlers:
     return ModeRequestHandlers(
+        simulation=SimulationSandboxRequestHandler(),
         execution=ExecutionSandboxRequestHandler(
             revalidation_fixtures=(
                 SandboxRevalidationFixture(
@@ -68,7 +70,7 @@ def _handlers(
                     result_reference="sandbox-result",
                 ),
             ),
-        )
+        ),
     )
 
 
