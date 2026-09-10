@@ -59,15 +59,16 @@ class Phase2CompletionWebTests(TestCase):
             queue_repository=ModeWorkQueueRepository(),
         )
         request = _request()
+        now = datetime.now(UTC)
         (scheduled,) = coordinator.schedule(
             request,
             owner=self.user.get_username(),
             correlation_id=CORRELATION_ID,
-            scheduled_for=NOW,
-            expires_at=NOW + timedelta(minutes=5),
+            scheduled_for=now,
+            expires_at=now + timedelta(minutes=5),
         )
         (waiting,) = coordinator.dispatch_due(
-            now=NOW,
+            now=now,
             owner=self.user.get_username(),
         )
         self.assertEqual(waiting.state, WorkState.RECHECK)
