@@ -49,7 +49,11 @@ class SettlementService:
 
         result = cls.collected_result_for_settlement(outcome)
         work = record.proposal.work
-        if result.execution_id != str(work.id) or result.correlation_id != work.correlation_id:
+        if (
+            result.match_id != work.opportunity_id
+            or result.execution_id != str(work.id)
+            or result.correlation_id != work.correlation_id
+        ):
             raise ValueError("collected_result_identity_mismatch")
         return result
 
