@@ -19,7 +19,10 @@ from tests.unit.execution.test_service import ledger, proposal
 
 
 def collected_result(
-    record: ExecutionRecord, *, availability: ResultAvailability = ResultAvailability.AVAILABLE
+    record: ExecutionRecord,
+    *,
+    availability: ResultAvailability = ResultAvailability.AVAILABLE,
+    match_id: str | None = None,
 ) -> ResultCollectionOutcome:
     source = DataSourceMetadata(
         provider_id="result_fixture",
@@ -27,7 +30,7 @@ def collected_result(
         transport=SourceTransport.IN_MEMORY,
     )
     request = ResultCollectionRequest(
-        match_id=record.proposal.work.opportunity_id,
+        match_id=match_id or record.proposal.work.opportunity_id,
         execution_id=str(record.proposal.work.id),
         correlation_id=record.proposal.work.correlation_id,
         source=source,
@@ -84,3 +87,25 @@ def test_unavailable_collected_result_stops_before_settlement() -> None:
             now=datetime(2026, 1, 1, tzinfo=UTC),
             collected_result=outcome,
         )
+
+
+def test_wrong_match_result_stops_before_settlement_or_ledger_change() -> None:
+    record = ExecutionRecord(proposal=proposal())
+    original = ledger()
+    outcome = collected_result(record, match_id="other-match")
+
+    with pytest.raises(ValueError, match="collected_result_identity_mismatch"):
+        ExecutionService().decide(
+            record,
+            original,
+            actor="owner",
+            owner="owner",
+            approve=True,
+            now=datetime(2026, 1, 1, tzinfo=UTC),
+            collected_result=outcome,
+        )
+
+    assert original.balance.available == ledger().balance.available
+    assert original.balance.reserved == 0
+    assert original.balance.locked == 0
+    assert original.balance.pending == 0
