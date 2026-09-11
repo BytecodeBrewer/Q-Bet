@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -52,7 +52,6 @@ class TheOddsApiAdapter:
         region: str = "eu",
         currency: Currency = "EUR",
         available_stake: Decimal = Decimal(0),
-        max_snapshot_age: timedelta = timedelta(minutes=5),
         http_get: HttpGet | None = None,
         clock: Clock | None = None,
     ) -> None:
@@ -60,13 +59,10 @@ class TheOddsApiAdapter:
             raise ValueError("region must not be blank")
         if available_stake.is_nan() or available_stake.is_infinite() or available_stake < 0:
             raise ValueError("available_stake must be a finite non-negative decimal")
-        if max_snapshot_age < timedelta():
-            raise ValueError("max_snapshot_age must not be negative")
         self._api_key = api_key
         self._region = region
         self._currency: Currency = currency
         self._available_stake = available_stake
-        self._max_snapshot_age = max_snapshot_age
         self._http_get = http_get or _default_http_get
         self._clock = clock or (lambda: datetime.now(UTC))
 
@@ -76,7 +72,8 @@ class TheOddsApiAdapter:
     def fetch(self, request: DataCollectionRequest) -> NormalizedMarketSnapshot:
         self._validate_request(request)
         event = self._fetch_event(request, self._configured_api_key())
-        return self._normalize_event(request, event)
+        fetched_at = _ensure_aware(self._clock(), "clock result")
+        return self._normalize_event(request, event, fetched_at)
 
     def _validate_request(self, request: DataCollectionRequest) -> None:
         if request.source.transport is not SourceTransport.API:
@@ -130,7 +127,10 @@ class TheOddsApiAdapter:
         return payload
 
     def _normalize_event(
-        self, request: DataCollectionRequest, event: Mapping[str, Any]
+        self,
+        request: DataCollectionRequest,
+        event: Mapping[str, Any],
+        fetched_at: datetime,
     ) -> NormalizedMarketSnapshot:
         assert request.sport is not None
         assert request.event_id is not None
@@ -141,7 +141,6 @@ class TheOddsApiAdapter:
         sport = _required_text(event, "sport_key")
         if sport != request.sport:
             raise TheOddsApiPayloadError("The Odds API sport identity did not match the request")
-        fetched_at = _ensure_aware(self._clock(), "clock result")
         market_id = f"{event_id}:{request.market}"
         offers = _offers_for_market(
             event=event,
@@ -149,14 +148,7 @@ class TheOddsApiAdapter:
             market_id=market_id,
             currency=self._currency,
             available_stake=self._available_stake,
-        )
-        observed_at = min(offer.observed_at for offer in offers)
-        if observed_at > fetched_at:
-            raise TheOddsApiPayloadError("The Odds API last_update must not be in the future")
-        freshness = (
-            FreshnessStatus.FRESH
-            if fetched_at - observed_at <= self._max_snapshot_age
-            else FreshnessStatus.STALE
+            observed_at=fetched_at,
         )
         return NormalizedMarketSnapshot(
             id=market_id,
@@ -167,7 +159,7 @@ class TheOddsApiAdapter:
             event_id=event_id,
             market_id=market_id,
             fetched_at=fetched_at,
-            freshness=freshness,
+            freshness=FreshnessStatus.FRESH,
             completeness=CompletenessStatus.COMPLETE,
             offers=offers,
         )
@@ -180,6 +172,7 @@ def _offers_for_market(
     market_id: str,
     currency: Currency,
     available_stake: Decimal,
+    observed_at: datetime,
 ) -> tuple[NormalizedOffer, ...]:
     bookmakers = event.get("bookmakers")
     if not isinstance(bookmakers, list) or not bookmakers:
@@ -200,7 +193,6 @@ def _offers_for_market(
         if len(matching_markets) != 1:
             raise TheOddsApiPayloadError("The Odds API response lacks the requested market")
         market = matching_markets[0]
-        observed_at = _parse_timestamp(_required_text(market, "last_update"))
         outcomes = market.get("outcomes")
         if not isinstance(outcomes, list) or len(outcomes) < 2:
             raise TheOddsApiPayloadError("The Odds API market must contain at least two outcomes")
@@ -244,13 +236,6 @@ def _decimal_odds(value: Any) -> Decimal:
             "The Odds API outcome price must be finite and greater than one"
         )
     return odds
-
-
-def _parse_timestamp(value: str) -> datetime:
-    try:
-        return _ensure_aware(datetime.fromisoformat(value.replace("Z", "+00:00")), "last_update")
-    except ValueError as error:
-        raise TheOddsApiPayloadError("The Odds API last_update timestamp is invalid") from error
 
 
 def _ensure_aware(value: datetime, name: str) -> datetime:
