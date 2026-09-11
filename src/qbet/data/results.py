@@ -33,6 +33,15 @@ class ResultCollectionStatus(StrEnum):
     NOT_YET_AVAILABLE = "not_yet_available"
 
 
+_STATUS_FOR_UNAVAILABLE_RESULT = {
+    ResultAvailability.FAILED: ResultCollectionStatus.FAILED,
+    ResultAvailability.CANCELLED: ResultCollectionStatus.CANCELLED,
+    ResultAvailability.PARTIAL: ResultCollectionStatus.PARTIAL,
+    ResultAvailability.UNKNOWN: ResultCollectionStatus.UNKNOWN,
+    ResultAvailability.NOT_YET_AVAILABLE: ResultCollectionStatus.NOT_YET_AVAILABLE,
+}
+
+
 class ResultCollectionRequest(DomainModel):
     """Provider-neutral selection and correlation context for one result read."""
 
@@ -76,8 +85,13 @@ class ResultCollectionOutcome(DomainModel):
     @model_validator(mode="after")
     def validates_result_boundary(self) -> "ResultCollectionOutcome":
         if self.status is ResultCollectionStatus.AVAILABLE:
-            if self.result is None or self.reason_code is not None:
-                raise ValueError("available collection outcomes require a result only")
+            if (
+                self.result is None
+                or self.result.availability is not ResultAvailability.AVAILABLE
+                or self.result.provider_outcome is None
+                or self.reason_code is not None
+            ):
+                raise ValueError("available collection outcomes require an available result only")
         elif self.result is not None:
             raise ValueError("non-available collection outcomes must not expose a result")
         elif self.reason_code is None:
@@ -87,7 +101,12 @@ class ResultCollectionOutcome(DomainModel):
     def require_result_for_settlement_or_reporting(self) -> NormalizedMatchResult:
         """Prevent unvalidated collection states from crossing the post-event boundary."""
 
-        if self.status is not ResultCollectionStatus.AVAILABLE or self.result is None:
+        if (
+            self.status is not ResultCollectionStatus.AVAILABLE
+            or self.result is None
+            or self.result.availability is not ResultAvailability.AVAILABLE
+            or self.result.provider_outcome is None
+        ):
             raise ValueError("result collection outcome is not available")
         return self.result
 
@@ -110,8 +129,16 @@ class DeterministicResultFixture(DomainModel):
     def validates_fixture_contract(self) -> "DeterministicResultFixture":
         if self.status is ResultCollectionStatus.AVAILABLE and self.result is None:
             raise ValueError("available fixtures require a result")
+        if self.status is ResultCollectionStatus.AVAILABLE and (
+            self.result is None or self.result.availability is not ResultAvailability.AVAILABLE
+        ):
+            raise ValueError("available fixtures require an available result")
         if self.status is not ResultCollectionStatus.AVAILABLE and self.reason_code is None:
             raise ValueError("non-available fixtures require a reason_code")
+        if self.result is not None and self.result.availability is not ResultAvailability.AVAILABLE:
+            expected_status = _STATUS_FOR_UNAVAILABLE_RESULT[self.result.availability]
+            if self.status is not expected_status:
+                raise ValueError("fixture status must match result availability")
         return self
 
 

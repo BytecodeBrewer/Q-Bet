@@ -16,6 +16,7 @@ from qbet.data import (
     ResultCollector,
     SourceTransport,
 )
+from qbet.settlement import SettlementService
 
 SOURCE = DataSourceMetadata(
     provider_id="result_fixture", source_id="settlement-feed", transport=SourceTransport.IN_MEMORY
@@ -68,26 +69,34 @@ def test_available_result_preserves_identity_source_and_correlation() -> None:
 
 
 @pytest.mark.parametrize(
-    ("status", "reason_code"),
+    ("availability", "status", "reason_code"),
     [
-        (ResultCollectionStatus.FAILED, "provider_failed"),
-        (ResultCollectionStatus.CANCELLED, "event_cancelled"),
-        (ResultCollectionStatus.PARTIAL, "result_partial"),
-        (ResultCollectionStatus.UNKNOWN, "result_unknown"),
-        (ResultCollectionStatus.INVALID, "result_invalid"),
+        (ResultAvailability.FAILED, ResultCollectionStatus.FAILED, "provider_failed"),
+        (ResultAvailability.CANCELLED, ResultCollectionStatus.CANCELLED, "event_cancelled"),
+        (ResultAvailability.PARTIAL, ResultCollectionStatus.PARTIAL, "result_partial"),
+        (ResultAvailability.UNKNOWN, ResultCollectionStatus.UNKNOWN, "result_unknown"),
+        (
+            ResultAvailability.NOT_YET_AVAILABLE,
+            ResultCollectionStatus.NOT_YET_AVAILABLE,
+            "result_not_ready",
+        ),
     ],
 )
 def test_non_available_fixture_states_are_typed_before_settlement(
-    status: ResultCollectionStatus, reason_code: str
+    availability: ResultAvailability, status: ResultCollectionStatus, reason_code: str
 ) -> None:
     outcome = collector(
-        DeterministicResultFixture(result=result(), status=status, reason_code=reason_code)
+        DeterministicResultFixture(
+            result=result(availability=availability, reason_code=reason_code),
+            status=status,
+            reason_code=reason_code,
+        )
     ).collect(request())
 
     assert outcome.status is status
     assert outcome.reason_code == reason_code
     with pytest.raises(ValueError, match="not available"):
-        outcome.require_result_for_settlement_or_reporting()
+        SettlementService().collected_result_for_settlement(outcome)
 
 
 def test_missing_fixture_returns_not_yet_available() -> None:
@@ -140,3 +149,20 @@ def test_result_models_reject_invalid_contracts() -> None:
         result(provider_outcome=None)
     with pytest.raises(ValueError, match="require a result"):
         DeterministicResultFixture()
+
+
+@pytest.mark.parametrize(
+    "availability",
+    [
+        ResultAvailability.FAILED,
+        ResultAvailability.CANCELLED,
+        ResultAvailability.PARTIAL,
+        ResultAvailability.UNKNOWN,
+        ResultAvailability.NOT_YET_AVAILABLE,
+    ],
+)
+def test_unavailable_results_cannot_be_declared_available(availability: ResultAvailability) -> None:
+    with pytest.raises(ValueError, match="available result"):
+        DeterministicResultFixture(
+            result=result(availability=availability, reason_code="provider_not_available")
+        )
