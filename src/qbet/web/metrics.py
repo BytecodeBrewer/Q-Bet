@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from datetime import timedelta
 
 from django.conf import settings
@@ -16,13 +17,22 @@ from qbet.storage.models import ModeWorkQueueRow
 from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 
 _METRICS_WINDOW = timedelta(minutes=15)
+_BEARER_PREFIX = "Bearer "
+
+
+def _authorized(request: HttpRequest) -> bool:
+    configured_token = str(getattr(settings, "QBET_METRICS_TOKEN", ""))
+    authorization = request.headers.get("Authorization", "")
+    if not configured_token or not authorization.startswith(_BEARER_PREFIX):
+        return False
+    presented_token = authorization.removeprefix(_BEARER_PREFIX)
+    return secrets.compare_digest(presented_token, configured_token)
 
 
 def prometheus_metrics(request: HttpRequest) -> HttpResponse:
-    """Expose bounded operational telemetry when explicitly enabled for the deployment."""
+    """Expose bounded telemetry only for an explicitly enabled authenticated scraper."""
 
-    del request
-    if not bool(getattr(settings, "QBET_METRICS_ENABLED", False)):
+    if not bool(getattr(settings, "QBET_METRICS_ENABLED", False)) or not _authorized(request):
         return HttpResponseNotFound()
 
     end = timezone.now()
