@@ -87,6 +87,10 @@ class TheOddsApiAdapter:
             raise TheOddsApiConfigurationError(
                 "The Odds API collection requires sport, event_id, and market"
             )
+        if request.market.endswith("_lay"):
+            raise TheOddsApiConfigurationError(
+                "The Odds API lay markets are not supported by this adapter"
+            )
 
     def _configured_api_key(self) -> str:
         value = self._api_key or os.environ.get("QBET_THE_ODDS_API_KEY")
@@ -146,7 +150,7 @@ class TheOddsApiAdapter:
             currency=self._currency,
             available_stake=self._available_stake,
         )
-        observed_at = max(offer.observed_at for offer in offers)
+        observed_at = min(offer.observed_at for offer in offers)
         if observed_at > fetched_at:
             raise TheOddsApiPayloadError("The Odds API last_update must not be in the future")
         freshness = (
