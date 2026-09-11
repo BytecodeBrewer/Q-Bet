@@ -65,12 +65,19 @@ class PrometheusMetricsTests(TestCase):
         body = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("qbet_monitoring_events_total", body)
+        self.assertIn("qbet_monitoring_events_window", body)
         self.assertIn('mode="simulation"', body)
         self.assertIn('mode="execution"', body)
-        self.assertIn("qbet_stage_duration_ms_bucket", body)
+        self.assertIn("qbet_stage_duration_observations_ms", body)
         self.assertIn('qbet_queue_items{mode="execution",state="pending"} 1', body)
-        self.assertIn('qbet_operational_issues_total{level="warning",stage="request_handler"} 1', body)
+        self.assertIn(
+            'qbet_operational_issues_window{level="warning",stage="request_handler"} 1',
+            body,
+        )
+        self.assertIn(
+            'qbet_lifecycle_outcomes_window{mode="simulation",status="completed"} 1',
+            body,
+        )
         self.assertNotIn(str(correlation_id), body)
         self.assertNotIn(str(work_id), body)
         self.assertNotIn("private-opportunity", body)
