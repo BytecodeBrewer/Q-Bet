@@ -19,7 +19,7 @@ This file is the companion register for concrete Phase 3 external integrations. 
 
 | Area | Phase 3 intent | Concrete choice | Status |
 | --- | --- | --- | --- |
-| Data Aggregation / odds | Feed normalized candidate markets and quotations into the sports pipeline through typed adapters. | The Odds API, Odds-API.io, OddsPapi, BetBurger, OddsJam are user-provided candidates. | candidates supplied; first adapter selection pending |
+| Data Aggregation / odds | Feed normalized candidate markets and quotations into the sports pipeline through typed adapters. | The Odds API is the selected first read-only quotation adapter; Odds-API.io, OddsPapi, BetBurger, and OddsJam remain future candidates. | The Odds API adapter connected |
 | RequestHandler revalidation | Perform targeted event-specific refreshes close to execution using current quotation/provider state rather than repeating broad ingestion. | Reuse selected quotation adapters with source-aware targeted pulls and optional cross-checking. | architecture direction confirmed |
 | Result data / settlement | Resolve final match/result state independently from normal quotation ingestion where practical. | football-data.org, OpenLigaDB, API-Football, and a score endpoint from The Odds API are user-provided candidates. | candidates supplied; first adapter selection pending |
 | Bank / account data | Connect balances, transactions, sandbox execution, and later account-backed flows through the bank adapter boundary. | bunq is the first concrete bank integration. Automated transactions and official sandbox operation have already been checked by the user in bunq documentation/SDK. | capability direction confirmed; adapter implementation pending |
@@ -38,7 +38,7 @@ The same external provider does not have to serve every pipeline responsibility.
 
 Data Aggregation performs the broader read-only discovery/import work that produces normalized market candidates for the engines.
 
-- **The Odds API** — primary candidate for structured pre-match/live quotation ingestion.
+- **The Odds API** — selected and connected first read-only adapter for structured pre-match/live quotation ingestion.
 - **Odds-API.io** — cost-conscious candidate for structured German/international bookmaker coverage.
 - **OddsPapi** — lightweight candidate for development and ingestion testing.
 - **BetBurger** — professional scanner/data candidate for higher-frequency arbitrage-oriented inputs where suitable API/data access exists.
@@ -120,8 +120,8 @@ A ticket agent should use the candidates above directly. Do not open broad provi
 
 ### Market / Odds Priority
 
-- Preferred first adapter: not selected yet from The Odds API, Odds-API.io, OddsPapi, BetBurger, and OddsJam.
-- After selection, check only the implementation facts that can change over time: authentication, current transport/API shape, rate limits/quota, relevant market coverage, pricing, and permitted integration use.
+- First adapter: The Odds API, connected through `src/qbet/data/the_odds_api.py`.
+- For later providers, check only implementation facts that can change over time: authentication, current transport/API shape, rate limits/quota, relevant market coverage, pricing, and permitted integration use.
 
 ### Result Source Priority
 

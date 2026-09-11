@@ -144,6 +144,30 @@ def test_adapter_returns_stale_snapshot_that_builder_rejects() -> None:
         snapshot.require_ready_for_preparation()
 
 
+def test_adapter_uses_oldest_offer_timestamp_for_snapshot_freshness() -> None:
+    response = payload()
+    response["bookmakers"].append(
+        {
+            "key": "book-two",
+            "markets": [
+                {
+                    "key": "h2h",
+                    "last_update": "2026-09-11T09:50:00Z",
+                    "outcomes": [
+                        {"name": "Home", "price": 2.2},
+                        {"name": "Away", "price": 2.45},
+                    ],
+                }
+            ],
+        }
+    )
+
+    snapshot = adapter(response).fetch(request())
+
+    with pytest.raises(ValueError, match="fresh"):
+        snapshot.require_ready_for_preparation()
+
+
 def test_adapter_requires_environment_or_application_bound_key() -> None:
     with pytest.raises(TheOddsApiConfigurationError, match="QBET_THE_ODDS_API_KEY"):
         TheOddsApiAdapter(
@@ -155,6 +179,17 @@ def test_adapter_requires_environment_or_application_bound_key() -> None:
 def test_adapter_requires_a_complete_provider_neutral_selection() -> None:
     with pytest.raises(TheOddsApiConfigurationError, match="sport, event_id, and market"):
         adapter(payload()).fetch(request(event_id=None))
+
+
+def test_adapter_rejects_unsupported_lay_markets() -> None:
+    value = TheOddsApiAdapter(
+        api_key="configured-for-test",
+        clock=lambda: NOW,
+        http_get=lambda _: pytest.fail("network must not be called"),
+    )
+
+    with pytest.raises(TheOddsApiConfigurationError, match="lay markets"):
+        value.fetch(request(market="h2h_lay"))
 
 
 def test_adapter_encodes_provider_neutral_path_identifiers() -> None:
