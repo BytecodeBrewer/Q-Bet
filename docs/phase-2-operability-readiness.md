@@ -53,11 +53,14 @@ The scrape boundary is:
 GET /metrics/
 ```
 
-It is disabled by default. A controlled environment may enable it with:
+It is disabled by default. A controlled environment must both enable the boundary and configure a dedicated scrape credential:
 
 ```text
 QBET_METRICS_ENABLED=true
+QBET_METRICS_TOKEN=<dedicated-secret>
 ```
+
+Scrapers authenticate with `Authorization: Bearer <dedicated-secret>`. Missing or incorrect credentials receive the same not-found response as a disabled endpoint so technical Monitoring is not exposed merely by enabling the feature flag. The token must be stored only in deployment/secrets configuration and must not be committed.
 
 Hosted preview keeps the endpoint disabled explicitly.
 
