@@ -136,6 +136,7 @@ DATABASES = {
 }
 QBET_SIMULATION_MODE_ENABLED = _environment_flag("QBET_SIMULATION_MODE_ENABLED")
 QBET_METRICS_ENABLED = _environment_flag("QBET_METRICS_ENABLED")
+QBET_METRICS_TOKEN = os.environ.get("QBET_METRICS_TOKEN", "")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
