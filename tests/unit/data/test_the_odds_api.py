@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
+from urllib.error import HTTPError
 from uuid import UUID
 
 import pytest
@@ -18,6 +19,7 @@ from qbet.data import (
     THE_ODDS_API_PROVIDER_ID,
     TheOddsApiAdapter,
     TheOddsApiConfigurationError,
+    TheOddsApiError,
     TheOddsApiPayloadError,
 )
 from qbet.data.sports_match_builder import (
@@ -153,3 +155,54 @@ def test_adapter_requires_environment_or_application_bound_key() -> None:
 def test_adapter_requires_a_complete_provider_neutral_selection() -> None:
     with pytest.raises(TheOddsApiConfigurationError, match="sport, event_id, and market"):
         adapter(payload()).fetch(request(event_id=None))
+
+
+def test_transport_failure_does_not_chain_or_expose_the_api_key() -> None:
+    api_key = "test-key-that-must-not-leak"
+
+    def rate_limited(url: str) -> tuple[int, dict[str, str], bytes]:
+        raise HTTPError(url, 429, "Too Many Requests", {}, None)
+
+    value = TheOddsApiAdapter(api_key=api_key, clock=lambda: NOW, http_get=rate_limited)
+
+    with pytest.raises(TheOddsApiError, match="request failed") as raised:
+        value.fetch(request())
+
+    assert api_key not in str(raised.value)
+    assert raised.value.__cause__ is None
+
+
+def test_non_success_response_is_a_stable_provider_error() -> None:
+    value = TheOddsApiAdapter(
+        api_key="configured-for-test",
+        clock=lambda: NOW,
+        http_get=lambda _: (429, {}, b""),
+    )
+
+    with pytest.raises(TheOddsApiError, match="HTTP 429"):
+        value.fetch(request())
+
+
+def test_adapter_rejects_invalid_json_and_mismatched_event_identity() -> None:
+    invalid_json = TheOddsApiAdapter(
+        api_key="configured-for-test",
+        clock=lambda: NOW,
+        http_get=lambda _: (200, {}, b"{"),
+    )
+    with pytest.raises(TheOddsApiPayloadError, match="invalid JSON"):
+        invalid_json.fetch(request())
+
+    with pytest.raises(TheOddsApiPayloadError, match="event identity"):
+        adapter(payload(id="other-event")).fetch(request())
+
+
+def test_adapter_rejects_invalid_odds_and_future_provider_timestamps() -> None:
+    invalid_odds = payload()
+    invalid_odds["bookmakers"][0]["markets"][0]["outcomes"][0]["price"] = "Infinity"
+    with pytest.raises(TheOddsApiPayloadError, match="price must be finite"):
+        adapter(invalid_odds).fetch(request())
+
+    future_timestamp = payload()
+    future_timestamp["bookmakers"][0]["markets"][0]["last_update"] = "2026-09-11T10:01:00Z"
+    with pytest.raises(TheOddsApiPayloadError, match="must not be in the future"):
+        adapter(future_timestamp).fetch(request())
