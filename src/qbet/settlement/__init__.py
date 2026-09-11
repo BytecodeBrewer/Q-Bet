@@ -1,6 +1,7 @@
 """Validated settlement is the only dispatch-result capital writer."""
 
 from qbet.domain.ledger import LedgerCommand, LedgerOperation
+from qbet.data.results import NormalizedMatchResult, ResultCollectionOutcome
 from qbet.execution.models import ExecutionRecord, Lifecycle, SandboxResult
 from qbet.execution.sandbox import SandboxRequestHandler
 from qbet.ledger import PortfolioLedger
@@ -30,6 +31,14 @@ def transition(record: ExecutionRecord, state: Lifecycle, **changes) -> Executio
 
 
 class SettlementService:
+    @staticmethod
+    def collected_result_for_settlement(
+        outcome: ResultCollectionOutcome,
+    ) -> NormalizedMatchResult:
+        """Admit only a validated available collection result to post-event settlement."""
+
+        return outcome.require_result_for_settlement_or_reporting()
+
     def settle(
         self, record: ExecutionRecord, ledger: PortfolioLedger, result: SandboxResult
     ) -> tuple[ExecutionRecord, PortfolioLedger]:
