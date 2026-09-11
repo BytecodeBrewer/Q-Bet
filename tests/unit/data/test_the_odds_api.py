@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 from urllib.error import HTTPError
@@ -58,7 +58,6 @@ def payload(**changes: object) -> dict[str, Any]:
                 "markets": [
                     {
                         "key": "h2h",
-                        "last_update": "2026-09-11T09:58:00Z",
                         "outcomes": [
                             {"name": "Home", "price": 2.25},
                             {"name": "Away", "price": 2.4},
@@ -128,7 +127,7 @@ def test_normalized_snapshot_flows_through_existing_sports_match_builder() -> No
                     }
                 ]
             ),
-            "last_update",
+            "at least two outcomes",
         ),
     ],
 )
@@ -137,14 +136,7 @@ def test_adapter_rejects_unsafe_provider_payloads(response: dict[str, Any], mess
         adapter(response).fetch(request())
 
 
-def test_adapter_returns_stale_snapshot_that_builder_rejects() -> None:
-    snapshot = adapter(payload(), now=NOW + timedelta(minutes=6)).fetch(request())
-
-    with pytest.raises(ValueError, match="fresh"):
-        snapshot.require_ready_for_preparation()
-
-
-def test_adapter_uses_oldest_offer_timestamp_for_snapshot_freshness() -> None:
+def test_adapter_uses_its_fetch_time_for_all_normalized_offers() -> None:
     response = payload()
     response["bookmakers"].append(
         {
@@ -152,7 +144,6 @@ def test_adapter_uses_oldest_offer_timestamp_for_snapshot_freshness() -> None:
             "markets": [
                 {
                     "key": "h2h",
-                    "last_update": "2026-09-11T09:50:00Z",
                     "outcomes": [
                         {"name": "Home", "price": 2.2},
                         {"name": "Away", "price": 2.45},
@@ -164,8 +155,9 @@ def test_adapter_uses_oldest_offer_timestamp_for_snapshot_freshness() -> None:
 
     snapshot = adapter(response).fetch(request())
 
-    with pytest.raises(ValueError, match="fresh"):
-        snapshot.require_ready_for_preparation()
+    assert snapshot.fetched_at == NOW
+    assert {offer.observed_at for offer in snapshot.offers} == {NOW}
+    assert snapshot.require_ready_for_preparation() is snapshot
 
 
 def test_adapter_requires_environment_or_application_bound_key() -> None:
@@ -258,13 +250,8 @@ def test_adapter_rejects_invalid_json_and_mismatched_event_identity() -> None:
         adapter(payload(id="other-event")).fetch(request())
 
 
-def test_adapter_rejects_invalid_odds_and_future_provider_timestamps() -> None:
+def test_adapter_rejects_invalid_odds() -> None:
     invalid_odds = payload()
     invalid_odds["bookmakers"][0]["markets"][0]["outcomes"][0]["price"] = "Infinity"
     with pytest.raises(TheOddsApiPayloadError, match="price must be finite"):
         adapter(invalid_odds).fetch(request())
-
-    future_timestamp = payload()
-    future_timestamp["bookmakers"][0]["markets"][0]["last_update"] = "2026-09-11T10:01:00Z"
-    with pytest.raises(TheOddsApiPayloadError, match="must not be in the future"):
-        adapter(future_timestamp).fetch(request())
