@@ -118,6 +118,11 @@ class NormalizedMarketSnapshot(DomainModel):
 
 
 class DataCollectionRequest(DomainModel):
+    """A provider-neutral request for one selected remote market."""
+
     correlation_id: UUID
     target: DataTarget
     source: DataSourceMetadata
+    sport: Identifier | None = None
+    event_id: Identifier | None = None
+    market: Identifier | None = None
