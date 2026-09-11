@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import UUID
 
 from django.contrib.auth.models import User
@@ -54,12 +55,32 @@ def _request(opportunity_id: str) -> BonusEngineRequest:
     )
 
 
+def _valid_revalidation(opportunity_id: str) -> SandboxRevalidationFixture:
+    return SandboxRevalidationFixture(
+        opportunity_id=opportunity_id,
+        outcome=RevalidationOutcome.VALID,
+        validated_at=NOW,
+    )
+
+
+def _successful_result(opportunity_id: str) -> SandboxResultFixture:
+    return SandboxResultFixture(
+        opportunity_id=opportunity_id,
+        status=ResultStatus.SUCCESS,
+        observed_at=NOW,
+        result_reference="sandbox-result",
+    )
+
+
 def _handlers(
     opportunity_id: str,
     outcome: RevalidationOutcome = RevalidationOutcome.VALID,
 ) -> ModeRequestHandlers:
     return ModeRequestHandlers(
-        simulation=SimulationSandboxRequestHandler(),
+        simulation=SimulationSandboxRequestHandler(
+            revalidation_fixtures=(_valid_revalidation(opportunity_id),),
+            result_fixtures=(_successful_result(opportunity_id),),
+        ),
         execution=ExecutionSandboxRequestHandler(
             revalidation_fixtures=(
                 SandboxRevalidationFixture(
@@ -69,14 +90,7 @@ def _handlers(
                     reason_code=None if outcome is RevalidationOutcome.VALID else "fixture_revalidation",
                 ),
             ),
-            result_fixtures=(
-                SandboxResultFixture(
-                    opportunity_id=opportunity_id,
-                    status=ResultStatus.SUCCESS,
-                    observed_at=NOW,
-                    result_reference="sandbox-result",
-                ),
-            ),
+            result_fixtures=(_successful_result(opportunity_id),),
         ),
     )
 
@@ -100,6 +114,16 @@ class Phase2OperabilityGateTests(TransactionTestCase):
             "/admin-area/gui-settings/",
             {"bonus": bonus, "sports_capital": sports_capital},
         )
+        self.assertEqual(response.status_code, 302)
+
+    def _approve(self, execution_id) -> None:
+        self.client.force_login(self.user)
+        with patch("qbet.workflow.approval.datetime") as approval_clock:
+            approval_clock.now.return_value = NOW
+            response = self.client.post(
+                f"/execution/approvals/{execution_id}/decision/",
+                {"decision": "approve"},
+            )
         self.assertEqual(response.status_code, 302)
 
     def _coordinator(
@@ -156,7 +180,10 @@ class Phase2OperabilityGateTests(TransactionTestCase):
             scheduled_for=NOW,
             expires_at=NOW + timedelta(minutes=5),
         )
-        self.assertEqual({item.work.mode for item in scheduled}, {WorkflowMode.SIMULATION, WorkflowMode.EXECUTION})
+        self.assertEqual(
+            {item.work.mode for item in scheduled},
+            {WorkflowMode.SIMULATION, WorkflowMode.EXECUTION},
+        )
         execution_work = next(
             item for item in scheduled if item.work.mode is WorkflowMode.EXECUTION
         )
@@ -178,11 +205,7 @@ class Phase2OperabilityGateTests(TransactionTestCase):
         self.assertNotContains(approvals, "RequestHandler")
         self.assertNotContains(approvals, "PortfolioLedger")
 
-        approved = self.client.post(
-            f"/execution/approvals/{execution_work.work.id}/decision/",
-            {"decision": "approve"},
-        )
-        self.assertEqual(approved.status_code, 302)
+        self._approve(execution_work.work.id)
 
         recreated = self._coordinator(opportunity_id)
         (completed,) = recreated.dispatch_due(
@@ -281,12 +304,7 @@ class Phase2OperabilityGateTests(TransactionTestCase):
         (waiting,) = coordinator.dispatch_due(now=NOW, owner=self.user.get_username())
         self.assertEqual(waiting.state, WorkState.RECHECK)
 
-        self.client.force_login(self.user)
-        approved = self.client.post(
-            f"/execution/approvals/{scheduled.work.id}/decision/",
-            {"decision": "approve"},
-        )
-        self.assertEqual(approved.status_code, 302)
+        self._approve(scheduled.work.id)
 
         rejected = self._coordinator(
             opportunity_id,
@@ -314,7 +332,8 @@ class Phase2OperabilityGateTests(TransactionTestCase):
         self.assertTrue(
             any(
                 str(item.status) in {"rejected", "cancelled", "reject"}
-                or str(item.reason_code or "") in {"fixture_revalidation", "revalidation_rejected"}
+                or str(item.reason_code or "")
+                in {"fixture_revalidation", "revalidation_rejected"}
                 for item in records
             )
         )
