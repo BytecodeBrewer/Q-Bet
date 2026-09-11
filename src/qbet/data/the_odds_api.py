@@ -110,8 +110,9 @@ class TheOddsApiAdapter:
         url = f"{_BASE_URL}/sports/{request.sport}/events/{request.event_id}/odds?{query}"
         try:
             status, _, response = self._http_get(url)
-        except (HTTPError, URLError, OSError) as error:
-            raise TheOddsApiError("The Odds API request failed") from error
+        except (HTTPError, URLError, OSError):
+            # urllib exceptions may retain the complete request URL, including apiKey.
+            raise TheOddsApiError("The Odds API request failed") from None
         if status != 200:
             raise TheOddsApiError(f"The Odds API returned HTTP {status}")
         try:
@@ -144,6 +145,8 @@ class TheOddsApiAdapter:
             available_stake=self._available_stake,
         )
         observed_at = max(offer.observed_at for offer in offers)
+        if observed_at > fetched_at:
+            raise TheOddsApiPayloadError("The Odds API last_update must not be in the future")
         freshness = (
             FreshnessStatus.FRESH
             if fetched_at - observed_at <= self._max_snapshot_age
