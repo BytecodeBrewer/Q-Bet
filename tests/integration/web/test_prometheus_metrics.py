@@ -8,13 +8,23 @@ from qbet.monitoring import MonitoringLevel, MonitoringRecord
 from qbet.storage.models import ModeWorkQueueRow
 from qbet.storage.monitoring import PostgresMonitoringRepository
 
+_METRICS_TOKEN = "test-metrics-token"
+
 
 class PrometheusMetricsTests(TestCase):
-    @override_settings(QBET_METRICS_ENABLED=False)
+    @override_settings(QBET_METRICS_ENABLED=False, QBET_METRICS_TOKEN=_METRICS_TOKEN)
     def test_metrics_endpoint_is_disabled_by_default(self) -> None:
         self.assertEqual(self.client.get("/metrics/").status_code, 404)
 
-    @override_settings(QBET_METRICS_ENABLED=True)
+    @override_settings(QBET_METRICS_ENABLED=True, QBET_METRICS_TOKEN=_METRICS_TOKEN)
+    def test_metrics_endpoint_requires_configured_bearer_token(self) -> None:
+        self.assertEqual(self.client.get("/metrics/").status_code, 404)
+        self.assertEqual(
+            self.client.get("/metrics/", HTTP_AUTHORIZATION="Bearer wrong-token").status_code,
+            404,
+        )
+
+    @override_settings(QBET_METRICS_ENABLED=True, QBET_METRICS_TOKEN=_METRICS_TOKEN)
     def test_metrics_are_low_cardinality_projections_of_durable_state(self) -> None:
         now = timezone.now()
         correlation_id = UUID("12345678-1234-5678-1234-567812345678")
@@ -61,7 +71,10 @@ class PrometheusMetricsTests(TestCase):
             payload={"opportunity_id": "private-opportunity"},
         )
 
-        response = self.client.get("/metrics/")
+        response = self.client.get(
+            "/metrics/",
+            HTTP_AUTHORIZATION=f"Bearer {_METRICS_TOKEN}",
+        )
         body = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
