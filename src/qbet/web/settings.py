@@ -135,6 +135,7 @@ DATABASES = {
     )
 }
 QBET_SIMULATION_MODE_ENABLED = _environment_flag("QBET_SIMULATION_MODE_ENABLED")
+QBET_METRICS_ENABLED = _environment_flag("QBET_METRICS_ENABLED")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
