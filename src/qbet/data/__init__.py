@@ -13,6 +13,13 @@ from .models import (
     SourceTransport,
 )
 from .protocol import ApiAdapter, DataCollector
+from .the_odds_api import (
+    THE_ODDS_API_PROVIDER_ID,
+    TheOddsApiAdapter,
+    TheOddsApiConfigurationError,
+    TheOddsApiError,
+    TheOddsApiPayloadError,
+)
 
 __all__ = [
     "ApiAdapter",
@@ -27,4 +34,9 @@ __all__ = [
     "NormalizedOffer",
     "OfferAvailability",
     "SourceTransport",
+    "THE_ODDS_API_PROVIDER_ID",
+    "TheOddsApiAdapter",
+    "TheOddsApiConfigurationError",
+    "TheOddsApiError",
+    "TheOddsApiPayloadError",
 ]
