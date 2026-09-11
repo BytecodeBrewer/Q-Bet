@@ -25,10 +25,12 @@ def render_prometheus_metrics(
     records: Iterable[MonitoringRecord],
     queue_counts: Mapping[tuple[str, str], int],
 ) -> str:
-    """Render non-authoritative operational telemetry from persisted Q-Bet state.
+    """Render a bounded, non-authoritative operational telemetry snapshot.
 
-    Correlation IDs, user/work/opportunity identifiers, references, raw payloads, and
-    provider/account identifiers are deliberately excluded from labels and metric values.
+    The supplied records represent a rolling observation window, so event and duration
+    counts are gauges rather than monotonic process counters. Correlation IDs,
+    user/work/opportunity identifiers, references, raw payloads, and provider/account
+    identifiers are deliberately excluded from labels and metric values.
     """
 
     event_counts: Counter[tuple[str, str, str, str, str]] = Counter()
@@ -44,7 +46,7 @@ def render_prometheus_metrics(
         level = record.level.value
         event_counts[(engine, mode, stage, status, level)] += 1
 
-        if mode in {"simulation", "execution"}:
+        if record.event_type == "lifecycle" and mode in {"simulation", "execution"}:
             lifecycle_counts[(mode, status)] += 1
         if level in {"warning", "error"}:
             issue_counts[(level, stage)] += 1
@@ -52,42 +54,42 @@ def render_prometheus_metrics(
             durations[(engine, mode, stage)].append(record.duration_ms)
 
     lines = [
-        "# HELP qbet_monitoring_events_total Persisted operational Monitoring events.",
-        "# TYPE qbet_monitoring_events_total counter",
+        "# HELP qbet_monitoring_events_window Persisted Monitoring events in the scrape window.",
+        "# TYPE qbet_monitoring_events_window gauge",
     ]
     for (engine, mode, stage, status, level), count in sorted(event_counts.items()):
         lines.append(
-            "qbet_monitoring_events_total"
+            "qbet_monitoring_events_window"
             + _labels(engine=engine, mode=mode, stage=stage, status=status, level=level)
             + f" {count}"
         )
 
     lines.extend(
         [
-            "# HELP qbet_lifecycle_events_total Simulation/Execution lifecycle outcomes.",
-            "# TYPE qbet_lifecycle_events_total counter",
+            "# HELP qbet_lifecycle_outcomes_window Lifecycle outcomes in the scrape window.",
+            "# TYPE qbet_lifecycle_outcomes_window gauge",
         ]
     )
     for (mode, status), count in sorted(lifecycle_counts.items()):
         lines.append(
-            "qbet_lifecycle_events_total" + _labels(mode=mode, status=status) + f" {count}"
+            "qbet_lifecycle_outcomes_window" + _labels(mode=mode, status=status) + f" {count}"
         )
 
     lines.extend(
         [
-            "# HELP qbet_operational_issues_total Warning and error observations by stage.",
-            "# TYPE qbet_operational_issues_total counter",
+            "# HELP qbet_operational_issues_window Warnings/errors in the scrape window.",
+            "# TYPE qbet_operational_issues_window gauge",
         ]
     )
     for (level, stage), count in sorted(issue_counts.items()):
         lines.append(
-            "qbet_operational_issues_total" + _labels(level=level, stage=stage) + f" {count}"
+            "qbet_operational_issues_window" + _labels(level=level, stage=stage) + f" {count}"
         )
 
     lines.extend(
         [
-            "# HELP qbet_stage_duration_ms Persisted stage duration distribution in milliseconds.",
-            "# TYPE qbet_stage_duration_ms histogram",
+            "# HELP qbet_stage_duration_observations_ms Bounded stage-duration distribution.",
+            "# TYPE qbet_stage_duration_observations_ms gauge",
         ]
     )
     for (engine, mode, stage), values in sorted(durations.items()):
@@ -95,20 +97,14 @@ def render_prometheus_metrics(
         for bucket in _DURATION_BUCKETS_MS:
             bucket_count = sum(value <= bucket for value in values)
             lines.append(
-                "qbet_stage_duration_ms_bucket"
+                "qbet_stage_duration_observations_ms"
                 + _labels(**base_labels, le=str(bucket))
                 + f" {bucket_count}"
             )
         lines.append(
-            "qbet_stage_duration_ms_bucket"
+            "qbet_stage_duration_observations_ms"
             + _labels(**base_labels, le="+Inf")
             + f" {len(values)}"
-        )
-        lines.append(
-            "qbet_stage_duration_ms_sum" + _labels(**base_labels) + f" {sum(values)}"
-        )
-        lines.append(
-            "qbet_stage_duration_ms_count" + _labels(**base_labels) + f" {len(values)}"
         )
 
     lines.extend(
