@@ -5,11 +5,13 @@ from django.urls import path
 from qbet.web import views
 from qbet.web.engine_runtime import engine_runtime_control
 from qbet.web.execution_approvals import execution_approval_decision, execution_approvals
+from qbet.web.metrics import prometheus_metrics
 from qbet.web.routing_settings import routing_settings
 
 urlpatterns = [
     path("", views.home, name="home"),
     path("health/", views.health, name="health"),
+    path("metrics/", prometheus_metrics, name="metrics"),
     path("register/", views.register, name="register"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
