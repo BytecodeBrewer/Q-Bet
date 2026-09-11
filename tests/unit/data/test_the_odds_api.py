@@ -157,6 +157,33 @@ def test_adapter_requires_a_complete_provider_neutral_selection() -> None:
         adapter(payload()).fetch(request(event_id=None))
 
 
+def test_adapter_encodes_provider_neutral_path_identifiers() -> None:
+    captured_urls: list[str] = []
+    provider_request = request(
+        sport="soccer/europe?unexpected#fragment",
+        event_id="event/123?unexpected#fragment%2F",
+    )
+    provider_payload = payload(
+        id=provider_request.event_id,
+        sport_key=provider_request.sport,
+    )
+    value = TheOddsApiAdapter(
+        api_key="configured-for-test",
+        clock=lambda: NOW,
+        http_get=lambda url: (
+            captured_urls.append(url) or 200,
+            {},
+            json.dumps(provider_payload).encode(),
+        ),
+    )
+
+    value.fetch(provider_request)
+
+    assert len(captured_urls) == 1
+    assert "/sports/soccer%2Feurope%3Funexpected%23fragment/" in captured_urls[0]
+    assert "/events/event%2F123%3Funexpected%23fragment%252F/odds?" in captured_urls[0]
+
+
 def test_transport_failure_does_not_chain_or_expose_the_api_key() -> None:
     api_key = "test-key-that-must-not-leak"
 

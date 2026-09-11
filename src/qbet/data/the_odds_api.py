@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import urlopen
 
 from qbet.data.models import (
@@ -107,7 +107,9 @@ class TheOddsApiAdapter:
                 "dateFormat": "iso",
             }
         )
-        url = f"{_BASE_URL}/sports/{request.sport}/events/{request.event_id}/odds?{query}"
+        sport = quote(request.sport, safe="")
+        event_id = quote(request.event_id, safe="")
+        url = f"{_BASE_URL}/sports/{sport}/events/{event_id}/odds?{query}"
         try:
             status, _, response = self._http_get(url)
         except (HTTPError, URLError, OSError):
