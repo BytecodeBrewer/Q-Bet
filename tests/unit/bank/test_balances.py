@@ -154,15 +154,35 @@ def test_currency_and_identity_mismatches_are_rejected(
     assert outcome.reason_code == reason_code
 
 
-@pytest.mark.parametrize("amount", [Decimal("-0.01"), Decimal("Infinity"), Decimal("NaN")])
+@pytest.mark.parametrize("amount", [Decimal("-0.01"), Decimal("Infinity"), Decimal("NaN"), 123.45])
 def test_invalid_balance_amounts_are_rejected(amount: Decimal) -> None:
     with pytest.raises(ValueError):
         balance(available_balance=amount)
 
 
-def test_account_references_must_be_redacted() -> None:
-    with pytest.raises(ValueError, match="redacted"):
-        request(account_reference="DE89370400440532013000")
+@pytest.mark.parametrize(
+    "account_reference",
+    [
+        "DE89370400440532013000",
+        "DE89370400440532013000*",
+        "DE89370400440532013000-***1234",
+        "account-***12345",
+    ],
+)
+def test_account_references_must_use_a_bounded_opaque_mask(account_reference: str) -> None:
+    with pytest.raises(ValueError, match="opaque-label"):
+        request(account_reference=account_reference)
+
+
+def test_float_provider_payload_is_rejected_before_a_consumer_uses_it() -> None:
+    payload = available_response().model_dump(mode="python")
+    assert isinstance(payload["balance"], dict)
+    payload["balance"]["available_balance"] = 123.45
+
+    outcome = service(payload).read_balance(request())
+
+    assert outcome.status is BankBalanceStatus.INVALID
+    assert outcome.reason_code == "balance_response_invalid"
 
 
 def test_missing_fixture_is_unavailable_and_fixture_replay_is_deterministic() -> None:

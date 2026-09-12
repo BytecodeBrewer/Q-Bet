@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+import re
 from typing import Protocol, TypeAlias, runtime_checkable
 from uuid import UUID
 
@@ -13,6 +14,9 @@ from pydantic import ValidationError, field_validator, model_validator
 
 from qbet.data.models import DataSourceMetadata, FreshnessStatus
 from qbet.domain.models import Currency, DomainModel, Identifier, NonNegativeDecimal
+
+
+_REDACTED_ACCOUNT_REFERENCE = re.compile(r"^[a-z][a-z_-]{0,23}-\*{3}[0-9]{4}$", re.IGNORECASE)
 
 
 class BankBalanceStatus(StrEnum):
@@ -36,8 +40,8 @@ class BankBalanceRequest(DomainModel):
     @field_validator("account_reference")
     @classmethod
     def account_reference_is_redacted(cls, value: str) -> str:
-        if "*" not in value:
-            raise ValueError("account_reference must be redacted")
+        if not _REDACTED_ACCOUNT_REFERENCE.fullmatch(value):
+            raise ValueError("account_reference must use the opaque-label-***1234 format")
         return value
 
     @field_validator("fresh_after")
@@ -63,8 +67,15 @@ class BankBalance(DomainModel):
     @field_validator("account_reference")
     @classmethod
     def account_reference_is_redacted(cls, value: str) -> str:
-        if "*" not in value:
-            raise ValueError("account_reference must be redacted")
+        if not _REDACTED_ACCOUNT_REFERENCE.fullmatch(value):
+            raise ValueError("account_reference must use the opaque-label-***1234 format")
+        return value
+
+    @field_validator("available_balance", "current_balance", mode="before")
+    @classmethod
+    def balances_are_not_binary_floats(cls, value: object) -> object:
+        if isinstance(value, float):
+            raise ValueError("balance amounts must not use binary floating point")
         return value
 
     @field_validator("available_balance", "current_balance")
@@ -144,8 +155,8 @@ class BankBalanceFixture(DomainModel):
     @field_validator("account_reference")
     @classmethod
     def account_reference_is_redacted(cls, value: str) -> str:
-        if "*" not in value:
-            raise ValueError("account_reference must be redacted")
+        if not _REDACTED_ACCOUNT_REFERENCE.fullmatch(value):
+            raise ValueError("account_reference must use the opaque-label-***1234 format")
         return value
 
 
