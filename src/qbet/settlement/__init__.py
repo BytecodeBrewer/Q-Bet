@@ -1,6 +1,7 @@
 """Validated settlement is the only dispatch-result capital writer."""
 
 from qbet.domain.ledger import LedgerCommand, LedgerOperation
+from qbet.data.results import NormalizedMatchResult, ResultCollectionOutcome
 from qbet.execution.models import ExecutionRecord, Lifecycle, SandboxResult
 from qbet.execution.sandbox import SandboxRequestHandler
 from qbet.ledger import PortfolioLedger
@@ -30,9 +31,42 @@ def transition(record: ExecutionRecord, state: Lifecycle, **changes) -> Executio
 
 
 class SettlementService:
+    @staticmethod
+    def collected_result_for_settlement(
+        outcome: ResultCollectionOutcome,
+    ) -> NormalizedMatchResult:
+        """Admit only a validated available collection result to post-event settlement."""
+
+        return outcome.require_result_for_settlement_or_reporting()
+
+    @classmethod
+    def validates_collected_result(
+        cls,
+        record: ExecutionRecord,
+        outcome: ResultCollectionOutcome,
+    ) -> NormalizedMatchResult:
+        """Require a collected result to belong to this execution before settlement."""
+
+        result = cls.collected_result_for_settlement(outcome)
+        work = record.proposal.work
+        if (
+            result.match_id != work.opportunity_id
+            or result.execution_id != str(work.id)
+            or result.correlation_id != work.correlation_id
+        ):
+            raise ValueError("collected_result_identity_mismatch")
+        return result
+
     def settle(
-        self, record: ExecutionRecord, ledger: PortfolioLedger, result: SandboxResult
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+        result: SandboxResult,
+        *,
+        collected_result: ResultCollectionOutcome | None = None,
     ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        if collected_result is not None:
+            self.validates_collected_result(record, collected_result)
         if record.state in {
             Lifecycle.SETTLED,
             Lifecycle.FAILED,

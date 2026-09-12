@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Protocol
 
+from qbet.data.results import ResultCollectionOutcome
 from qbet.domain.ledger import LedgerOperation
 from qbet.execution.models import ApprovedExecutionRequest, ExecutionRecord, Lifecycle
 from qbet.execution.sandbox import (
@@ -148,6 +149,7 @@ class ExecutionService:
         ledger: PortfolioLedger,
         *,
         now: datetime,
+        collected_result: ResultCollectionOutcome | None = None,
     ) -> tuple[ExecutionRecord, PortfolioLedger]:
         """Resume an explicitly approved record after the workflow revalidation gate."""
 
@@ -231,6 +233,7 @@ class ExecutionService:
                 record,
                 ledger,
                 record.result,
+                collected_result=collected_result,
             )
             return self._persist(settled_record, settled_ledger)
 
@@ -245,6 +248,7 @@ class ExecutionService:
         owner: str,
         approve: bool,
         now: datetime,
+        collected_result: ResultCollectionOutcome | None = None,
     ) -> tuple[ExecutionRecord, PortfolioLedger]:
         """Backward-compatible one-call deterministic decision/dispatch helper."""
 
@@ -352,6 +356,7 @@ class ExecutionService:
                 record,
                 ledger,
                 record.result,
+                collected_result=collected_result,
             )
             return self._persist(settled_record, settled_ledger)
 
