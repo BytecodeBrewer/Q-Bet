@@ -22,6 +22,16 @@ from .polling import (
     SmartPollingConfiguration,
     SmartPollingPolicy,
 )
+from .results import (
+    DeterministicResultCollector,
+    DeterministicResultFixture,
+    NormalizedMatchResult,
+    ResultAvailability,
+    ResultCollectionOutcome,
+    ResultCollectionRequest,
+    ResultCollectionStatus,
+    ResultCollector,
+)
 from .the_odds_api import (
     THE_ODDS_API_PROVIDER_ID,
     TheOddsApiAdapter,
