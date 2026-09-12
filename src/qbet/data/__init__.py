@@ -13,6 +13,32 @@ from .models import (
     SourceTransport,
 )
 from .protocol import ApiAdapter, DataCollector
+from .polling import (
+    PollingDecision,
+    PollingOutcome,
+    PollingRequest,
+    PollingSchedule,
+    PollingTarget,
+    SmartPollingConfiguration,
+    SmartPollingPolicy,
+)
+from .results import (
+    DeterministicResultCollector,
+    DeterministicResultFixture,
+    NormalizedMatchResult,
+    ResultAvailability,
+    ResultCollectionOutcome,
+    ResultCollectionRequest,
+    ResultCollectionStatus,
+    ResultCollector,
+)
+from .the_odds_api import (
+    THE_ODDS_API_PROVIDER_ID,
+    TheOddsApiAdapter,
+    TheOddsApiConfigurationError,
+    TheOddsApiError,
+    TheOddsApiPayloadError,
+)
 
 __all__ = [
     "ApiAdapter",
@@ -21,10 +47,30 @@ __all__ = [
     "DataCollector",
     "DataSourceMetadata",
     "DataTarget",
+    "DeterministicResultCollector",
+    "DeterministicResultFixture",
     "DeterministicInMemoryDataSource",
     "FreshnessStatus",
     "NormalizedMarketSnapshot",
+    "NormalizedMatchResult",
     "NormalizedOffer",
     "OfferAvailability",
+    "PollingDecision",
+    "PollingOutcome",
+    "PollingRequest",
+    "PollingSchedule",
+    "PollingTarget",
+    "SmartPollingConfiguration",
+    "SmartPollingPolicy",
     "SourceTransport",
+    "ResultAvailability",
+    "ResultCollectionOutcome",
+    "ResultCollectionRequest",
+    "ResultCollectionStatus",
+    "ResultCollector",
+    "THE_ODDS_API_PROVIDER_ID",
+    "TheOddsApiAdapter",
+    "TheOddsApiConfigurationError",
+    "TheOddsApiError",
+    "TheOddsApiPayloadError",
 ]
