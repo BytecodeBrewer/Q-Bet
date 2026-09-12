@@ -35,30 +35,33 @@ class PollingRequest(DomainModel):
     match_id: Identifier
     correlation_id: UUID
     fetched_at: AwareDatetime
-    freshness_deadline: AwareDatetime
     event_starts_at: AwareDatetime
     next_poll_at: AwareDatetime
     attempt: int = Field(ge=0)
     result_available: bool = False
+    result_partial: bool = False
     terminal: bool = False
     mode: Identifier
     engine: Identifier
 
-    @model_validator(mode="after")
-    def validates_timing(self) -> "PollingRequest":
-        if self.fetched_at > self.freshness_deadline:
-            raise ValueError("fetched_at must not be after freshness_deadline")
-        return self
-
     @property
-    def key(self) -> tuple[PollingTarget, str, UUID]:
-        return self.target, self.match_id, self.correlation_id
+    def key(self) -> tuple[PollingTarget, str, str, str, UUID, str, str]:
+        return (
+            self.target,
+            self.source.provider_id,
+            self.source.source_id,
+            self.match_id,
+            self.correlation_id,
+            self.mode,
+            self.engine,
+        )
 
 
 class SmartPollingConfiguration(DomainModel):
     """Bounded deterministic intervals supplied by application configuration."""
 
     market_interval: timedelta = timedelta(minutes=5)
+    market_freshness_window: timedelta = timedelta(minutes=5)
     result_retry_interval: timedelta = timedelta(minutes=10)
     max_attempts: int = Field(default=3, ge=1)
     latest_market_poll_before_event: timedelta = timedelta(minutes=1)
@@ -68,6 +71,7 @@ class SmartPollingConfiguration(DomainModel):
         if (
             min(
                 self.market_interval,
+                self.market_freshness_window,
                 self.result_retry_interval,
                 self.latest_market_poll_before_event,
             )
@@ -84,6 +88,7 @@ class PollingDecision(DomainModel):
     outcome: PollingOutcome
     reason: Identifier
     scheduled_for: AwareDatetime | None = None
+    freshness_deadline: AwareDatetime | None = None
 
     @model_validator(mode="after")
     def validates_schedule(self) -> "PollingDecision":
@@ -120,11 +125,13 @@ class SmartPollingPolicy:
         return self._result_decision(request)
 
     def _market_decision(self, request: PollingRequest) -> PollingDecision:
-        if request.freshness_deadline > request.next_poll_at:
+        freshness_deadline = request.fetched_at + self._configuration.market_freshness_window
+        if freshness_deadline > request.next_poll_at:
             return PollingDecision(
                 request=request,
                 outcome=PollingOutcome.SKIPPED_FRESH,
                 reason="market_data_fresh",
+                freshness_deadline=freshness_deadline,
             )
         latest = request.event_starts_at - self._configuration.latest_market_poll_before_event
         if request.next_poll_at >= latest:
@@ -132,12 +139,14 @@ class SmartPollingPolicy:
                 request=request,
                 outcome=PollingOutcome.EXPIRED,
                 reason="market_event_window_closed",
+                freshness_deadline=freshness_deadline,
             )
         return PollingDecision(
             request=request,
             outcome=PollingOutcome.SCHEDULED,
             reason="market_refresh_due",
             scheduled_for=min(request.next_poll_at + self._configuration.market_interval, latest),
+            freshness_deadline=freshness_deadline,
         )
 
     def _result_decision(self, request: PollingRequest) -> PollingDecision:
@@ -150,7 +159,7 @@ class SmartPollingPolicy:
         return PollingDecision(
             request=request,
             outcome=PollingOutcome.SCHEDULED,
-            reason="result_retry_due",
+            reason="partial_result_retry" if request.result_partial else "result_retry_due",
             scheduled_for=request.next_poll_at + self._configuration.result_retry_interval,
         )
 
@@ -159,7 +168,9 @@ class PollingSchedule:
     """Small application queue boundary that never dispatches collectors itself."""
 
     def __init__(self) -> None:
-        self._entries: dict[tuple[PollingTarget, str, UUID], PollingDecision] = {}
+        self._entries: dict[
+            tuple[PollingTarget, str, str, str, UUID, str, str], PollingDecision
+        ] = {}
 
     def schedule(self, decision: PollingDecision) -> PollingDecision:
         if decision.outcome is not PollingOutcome.SCHEDULED:
