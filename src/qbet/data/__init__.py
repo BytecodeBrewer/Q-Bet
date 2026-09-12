@@ -13,6 +13,15 @@ from .models import (
     SourceTransport,
 )
 from .protocol import ApiAdapter, DataCollector
+from .polling import (
+    PollingDecision,
+    PollingOutcome,
+    PollingRequest,
+    PollingSchedule,
+    PollingTarget,
+    SmartPollingConfiguration,
+    SmartPollingPolicy,
+)
 from .results import (
     DeterministicResultCollector,
     DeterministicResultFixture,
@@ -46,6 +55,13 @@ __all__ = [
     "NormalizedMatchResult",
     "NormalizedOffer",
     "OfferAvailability",
+    "PollingDecision",
+    "PollingOutcome",
+    "PollingRequest",
+    "PollingSchedule",
+    "PollingTarget",
+    "SmartPollingConfiguration",
+    "SmartPollingPolicy",
     "SourceTransport",
     "ResultAvailability",
     "ResultCollectionOutcome",
