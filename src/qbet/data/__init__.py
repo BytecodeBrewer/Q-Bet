@@ -13,7 +13,6 @@ from .models import (
     SourceTransport,
 )
 from .protocol import ApiAdapter, DataCollector
-<<<<<<< HEAD
 from .polling import (
     PollingDecision,
     PollingOutcome,
