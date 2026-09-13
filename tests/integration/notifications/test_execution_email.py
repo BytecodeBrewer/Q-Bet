@@ -62,6 +62,11 @@ def coordinator(
                     opportunity_id=opportunity_id,
                     outcome=revalidation_outcome,
                     validated_at=NOW,
+                    reason_code=(
+                        None
+                        if revalidation_outcome is RevalidationOutcome.VALID
+                        else "fixture_revalidation"
+                    ),
                 ),
             ),
             result_fixtures=(
@@ -78,6 +83,20 @@ def coordinator(
         RoutingConfiguration(bonus=EngineModes(execution=True)),
         queue_repository=ModeWorkQueueRepository(),
         mode_request_handlers=handlers,
+    )
+
+
+def dispatch_after_approval(
+    dispatcher: ModeDispatchCoordinator,
+    *,
+    work_id: UUID,
+    owner: str,
+):
+    queued = ModeWorkQueueRepository().load(work_id)
+    assert queued is not None
+    return dispatcher.dispatch_due(
+        now=queued.scheduled_for + timedelta(seconds=1),
+        owner=owner,
     )
 
 
@@ -121,7 +140,11 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
 
         self.assertEqual(NotificationTaskRow.objects.count(), 0)
         self.assertEqual(len(getattr(mail, "outbox", [])), 0)
-        dispatcher.dispatch_due(now=NOW + timedelta(seconds=1), owner=user.get_username())
+        dispatch_after_approval(
+            dispatcher,
+            work_id=scheduled.work.id,
+            owner=user.get_username(),
+        )
 
         self.assertEqual(first.status_code, 302)
         self.assertEqual(repeated.status_code, 302)
@@ -159,7 +182,11 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
             {"decision": "approve"},
         )
 
-        dispatcher.dispatch_due(now=NOW + timedelta(seconds=1), owner=user.get_username())
+        dispatch_after_approval(
+            dispatcher,
+            work_id=scheduled.work.id,
+            owner=user.get_username(),
+        )
 
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("Hello fallback-user", mail.outbox[0].body)
@@ -179,7 +206,11 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
             {"decision": "approve"},
         )
 
-        dispatcher.dispatch_due(now=NOW + timedelta(seconds=1), owner=user.get_username())
+        dispatch_after_approval(
+            dispatcher,
+            work_id=scheduled.work.id,
+            owner=user.get_username(),
+        )
 
         self.assertEqual(response.status_code, 302)
         task = NotificationTaskRow.objects.get()
@@ -203,10 +234,14 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
             reverse("execution-approval-decision", args=[scheduled.work.id]),
             {"decision": "approve"},
         )
-        outcome = coordinator(
-            "revalidation-failed-opportunity",
-            revalidation_outcome=RevalidationOutcome.REJECTED,
-        ).dispatch_due(now=NOW + timedelta(seconds=1), owner=user.get_username())
+        outcome = dispatch_after_approval(
+            coordinator(
+                "revalidation-failed-opportunity",
+                revalidation_outcome=RevalidationOutcome.REJECTED,
+            ),
+            work_id=scheduled.work.id,
+            owner=user.get_username(),
+        )
 
         self.assertEqual(outcome[0].state.value, "cancelled")
         self.assertEqual(NotificationTaskRow.objects.count(), 0)
