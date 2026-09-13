@@ -154,6 +154,12 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "home"
 
+EMAIL_BACKEND = os.environ.get(
+    "QBET_EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+DEFAULT_FROM_EMAIL = os.environ.get("QBET_DEFAULT_FROM_EMAIL", "qbet@localhost")
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
