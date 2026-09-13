@@ -19,20 +19,26 @@ class NotificationRecipientStatus(DomainModel):
 def notification_recipient_status(
     *,
     user_id: str,
-    first_name: str,
-    last_name: str,
     email: str,
+    first_name: str = "",
+    last_name: str = "",
+    display_name: str = "",
 ) -> NotificationRecipientStatus:
-    """Return a safe, typed delivery-readiness projection for one user profile."""
+    """Return the canonical typed delivery-readiness projection for one recipient."""
 
     normalized_email = email.strip()
-    display_name = " ".join(part for part in (first_name.strip(), last_name.strip()) if part)
-    if not display_name:
-        display_name = user_id
+    normalized_display_name = display_name.strip()
+    if not normalized_display_name:
+        normalized_display_name = " ".join(
+            part for part in (first_name.strip(), last_name.strip()) if part
+        )
+    if not normalized_display_name:
+        normalized_display_name = user_id
+
     if not normalized_email:
         return NotificationRecipientStatus(
             user_id=user_id,
-            display_name=display_name,
+            display_name=normalized_display_name,
             ready=False,
             reason_code="recipient_email_missing",
         )
@@ -41,14 +47,14 @@ def notification_recipient_status(
     except ValidationError:
         return NotificationRecipientStatus(
             user_id=user_id,
-            display_name=display_name,
+            display_name=normalized_display_name,
             email=normalized_email,
             ready=False,
             reason_code="recipient_email_invalid",
         )
     return NotificationRecipientStatus(
         user_id=user_id,
-        display_name=display_name,
+        display_name=normalized_display_name,
         email=normalized_email,
         ready=True,
     )
