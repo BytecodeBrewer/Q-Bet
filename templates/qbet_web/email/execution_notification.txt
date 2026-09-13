@@ -1,0 +1,15 @@
+Hello {{ notification.recipient.display_name }},
+
+Q-Bet has an approved {{ notification.strategy }} opportunity that requires your manual action.
+
+Opportunity: {{ notification.opportunity_id }}
+Engine: {{ notification.engine }}
+Action window starts: {{ notification.action_starts_at }}
+Action deadline: {{ notification.action_deadline }}
+
+Actions:
+{% for instruction in notification.instructions %}- {{ instruction.provider }}: {{ instruction.amount }} {{ instruction.currency }} (offer {{ instruction.offer_id }})
+{% endfor %}
+Reference: {{ notification.correlation_id }}
+
+This is an instruction notification only. Q-Bet has not placed a bet or moved money on your behalf.

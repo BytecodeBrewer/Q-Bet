@@ -12,7 +12,7 @@ The current system includes:
 
 - `BonusEngine` and `SportsCapitalEngine` with Decimal-based calculation logic for matched betting, arbitrage, dutching, fees, tax, rounding, stake and liability constraints
 - a connected workflow from engine evaluation through risk, liquidity, Simulation or controlled Execution
-- persistent PostgreSQL-backed workflow, approval, ledger, routing, reporting, and monitoring state
+- persistent PostgreSQL-backed workflow, approval, ledger, routing, reporting, monitoring, and notification state
 - isolated Simulation and Execution capital/state boundaries
 - explicit user approval before deterministic Execution dispatch
 - restart-safe and replay-safe workflow handling with idempotent settlement
@@ -21,6 +21,7 @@ The current system includes:
 - bounded CSV/JSON Monitoring exports and correlated workflow reconstruction
 - connected end-to-end coverage for the complete GUI-to-workflow path
 - a real read-only The Odds API adapter, provider-neutral market/result contracts, a deterministic read-only bank-balance boundary, and an approval-gated funding-proposal sandbox
+- approval-gated, idempotent Execution notifications with a replaceable Django email transport and deterministic no-network test adapter
 - CI/CD with Ruff, Pyright, pytest, Django checks, package builds, PostgreSQL-backed tests, and gated Vercel previews
 
 Still under development are broader real-provider coverage, live execution integrations, account/bank connectivity, additional engines, and the later multi-user/cloud execution model.

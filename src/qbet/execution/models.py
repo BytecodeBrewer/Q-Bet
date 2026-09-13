@@ -35,6 +35,8 @@ class ApprovedExecutionRequest(DomainModel):
     proposal: ExecutionProposal
     approved_by: str = Field(min_length=1)
     approved_at: AwareDatetime
+    notification_email: str = ""
+    notification_display_name: str = ""
 
 
 class SandboxResult(DomainModel):

@@ -60,6 +60,8 @@ class ExecutionApprovalService:
         actor: str,
         approve: bool,
         now: datetime | None = None,
+        notification_email: str = "",
+        notification_display_name: str = "",
     ) -> ExecutionRecord:
         decision_time = now or datetime.now(UTC)
         with transaction.atomic():
@@ -85,6 +87,8 @@ class ExecutionApprovalService:
                 owner=owner,
                 approve=approve,
                 now=decision_time,
+                notification_email=notification_email,
+                notification_display_name=notification_display_name,
             )
 
             if decided.state is Lifecycle.APPROVED:
