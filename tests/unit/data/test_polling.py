@@ -121,3 +121,15 @@ def test_schedule_preserves_mode_engine_and_source_isolation() -> None:
     assert schedule.schedule(execution).outcome is PollingOutcome.SCHEDULED
     assert schedule.schedule(other_engine).outcome is PollingOutcome.SCHEDULED
     assert len(schedule.entries()) == 3
+
+
+def test_schedule_allows_rescheduling_after_completion() -> None:
+    policy = SmartPollingPolicy()
+    schedule = PollingSchedule()
+    first = policy.decide(request(PollingTarget.MARKET))
+    later = policy.decide(request(PollingTarget.MARKET, next_poll_at=NOW + timedelta(minutes=15)))
+
+    assert schedule.schedule(first).outcome is PollingOutcome.SCHEDULED
+    schedule.complete(first.request)
+    assert schedule.schedule(later).outcome is PollingOutcome.SCHEDULED
+    assert schedule.entries() == (later,)

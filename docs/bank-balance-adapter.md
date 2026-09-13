@@ -9,7 +9,7 @@ identifier cannot be carried through the domain models. It returns a normalized
 
 An official bank adapter implements `BankBalanceProvider.read_balance(request)`. Provider
 credentials, OAuth handling, account identifiers, transport clients, and raw response payloads
-remain inside that adapter''s infrastructure configuration. They do not belong in `BankBalance`,
+remain inside that adapter's infrastructure configuration. They do not belong in `BankBalance`,
 requests, outcomes, logs, or persistence models.
 
 The boundary contains no transfer, deposit, withdrawal, top-up, reservation, order, or ledger

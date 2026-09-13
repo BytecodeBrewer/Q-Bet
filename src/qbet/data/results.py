@@ -89,6 +89,7 @@ class ResultCollectionOutcome(DomainModel):
                 self.result is None
                 or self.result.availability is not ResultAvailability.AVAILABLE
                 or self.result.provider_outcome is None
+                or not _matches_request(self.result, self.request)
                 or self.reason_code is not None
             ):
                 raise ValueError("available collection outcomes require an available result only")
@@ -121,12 +122,17 @@ class ResultCollector(Protocol):
 class DeterministicResultFixture(DomainModel):
     """Fixture-backed provider response for deterministic result collection tests."""
 
+    match_id: Identifier | None = None
     result: NormalizedMatchResult | None = None
     status: ResultCollectionStatus = ResultCollectionStatus.AVAILABLE
     reason_code: Identifier | None = None
 
     @model_validator(mode="after")
     def validates_fixture_contract(self) -> "DeterministicResultFixture":
+        if self.match_id is not None and self.result is not None and self.match_id != self.result.match_id:
+            raise ValueError("fixture match_id must match result.match_id")
+        if self.result is None and self.match_id is None:
+            raise ValueError("fixtures without results require match_id")
         if self.status is ResultCollectionStatus.AVAILABLE and self.result is None:
             raise ValueError("available fixtures require a result")
         if self.status is ResultCollectionStatus.AVAILABLE and (
@@ -148,11 +154,11 @@ class DeterministicResultCollector:
     def __init__(self, fixtures: tuple[DeterministicResultFixture, ...] = ()) -> None:
         indexed: dict[str, DeterministicResultFixture] = {}
         for fixture in fixtures:
-            if fixture.result is None:
-                continue
-            if fixture.result.match_id in indexed:
+            match_id = fixture.result.match_id if fixture.result is not None else fixture.match_id
+            assert match_id is not None
+            if match_id in indexed:
                 raise ValueError("result fixtures must use distinct match_id values")
-            indexed[fixture.result.match_id] = fixture
+            indexed[match_id] = fixture
         self._fixtures = indexed
 
     def collect(self, request: ResultCollectionRequest) -> ResultCollectionOutcome:
