@@ -21,9 +21,25 @@ _ROUTING_MODE_CHOICES = (
 class RegistrationForm(UserCreationForm):
     """Registration form that keeps account-existence errors non-enumerable."""
 
+    first_name = forms.CharField(max_length=150)
+    last_name = forms.CharField(max_length=150)
+    email = forms.EmailField(max_length=254)
+
     class Meta:
         model = User
-        fields = ("username", "password1", "password2")
+        fields = ("username", "first_name", "last_name", "email", "password1", "password2")
+
+
+class NotificationProfileForm(forms.ModelForm):
+    """Authenticated user-maintained identity data used for notifications."""
+
+    first_name = forms.CharField(max_length=150)
+    last_name = forms.CharField(max_length=150)
+    email = forms.EmailField(max_length=254)
+
+    class Meta:
+        model = User
+        fields = ("first_name", "last_name", "email")
 
 
 class PresentationSettingsForm(forms.Form):

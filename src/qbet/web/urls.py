@@ -11,6 +11,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("health/", views.health, name="health"),
     path("register/", views.register, name="register"),
+    path("profile/", views.profile, name="profile"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
     path("execution/approvals/", execution_approvals, name="execution-approvals"),
@@ -36,7 +37,9 @@ urlpatterns = [
         name="report-export",
     ),
     path("monitoring/", views.monitoring, name="monitoring"),
-    path("monitoring/export/<str:export_format>/", views.monitoring_export, name="monitoring-export"),
+    path(
+        "monitoring/export/<str:export_format>/", views.monitoring_export, name="monitoring-export"
+    ),
     path("admin-area/", views.admin_area, name="admin-area"),
     path("admin-area/gui-settings/", routing_settings, name="admin-gui-settings"),
     path(

@@ -33,6 +33,7 @@
               <a class="nav-link" href="{% url 'report-history' %}"{% if request.resolver_match.url_name == 'report-history' or request.resolver_match.url_name == 'report-detail' %} aria-current="page"{% endif %}>Reports</a>
             {% endif %}
             <a class="nav-link" href="{% url 'presentation-settings' %}"{% if request.resolver_match.url_name == 'presentation-settings' %} aria-current="page"{% endif %}>Settings</a>
+            <a class="nav-link" href="{% url 'profile' %}"{% if request.resolver_match.url_name == 'profile' %} aria-current="page"{% endif %}>Profile</a>
           {% endif %}
         </div>
 
