@@ -65,7 +65,7 @@ class ExecutionNotificationTask(DomainModel):
         if self.status in {NotificationStatus.SENT, NotificationStatus.ACKNOWLEDGED}:
             if self.sent_at is None:
                 raise ValueError("sent notification states require sent_at")
-        elif self.sent_at is not None:
+        elif self.status is not NotificationStatus.EXPIRED and self.sent_at is not None:
             raise ValueError("unsent notification states cannot carry sent_at")
         if self.status is NotificationStatus.ACKNOWLEDGED:
             if self.acknowledged_at is None:
