@@ -129,7 +129,11 @@ class DeterministicResultFixture(DomainModel):
 
     @model_validator(mode="after")
     def validates_fixture_contract(self) -> "DeterministicResultFixture":
-        if self.match_id is not None and self.result is not None and self.match_id != self.result.match_id:
+        if (
+            self.match_id is not None
+            and self.result is not None
+            and self.match_id != self.result.match_id
+        ):
             raise ValueError("fixture match_id must match result.match_id")
         if self.result is None and self.match_id is None:
             raise ValueError("fixtures without results require match_id")
@@ -169,10 +173,10 @@ class DeterministicResultCollector:
                 ResultCollectionStatus.NOT_YET_AVAILABLE,
                 "result_not_yet_available",
             )
-        result = fixture.result
-        assert result is not None
         if fixture.status is not ResultCollectionStatus.AVAILABLE:
             return _outcome(request, fixture.status, fixture.reason_code)
+        result = fixture.result
+        assert result is not None
         if not _matches_request(result, request):
             return _outcome(request, ResultCollectionStatus.MISMATCHED, "result_identity_mismatch")
         if result.observed_at < request.fresh_after:
