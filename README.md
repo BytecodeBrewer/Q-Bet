@@ -20,7 +20,7 @@ The current system includes:
 - customer-facing Reporting separated from administrator-only technical Monitoring
 - bounded CSV/JSON Monitoring exports and correlated workflow reconstruction
 - connected end-to-end coverage for the complete GUI-to-workflow path
-- a real read-only The Odds API adapter, provider-neutral market/result contracts, and a deterministic read-only bank-balance sandbox boundary
+- a real read-only The Odds API adapter, provider-neutral market/result contracts, a deterministic read-only bank-balance boundary, and an approval-gated funding-proposal sandbox
 - CI/CD with Ruff, Pyright, pytest, Django checks, package builds, PostgreSQL-backed tests, and gated Vercel previews
 
 Still under development are broader real-provider coverage, live execution integrations, account/bank connectivity, additional engines, and the later multi-user/cloud execution model.

@@ -11,6 +11,17 @@ from .balances import (
     DeterministicBankBalanceProvider,
     ReadOnlyBankBalanceService,
 )
+from .funding import (
+    BankFundingProposal,
+    BankFundingProposalService,
+    DeterministicFundingSandboxAdapter,
+    FundingAccountRole,
+    FundingApproval,
+    FundingApprover,
+    FundingDirection,
+    FundingProposalOutcome,
+    FundingProposalState,
+)
 
 __all__ = [
     "BankBalance",
@@ -22,4 +33,13 @@ __all__ = [
     "BankBalanceStatus",
     "DeterministicBankBalanceProvider",
     "ReadOnlyBankBalanceService",
+    "BankFundingProposal",
+    "BankFundingProposalService",
+    "DeterministicFundingSandboxAdapter",
+    "FundingAccountRole",
+    "FundingApproval",
+    "FundingApprover",
+    "FundingDirection",
+    "FundingProposalOutcome",
+    "FundingProposalState",
 ]
