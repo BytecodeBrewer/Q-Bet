@@ -18,6 +18,7 @@ from .models import (
     NotificationRecipient,
     NotificationStatus,
 )
+from .recipients import NotificationRecipientStatus, notification_recipient_status
 
 
 class NotificationDeliveryError(RuntimeError):
@@ -89,11 +90,16 @@ class ExecutionNotificationService:
         *,
         now: datetime,
     ) -> NotificationOutcome:
-        reason = _eligibility_reason(record, queued, recipient, now)
+        recipient_status = notification_recipient_status(
+            user_id=recipient.user_id,
+            email=recipient.email,
+            display_name=recipient.display_name,
+        )
+        reason = _eligibility_reason(record, queued, recipient_status, now)
         if reason is not None:
             return NotificationOutcome(accepted=False, reason_code=reason)
 
-        task = _build_task(record, queued, recipient, now)
+        task = _build_task(record, queued, recipient_status, now)
         persisted, created = self._repository.create(task)
         if not created:
             sendable = persisted.status in {
@@ -110,6 +116,21 @@ class ExecutionNotificationService:
                     else persisted.failure_reason or "notification_not_sendable"
                 ),
                 duplicate=True,
+            )
+
+        if not recipient_status.ready:
+            failed = _transition(
+                persisted,
+                NotificationStatus.FAILED,
+                now=now,
+                failure_reason=recipient_status.reason_code or "notification_recipient_not_ready",
+            )
+            failed = self._repository.save(failed)
+            self._emit(failed)
+            return NotificationOutcome(
+                task=failed,
+                accepted=False,
+                reason_code=failed.failure_reason,
             )
 
         queued_task = _transition(persisted, NotificationStatus.QUEUED, now=now)
@@ -235,7 +256,7 @@ class ExecutionNotificationService:
 def _eligibility_reason(
     record: ExecutionRecord,
     queued: QueuedWorkItem,
-    recipient: NotificationRecipient,
+    recipient: NotificationRecipientStatus,
     now: datetime,
 ) -> str | None:
     work = record.proposal.work
@@ -262,7 +283,7 @@ def _eligibility_reason(
 def _build_task(
     record: ExecutionRecord,
     queued: QueuedWorkItem,
-    recipient: NotificationRecipient,
+    recipient: NotificationRecipientStatus,
     now: datetime,
 ) -> ExecutionNotificationTask:
     request = record.proposal.request
@@ -286,7 +307,11 @@ def _build_task(
         id=uuid5(work.id, recipient.user_id),
         execution_id=work.id,
         correlation_id=work.correlation_id,
-        recipient=recipient,
+        recipient=NotificationRecipient(
+            user_id=recipient.user_id,
+            email=recipient.email,
+            display_name=recipient.display_name,
+        ),
         opportunity_id=work.opportunity_id,
         engine="BonusEngine" if work.engine == "bonus" else "SportsCapitalEngine",
         strategy=evaluation.strategy_result.strategy,
