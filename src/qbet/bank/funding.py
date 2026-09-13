@@ -92,6 +92,8 @@ class BankFundingProposal(DomainModel):
         )
         if (self.source_role, self.destination_role) != expected_roles:
             raise ValueError("funding direction must match source and destination roles")
+        if not self.target_context.endswith(f":{self.target_mode}"):
+            raise ValueError("funding target_context must match target_mode")
         if self.expires_at <= self.created_at:
             raise ValueError("funding proposals must expire after creation")
         if self.lifecycle_at < self.created_at:
@@ -107,6 +109,8 @@ class BankFundingProposal(DomainModel):
                 raise ValueError("funding approval requires an authenticated approver")
             if not self.created_at <= self.approval.approved_at < self.expires_at:
                 raise ValueError("funding approval must be recorded before proposal expiry")
+            if self.lifecycle_at < self.approval.approved_at:
+                raise ValueError("funding lifecycle time cannot precede approval")
         return self
 
 
@@ -143,6 +147,8 @@ class BankFundingProposalService:
             return _rejected(proposal, "proposal_not_proposed")
         if requested_at < proposal.created_at:
             return _rejected(proposal, "transition_before_creation")
+        if requested_at < proposal.lifecycle_at:
+            return _rejected(proposal, "transition_before_current_lifecycle")
         if requested_at >= proposal.expires_at:
             return _rejected(
                 _transition(proposal, FundingProposalState.EXPIRED, requested_at),
@@ -160,6 +166,7 @@ class BankFundingProposalService:
         approved_at: AwareDatetime,
         balance: BankBalance,
         ledger: PortfolioLedger,
+        capital_context: Identifier,
     ) -> FundingProposalOutcome:
         approval = FundingApproval(approver=approver, approved_at=approved_at)
         if proposal.state is FundingProposalState.APPROVED:
@@ -168,7 +175,14 @@ class BankFundingProposalService:
             return _rejected(proposal, "approval_conflict")
         if proposal.state is not FundingProposalState.AWAITING_APPROVAL:
             return _rejected(proposal, "proposal_not_awaiting_approval")
-        reason = self._validation_reason(proposal, approver, approved_at, balance, ledger)
+        reason = self._validation_reason(
+            proposal,
+            approver,
+            approved_at,
+            balance,
+            ledger,
+            capital_context,
+        )
         if reason is not None:
             expired = reason == "proposal_expired"
             current = (
@@ -193,6 +207,8 @@ class BankFundingProposalService:
             return _rejected(proposal, "proposal_not_awaiting_approval")
         if rejected_at < proposal.created_at:
             return _rejected(proposal, "transition_before_creation")
+        if rejected_at < proposal.lifecycle_at:
+            return _rejected(proposal, "transition_before_current_lifecycle")
         if rejected_at >= proposal.expires_at:
             return _rejected(
                 _transition(proposal, FundingProposalState.EXPIRED, rejected_at),
@@ -210,6 +226,8 @@ class BankFundingProposalService:
             return _rejected(proposal, "proposal_not_cancellable")
         if cancelled_at < proposal.created_at:
             return _rejected(proposal, "transition_before_creation")
+        if cancelled_at < proposal.lifecycle_at:
+            return _rejected(proposal, "transition_before_current_lifecycle")
         if cancelled_at >= proposal.expires_at:
             return _rejected(
                 _transition(proposal, FundingProposalState.EXPIRED, cancelled_at),
@@ -227,6 +245,8 @@ class BankFundingProposalService:
             return _rejected(proposal, "proposal_not_expirable")
         if observed_at < proposal.created_at:
             return _rejected(proposal, "transition_before_creation")
+        if observed_at < proposal.lifecycle_at:
+            return _rejected(proposal, "transition_before_current_lifecycle")
         if observed_at < proposal.expires_at:
             return _rejected(proposal, "proposal_not_expired")
         return _accepted(_transition(proposal, FundingProposalState.EXPIRED, observed_at))
@@ -238,11 +258,14 @@ class BankFundingProposalService:
         approved_at: AwareDatetime,
         balance: BankBalance,
         ledger: PortfolioLedger,
+        capital_context: Identifier,
     ) -> Identifier | None:
         if not approver.is_authenticated:
             return "approver_not_authenticated"
         if approved_at < proposal.created_at:
             return "approval_before_creation"
+        if approved_at < proposal.lifecycle_at:
+            return "transition_before_current_lifecycle"
         if approved_at >= proposal.expires_at:
             return "proposal_expired"
         if proposal.amount > self._max_amount:
@@ -251,6 +274,8 @@ class BankFundingProposalService:
             return "currency_mismatch"
         if balance.correlation_id != proposal.correlation_id:
             return "balance_correlation_mismatch"
+        if capital_context != proposal.target_context:
+            return "capital_context_mismatch"
         if ledger.balance.mode != proposal.target_mode:
             return "capital_context_mismatch"
         if (
@@ -292,6 +317,8 @@ class DeterministicFundingSandboxAdapter:
             return _rejected(proposal, "transition_before_creation")
         if acknowledged_at < approval.approved_at:
             return _rejected(proposal, "acknowledgement_before_approval")
+        if acknowledged_at < proposal.lifecycle_at:
+            return _rejected(proposal, "transition_before_current_lifecycle")
         if acknowledged_at >= proposal.expires_at:
             return _rejected(proposal, "proposal_expired")
         outcome = _accepted(
