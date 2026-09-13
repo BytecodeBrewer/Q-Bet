@@ -12,6 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import urlopen
 
+from pydantic import ValidationError
+
 from qbet.data.models import (
     CompletenessStatus,
     DataCollectionRequest,
@@ -132,37 +134,40 @@ class TheOddsApiAdapter:
         event: Mapping[str, Any],
         fetched_at: datetime,
     ) -> NormalizedMarketSnapshot:
-        assert request.sport is not None
-        assert request.event_id is not None
-        assert request.market is not None
-        event_id = _required_text(event, "id")
-        if event_id != request.event_id:
-            raise TheOddsApiPayloadError("The Odds API event identity did not match the request")
-        sport = _required_text(event, "sport_key")
-        if sport != request.sport:
-            raise TheOddsApiPayloadError("The Odds API sport identity did not match the request")
-        market_id = f"{event_id}:{request.market}"
-        offers = _offers_for_market(
-            event=event,
-            market_key=request.market,
-            market_id=market_id,
-            currency=self._currency,
-            available_stake=self._available_stake,
-            observed_at=fetched_at,
-        )
-        return NormalizedMarketSnapshot(
-            id=market_id,
-            correlation_id=request.correlation_id,
-            target=request.target,
-            source=request.source,
-            sport=sport,
-            event_id=event_id,
-            market_id=market_id,
-            fetched_at=fetched_at,
-            freshness=FreshnessStatus.FRESH,
-            completeness=CompletenessStatus.COMPLETE,
-            offers=offers,
-        )
+        try:
+            assert request.sport is not None
+            assert request.event_id is not None
+            assert request.market is not None
+            event_id = _required_text(event, "id")
+            if event_id != request.event_id:
+                raise TheOddsApiPayloadError("The Odds API event identity did not match the request")
+            sport = _required_text(event, "sport_key")
+            if sport != request.sport:
+                raise TheOddsApiPayloadError("The Odds API sport identity did not match the request")
+            market_id = f"{event_id}:{request.market}"
+            offers = _offers_for_market(
+                event=event,
+                market_key=request.market,
+                market_id=market_id,
+                currency=self._currency,
+                available_stake=self._available_stake,
+                observed_at=fetched_at,
+            )
+            return NormalizedMarketSnapshot(
+                id=market_id,
+                correlation_id=request.correlation_id,
+                target=request.target,
+                source=request.source,
+                sport=sport,
+                event_id=event_id,
+                market_id=market_id,
+                fetched_at=fetched_at,
+                freshness=FreshnessStatus.FRESH,
+                completeness=CompletenessStatus.COMPLETE,
+                offers=offers,
+            )
+        except ValidationError as error:
+            raise TheOddsApiPayloadError("The Odds API payload validation failed") from error
 
 
 def _offers_for_market(

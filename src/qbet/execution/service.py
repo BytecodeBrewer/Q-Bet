@@ -159,6 +159,8 @@ class ExecutionService:
             return self._persist(record, ledger)
 
         if record.state is Lifecycle.APPROVED:
+            if collected_result is not None:
+                SettlementService().validates_collected_result(record, collected_result)
             reason = SandboxRequestHandler().validate(record.proposal, now)
             if ledger.balance.mode != record.proposal.work.mode.value:
                 reason = "ledger_mode_mismatch"
@@ -273,6 +275,8 @@ class ExecutionService:
                     transition(record, Lifecycle.REJECTED, error=reason),
                     ledger,
                 )
+            if collected_result is not None:
+                SettlementService().validates_collected_result(record, collected_result)
 
             reserved, decision = ledger.apply(
                 ledger_command(
@@ -298,6 +302,8 @@ class ExecutionService:
             )
 
         if record.state is Lifecycle.APPROVED:
+            if collected_result is not None:
+                SettlementService().validates_collected_result(record, collected_result)
             locked = self._apply(
                 record,
                 ledger,
