@@ -251,7 +251,7 @@ def _eligibility_reason(
         return "execution_queue_mismatch"
     if queued.work.owner != work.owner or queued.request != record.proposal.request:
         return "execution_queue_mismatch"
-    if queued.state not in {WorkState.PENDING, WorkState.RECHECK}:
+    if queued.state not in {WorkState.PENDING, WorkState.RECHECK, WorkState.PROCESSING}:
         return "execution_not_notifiable"
     deadline = min(record.proposal.expires_at, queued.expires_at)
     if now >= deadline:
