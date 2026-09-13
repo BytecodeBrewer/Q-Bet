@@ -11,17 +11,73 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
-from qbet.execution.models import Lifecycle
-from qbet.storage.ledger import AuthoritativePersistenceError
+from qbet.execution.models import ExecutionRecord, Lifecycle
+from qbet.notifications import (
+    DjangoEmailTransport,
+    ExecutionNotificationService,
+    NotificationRecipient,
+)
+from qbet.storage.ledger import AuthoritativePersistenceError, ModeWorkQueueRepository
+from qbet.storage.monitoring import PostgresMonitoringRepository
+from qbet.storage.notifications import (
+    NotificationPersistenceError,
+    PostgresNotificationRepository,
+)
 from qbet.web.controls import presentation_preferences
 from qbet.workflow.approval import ExecutionApprovalService
 
 _EXECUTION_APPROVALS = ExecutionApprovalService()
+_EXECUTION_QUEUE = ModeWorkQueueRepository()
+_EXECUTION_NOTIFICATIONS = ExecutionNotificationService(
+    repository=PostgresNotificationRepository(),
+    transport=DjangoEmailTransport(),
+    monitoring_writer=PostgresMonitoringRepository(),
+)
 
 
 def _context(request: HttpRequest, **values: object) -> dict[str, object]:
     values.setdefault("preferences", presentation_preferences(request.session))
     return values
+
+
+def _recipient(request: HttpRequest) -> NotificationRecipient:
+    username = request.user.get_username()
+    get_full_name = getattr(request.user, "get_full_name", None)
+    full_name = get_full_name().strip() if callable(get_full_name) else ""
+    return NotificationRecipient(
+        user_id=username,
+        email=str(getattr(request.user, "email", "") or "").strip(),
+        display_name=full_name or username,
+    )
+
+
+def _notify_after_approval(request: HttpRequest, record: ExecutionRecord) -> None:
+    queued = _EXECUTION_QUEUE.load(record.proposal.work.id)
+    approval = record.approval
+    if queued is None or approval is None:
+        messages.warning(
+            request,
+            "Approval recorded, but the email notification could not be prepared safely.",
+        )
+        return
+    try:
+        outcome = _EXECUTION_NOTIFICATIONS.notify(
+            record,
+            queued,
+            _recipient(request),
+            now=approval.approved_at,
+        )
+    except (NotificationPersistenceError, DatabaseError, ValueError):
+        messages.warning(
+            request,
+            "Approval recorded, but the email notification could not be persisted safely.",
+        )
+        return
+    if not outcome.accepted:
+        messages.warning(
+            request,
+            "Approval recorded, but the email notification was not sent. Check your account email.",
+        )
 
 
 @login_required
@@ -78,6 +134,7 @@ def execution_approval_decision(
         return redirect("execution-approvals")
 
     if record.state is Lifecycle.APPROVED:
+        _notify_after_approval(request, record)
         messages.success(
             request,
             "Approval recorded. The opportunity will be revalidated before dispatch.",
