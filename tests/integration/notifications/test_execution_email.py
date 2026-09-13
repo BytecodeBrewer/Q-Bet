@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any, cast
 from uuid import UUID
 
 from django.contrib.auth import get_user_model
@@ -27,6 +28,10 @@ NOW = datetime.now(UTC).replace(microsecond=0)
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
 
 
+def create_user(**values: str) -> Any:
+    return cast(Any, get_user_model().objects).create_user(**values)
+
+
 def request(opportunity_id: str) -> BonusEngineRequest:
     return BonusEngineRequest(
         opportunity_id=opportunity_id,
@@ -44,14 +49,18 @@ def request(opportunity_id: str) -> BonusEngineRequest:
     )
 
 
-def coordinator(opportunity_id: str) -> ModeDispatchCoordinator:
+def coordinator(
+    opportunity_id: str,
+    *,
+    revalidation_outcome: RevalidationOutcome = RevalidationOutcome.VALID,
+) -> ModeDispatchCoordinator:
     handlers = ModeRequestHandlers(
         simulation=SimulationSandboxRequestHandler(),
         execution=ExecutionSandboxRequestHandler(
             revalidation_fixtures=(
                 SandboxRevalidationFixture(
                     opportunity_id=opportunity_id,
-                    outcome=RevalidationOutcome.VALID,
+                    outcome=revalidation_outcome,
                     validated_at=NOW,
                 ),
             ),
@@ -74,9 +83,15 @@ def coordinator(opportunity_id: str) -> ModeDispatchCoordinator:
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class ExecutionEmailIntegrationTests(TransactionTestCase):
-    def stage(self, *, owner: str, opportunity_id: str):
+    def stage(
+        self,
+        *,
+        owner: str,
+        opportunity_id: str,
+        revalidation_outcome: RevalidationOutcome = RevalidationOutcome.VALID,
+    ):
         engine_request = request(opportunity_id)
-        dispatcher = coordinator(opportunity_id)
+        dispatcher = coordinator(opportunity_id, revalidation_outcome=revalidation_outcome)
         (scheduled,) = dispatcher.schedule(
             engine_request,
             owner=owner,
@@ -85,22 +100,28 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
             expires_at=NOW + timedelta(minutes=5),
         )
         dispatcher.dispatch_due(now=NOW, owner=owner)
-        return scheduled
+        return scheduled, dispatcher
 
-    def test_web_approval_sends_customer_safe_email_once(self) -> None:
-        user = get_user_model().objects.create_user(
+    def test_successful_final_revalidation_sends_customer_safe_email_once(self) -> None:
+        user = create_user(
             username="alice",
             password="test-password-123",
             email="alice@example.com",
             first_name="Alice",
             last_name="Example",
         )
-        scheduled = self.stage(owner=user.get_username(), opportunity_id="email-opportunity")
+        scheduled, dispatcher = self.stage(
+            owner=user.get_username(), opportunity_id="email-opportunity"
+        )
         self.client.force_login(user)
         url = reverse("execution-approval-decision", args=[scheduled.work.id])
 
         first = self.client.post(url, {"decision": "approve"})
         repeated = self.client.post(url, {"decision": "approve"})
+
+        self.assertEqual(NotificationTaskRow.objects.count(), 0)
+        self.assertEqual(len(getattr(mail, "outbox", [])), 0)
+        dispatcher.dispatch_due(now=NOW + timedelta(seconds=1), owner=user.get_username())
 
         self.assertEqual(first.status_code, 302)
         self.assertEqual(repeated.status_code, 302)
@@ -122,12 +143,12 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
         self.assertNotIn("token", message.body.lower())
 
     def test_username_fallback_is_used_when_name_is_missing(self) -> None:
-        user = get_user_model().objects.create_user(
+        user = create_user(
             username="fallback-user",
             password="test-password-123",
             email="fallback@example.com",
         )
-        scheduled = self.stage(
+        scheduled, dispatcher = self.stage(
             owner=user.get_username(),
             opportunity_id="fallback-opportunity",
         )
@@ -138,15 +159,19 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
             {"decision": "approve"},
         )
 
+        dispatcher.dispatch_due(now=NOW + timedelta(seconds=1), owner=user.get_username())
+
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("Hello fallback-user", mail.outbox[0].body)
 
     def test_missing_email_is_persisted_as_failed_without_delivery(self) -> None:
-        user = get_user_model().objects.create_user(
+        user = create_user(
             username="no-email",
             password="test-password-123",
         )
-        scheduled = self.stage(owner=user.get_username(), opportunity_id="missing-email")
+        scheduled, dispatcher = self.stage(
+            owner=user.get_username(), opportunity_id="missing-email"
+        )
         self.client.force_login(user)
 
         response = self.client.post(
@@ -154,8 +179,35 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
             {"decision": "approve"},
         )
 
+        dispatcher.dispatch_due(now=NOW + timedelta(seconds=1), owner=user.get_username())
+
         self.assertEqual(response.status_code, 302)
         task = NotificationTaskRow.objects.get()
         self.assertEqual(task.state, "failed")
         self.assertEqual(task.payload["failure_reason"], "recipient_email_missing")
+        self.assertEqual(len(getattr(mail, "outbox", [])), 0)
+
+    def test_failed_final_revalidation_sends_no_notification(self) -> None:
+        user = create_user(
+            username="revalidation-failed",
+            password="test-password-123",
+            email="revalidation-failed@example.com",
+        )
+        scheduled, _ = self.stage(
+            owner=user.get_username(),
+            opportunity_id="revalidation-failed-opportunity",
+        )
+        self.client.force_login(user)
+
+        self.client.post(
+            reverse("execution-approval-decision", args=[scheduled.work.id]),
+            {"decision": "approve"},
+        )
+        outcome = coordinator(
+            "revalidation-failed-opportunity",
+            revalidation_outcome=RevalidationOutcome.REJECTED,
+        ).dispatch_due(now=NOW + timedelta(seconds=1), owner=user.get_username())
+
+        self.assertEqual(outcome[0].state.value, "cancelled")
+        self.assertEqual(NotificationTaskRow.objects.count(), 0)
         self.assertEqual(len(getattr(mail, "outbox", [])), 0)
