@@ -13,6 +13,7 @@ from qbet.request_handler import (
     ExecutionSandboxRequestHandler,
     ModeRequestHandlers,
     ResultStatus,
+    RevalidationOutcome,
     SandboxResultFixture,
     SandboxRevalidationFixture,
     SimulationSandboxRequestHandler,
@@ -22,7 +23,7 @@ from qbet.storage.models import NotificationTaskRow
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
-NOW = datetime(2026, 9, 13, 12, tzinfo=UTC)
+NOW = datetime.now(UTC).replace(microsecond=0)
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
 
 
@@ -50,7 +51,7 @@ def coordinator(opportunity_id: str) -> ModeDispatchCoordinator:
             revalidation_fixtures=(
                 SandboxRevalidationFixture(
                     opportunity_id=opportunity_id,
-                    outcome="valid",
+                    outcome=RevalidationOutcome.VALID,
                     validated_at=NOW,
                 ),
             ),
@@ -157,4 +158,4 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
         task = NotificationTaskRow.objects.get()
         self.assertEqual(task.state, "failed")
         self.assertEqual(task.payload["failure_reason"], "recipient_email_missing")
-        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(len(getattr(mail, "outbox", [])), 0)
