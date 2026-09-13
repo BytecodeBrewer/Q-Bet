@@ -26,6 +26,7 @@ PROPOSAL_ID = UUID("87654321-4321-8765-4321-876543218765")
 SOURCE = DataSourceMetadata(
     provider_id="bank_sandbox", source_id="fixture_bank", transport=SourceTransport.IN_MEMORY
 )
+CAPITAL_CONTEXT = "owner:execution"
 
 
 def proposal(**changes: object) -> BankFundingProposal:
@@ -38,7 +39,7 @@ def proposal(**changes: object) -> BankFundingProposal:
         "currency": "EUR",
         "reason": "capital_rebalance",
         "target_mode": "execution",
-        "target_context": "owner:execution",
+        "target_context": CAPITAL_CONTEXT,
         "correlation_id": CORRELATION_ID,
         "created_at": NOW - timedelta(minutes=2),
         "expires_at": NOW + timedelta(minutes=3),
@@ -94,6 +95,7 @@ def test_valid_funding_approval_preserves_the_ledger() -> None:
         approved_at=NOW,
         balance=balance(),
         ledger=original_ledger,
+        capital_context=CAPITAL_CONTEXT,
     )
 
     assert outcome.accepted
@@ -127,7 +129,12 @@ def test_approval_rejects_untrusted_over_limit_and_expired_proposals(
 ) -> None:
     item = awaiting_approval(**changes)
     outcome = service().approve(
-        item, approver=approver, approved_at=NOW, balance=balance(), ledger=ledger()
+        item,
+        approver=approver,
+        approved_at=NOW,
+        balance=balance(),
+        ledger=ledger(),
+        capital_context=CAPITAL_CONTEXT,
     )
 
     assert not outcome.accepted
@@ -149,6 +156,11 @@ def test_proposals_require_roles_that_match_the_direction() -> None:
         )
 
 
+def test_proposals_require_target_context_to_match_target_mode() -> None:
+    with pytest.raises(ValueError, match="target_context"):
+        proposal(target_context="owner:simulation")
+
+
 @pytest.mark.parametrize(
     ("balance_changes", "ledger_changes", "reason"),
     [
@@ -167,6 +179,7 @@ def test_approval_checks_currency_and_fresh_observed_balance(
         approved_at=NOW,
         balance=balance(**balance_changes),
         ledger=ledger(**ledger_changes),
+        capital_context=CAPITAL_CONTEXT,
     )
 
     assert not outcome.accepted
@@ -180,10 +193,25 @@ def test_approval_rejects_a_balance_from_a_different_correlation_context() -> No
         approved_at=NOW,
         balance=balance(correlation_id=UUID("87654321-4321-8765-4321-876543218765")),
         ledger=ledger(),
+        capital_context=CAPITAL_CONTEXT,
     )
 
     assert not outcome.accepted
     assert outcome.reason_code == "balance_correlation_mismatch"
+
+
+def test_approval_rejects_a_different_capital_context() -> None:
+    outcome = service().approve(
+        awaiting_approval(),
+        approver=FundingApprover(identity="staff-1", is_authenticated=True),
+        approved_at=NOW,
+        balance=balance(),
+        ledger=ledger(),
+        capital_context="other-owner:execution",
+    )
+
+    assert not outcome.accepted
+    assert outcome.reason_code == "capital_context_mismatch"
 
 
 def test_withdrawal_checks_ledger_capital_without_mutating_it() -> None:
@@ -200,6 +228,7 @@ def test_withdrawal_checks_ledger_capital_without_mutating_it() -> None:
         approved_at=NOW,
         balance=balance(),
         ledger=original_ledger,
+        capital_context=CAPITAL_CONTEXT,
     )
 
     assert not outcome.accepted
@@ -215,6 +244,7 @@ def test_approval_is_idempotent_but_conflicts_are_rejected() -> None:
         approved_at=NOW,
         balance=balance(),
         ledger=ledger(),
+        capital_context=CAPITAL_CONTEXT,
     )
     repeated = service().approve(
         first.proposal,
@@ -222,6 +252,7 @@ def test_approval_is_idempotent_but_conflicts_are_rejected() -> None:
         approved_at=NOW,
         balance=balance(),
         ledger=ledger(),
+        capital_context=CAPITAL_CONTEXT,
     )
     conflict = service().approve(
         first.proposal,
@@ -229,6 +260,7 @@ def test_approval_is_idempotent_but_conflicts_are_rejected() -> None:
         approved_at=NOW,
         balance=balance(),
         ledger=ledger(),
+        capital_context=CAPITAL_CONTEXT,
     )
 
     assert repeated.accepted and repeated.duplicate
@@ -253,6 +285,7 @@ def test_reject_cancel_and_expire_are_bounded_lifecycle_transitions() -> None:
             approved_at=NOW,
             balance=balance(),
             ledger=ledger(),
+            capital_context=CAPITAL_CONTEXT,
         )
         .reason_code
         == "proposal_not_awaiting_approval"
@@ -271,6 +304,7 @@ def test_lifecycle_transitions_reject_invalid_timestamps() -> None:
             approved_at=NOW,
             balance=balance(),
             ledger=ledger(),
+            capital_context=CAPITAL_CONTEXT,
         )
         .proposal
     )
@@ -299,6 +333,73 @@ def test_lifecycle_transitions_reject_invalid_timestamps() -> None:
     )
 
 
+def test_lifecycle_transitions_cannot_move_backwards_from_current_state() -> None:
+    awaiting = awaiting_approval()
+    backdated = awaiting.lifecycle_at - timedelta(seconds=1)
+    proposed_with_advanced_lifecycle = proposal(lifecycle_at=NOW - timedelta(seconds=30))
+
+    assert (
+        service()
+        .request_approval(
+            proposed_with_advanced_lifecycle,
+            requested_at=NOW - timedelta(minutes=1),
+        )
+        .reason_code
+        == "transition_before_current_lifecycle"
+    )
+    assert (
+        service()
+        .approve(
+            awaiting,
+            approver=FundingApprover(identity="staff-1", is_authenticated=True),
+            approved_at=backdated,
+            balance=balance(observed_at=backdated - timedelta(seconds=1)),
+            ledger=ledger(),
+            capital_context=CAPITAL_CONTEXT,
+        )
+        .reason_code
+        == "transition_before_current_lifecycle"
+    )
+    assert (
+        service().reject(awaiting, rejected_at=backdated).reason_code
+        == "transition_before_current_lifecycle"
+    )
+    assert (
+        service().cancel(awaiting, cancelled_at=backdated).reason_code
+        == "transition_before_current_lifecycle"
+    )
+    assert (
+        service().expire(awaiting, observed_at=backdated).reason_code
+        == "transition_before_current_lifecycle"
+    )
+
+
+def test_acknowledgement_cannot_precede_current_lifecycle_state() -> None:
+    approved = (
+        service()
+        .approve(
+            awaiting_approval(),
+            approver=FundingApprover(identity="staff-1", is_authenticated=True),
+            approved_at=NOW,
+            balance=balance(),
+            ledger=ledger(),
+            capital_context=CAPITAL_CONTEXT,
+        )
+        .proposal
+    )
+    values = approved.model_dump(mode="python")
+    values["lifecycle_at"] = NOW + timedelta(seconds=30)
+    advanced = BankFundingProposal.model_validate(values)
+
+    outcome = DeterministicFundingSandboxAdapter().acknowledge(
+        advanced,
+        acknowledged_at=NOW + timedelta(seconds=10),
+    )
+
+    assert not outcome.accepted
+    assert outcome.reason_code == "transition_before_current_lifecycle"
+
+
 def test_deterministic_sandbox_acknowledges_only_approved_proposals_idempotently() -> None:
     adapter = DeterministicFundingSandboxAdapter()
     assert (
@@ -314,6 +415,7 @@ def test_deterministic_sandbox_acknowledges_only_approved_proposals_idempotently
             approved_at=NOW,
             balance=balance(),
             ledger=ledger(),
+            capital_context=CAPITAL_CONTEXT,
         )
         .proposal
     )
@@ -325,7 +427,7 @@ def test_deterministic_sandbox_acknowledges_only_approved_proposals_idempotently
     assert repeated.accepted and repeated.duplicate
     assert repeated.proposal == first.proposal
     conflict = adapter.acknowledge(
-        approved.model_copy(update={"target_context": "owner:other"}),
+        approved.model_copy(update={"target_context": "other:execution"}),
         acknowledged_at=NOW + timedelta(seconds=2),
     )
     assert not conflict.accepted
