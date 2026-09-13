@@ -141,6 +141,8 @@ class BankFundingProposalService:
     ) -> FundingProposalOutcome:
         if proposal.state is not FundingProposalState.PROPOSED:
             return _rejected(proposal, "proposal_not_proposed")
+        if requested_at < proposal.created_at:
+            return _rejected(proposal, "transition_before_creation")
         if requested_at >= proposal.expires_at:
             return _rejected(
                 _transition(proposal, FundingProposalState.EXPIRED, requested_at),
@@ -176,12 +178,11 @@ class BankFundingProposalService:
             )
             return _rejected(current, reason)
         return _accepted(
-            proposal.model_copy(
-                update={
-                    "state": FundingProposalState.APPROVED,
-                    "lifecycle_at": approved_at,
-                    "approval": approval,
-                }
+            _transition(
+                proposal,
+                FundingProposalState.APPROVED,
+                approved_at,
+                approval=approval,
             )
         )
 
@@ -190,6 +191,13 @@ class BankFundingProposalService:
     ) -> FundingProposalOutcome:
         if proposal.state is not FundingProposalState.AWAITING_APPROVAL:
             return _rejected(proposal, "proposal_not_awaiting_approval")
+        if rejected_at < proposal.created_at:
+            return _rejected(proposal, "transition_before_creation")
+        if rejected_at >= proposal.expires_at:
+            return _rejected(
+                _transition(proposal, FundingProposalState.EXPIRED, rejected_at),
+                "proposal_expired",
+            )
         return _accepted(_transition(proposal, FundingProposalState.REJECTED, rejected_at))
 
     def cancel(
@@ -200,6 +208,13 @@ class BankFundingProposalService:
             FundingProposalState.AWAITING_APPROVAL,
         }:
             return _rejected(proposal, "proposal_not_cancellable")
+        if cancelled_at < proposal.created_at:
+            return _rejected(proposal, "transition_before_creation")
+        if cancelled_at >= proposal.expires_at:
+            return _rejected(
+                _transition(proposal, FundingProposalState.EXPIRED, cancelled_at),
+                "proposal_expired",
+            )
         return _accepted(_transition(proposal, FundingProposalState.CANCELLED, cancelled_at))
 
     def expire(
@@ -210,6 +225,8 @@ class BankFundingProposalService:
             FundingProposalState.AWAITING_APPROVAL,
         }:
             return _rejected(proposal, "proposal_not_expirable")
+        if observed_at < proposal.created_at:
+            return _rejected(proposal, "transition_before_creation")
         if observed_at < proposal.expires_at:
             return _rejected(proposal, "proposal_not_expired")
         return _accepted(_transition(proposal, FundingProposalState.EXPIRED, observed_at))
@@ -224,12 +241,16 @@ class BankFundingProposalService:
     ) -> Identifier | None:
         if not approver.is_authenticated:
             return "approver_not_authenticated"
-        if approved_at < proposal.created_at or approved_at >= proposal.expires_at:
+        if approved_at < proposal.created_at:
+            return "approval_before_creation"
+        if approved_at >= proposal.expires_at:
             return "proposal_expired"
         if proposal.amount > self._max_amount:
             return "amount_exceeds_limit"
         if balance.currency != proposal.currency or ledger.balance.currency != proposal.currency:
             return "currency_mismatch"
+        if balance.correlation_id != proposal.correlation_id:
+            return "balance_correlation_mismatch"
         if ledger.balance.mode != proposal.target_mode:
             return "capital_context_mismatch"
         if (
@@ -265,19 +286,36 @@ class DeterministicFundingSandboxAdapter:
             return outcome.model_copy(update={"duplicate": True})
         if proposal.state is not FundingProposalState.APPROVED:
             return _rejected(proposal, "proposal_not_approved")
+        approval = proposal.approval
+        assert approval is not None
+        if acknowledged_at < proposal.created_at:
+            return _rejected(proposal, "transition_before_creation")
+        if acknowledged_at < approval.approved_at:
+            return _rejected(proposal, "acknowledgement_before_approval")
         if acknowledged_at >= proposal.expires_at:
             return _rejected(proposal, "proposal_expired")
         outcome = _accepted(
-            _transition(proposal, FundingProposalState.ACKNOWLEDGED, acknowledged_at)
+            _transition(
+                proposal,
+                FundingProposalState.ACKNOWLEDGED,
+                acknowledged_at,
+                approval=approval,
+            )
         )
         self._acknowledgements[proposal.id] = (proposal, outcome)
         return outcome
 
 
 def _transition(
-    proposal: BankFundingProposal, state: FundingProposalState, lifecycle_at: AwareDatetime
+    proposal: BankFundingProposal,
+    state: FundingProposalState,
+    lifecycle_at: AwareDatetime,
+    *,
+    approval: FundingApproval | None = None,
 ) -> BankFundingProposal:
-    return proposal.model_copy(update={"state": state, "lifecycle_at": lifecycle_at})
+    values = proposal.model_dump(mode="python")
+    values.update({"state": state, "lifecycle_at": lifecycle_at, "approval": approval})
+    return BankFundingProposal.model_validate(values)
 
 
 def _accepted(proposal: BankFundingProposal, *, duplicate: bool = False) -> FundingProposalOutcome:

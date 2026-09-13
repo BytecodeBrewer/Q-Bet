@@ -173,6 +173,19 @@ def test_approval_checks_currency_and_fresh_observed_balance(
     assert outcome.reason_code == reason
 
 
+def test_approval_rejects_a_balance_from_a_different_correlation_context() -> None:
+    outcome = service().approve(
+        awaiting_approval(),
+        approver=FundingApprover(identity="staff-1", is_authenticated=True),
+        approved_at=NOW,
+        balance=balance(correlation_id=UUID("87654321-4321-8765-4321-876543218765")),
+        ledger=ledger(),
+    )
+
+    assert not outcome.accepted
+    assert outcome.reason_code == "balance_correlation_mismatch"
+
+
 def test_withdrawal_checks_ledger_capital_without_mutating_it() -> None:
     item = awaiting_approval(
         direction=FundingDirection.WITHDRAWAL,
@@ -243,6 +256,46 @@ def test_reject_cancel_and_expire_are_bounded_lifecycle_transitions() -> None:
         )
         .reason_code
         == "proposal_not_awaiting_approval"
+    )
+
+
+def test_lifecycle_transitions_reject_invalid_timestamps() -> None:
+    item = proposal()
+    awaiting = awaiting_approval()
+    before_creation = item.created_at - timedelta(seconds=1)
+    approved = (
+        service()
+        .approve(
+            awaiting,
+            approver=FundingApprover(identity="staff-1", is_authenticated=True),
+            approved_at=NOW,
+            balance=balance(),
+            ledger=ledger(),
+        )
+        .proposal
+    )
+
+    assert (
+        service().request_approval(item, requested_at=before_creation).reason_code
+        == "transition_before_creation"
+    )
+    assert (
+        service().reject(awaiting, rejected_at=before_creation).reason_code
+        == "transition_before_creation"
+    )
+    assert (
+        service().cancel(item, cancelled_at=before_creation).reason_code
+        == "transition_before_creation"
+    )
+    assert (
+        service().expire(item, observed_at=before_creation).reason_code
+        == "transition_before_creation"
+    )
+    assert (
+        DeterministicFundingSandboxAdapter()
+        .acknowledge(approved, acknowledged_at=NOW - timedelta(seconds=1))
+        .reason_code
+        == "acknowledgement_before_approval"
     )
 
 
