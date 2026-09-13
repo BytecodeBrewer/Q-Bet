@@ -7,6 +7,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 
+from qbet.notifications import notification_recipient_status
 from qbet.simulation import SimulationEngine
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
@@ -18,8 +19,8 @@ _ROUTING_MODE_CHOICES = (
 )
 
 
-class RegistrationForm(UserCreationForm):
-    """Registration form that keeps account-existence errors non-enumerable."""
+class NotificationReadyUserCreationForm(UserCreationForm):
+    """Canonical create boundary for new users that can receive notifications."""
 
     first_name = forms.CharField(max_length=150)
     last_name = forms.CharField(max_length=150)
@@ -28,6 +29,27 @@ class RegistrationForm(UserCreationForm):
     class Meta:
         model = User
         fields = ("username", "first_name", "last_name", "email", "password1", "password2")
+
+    def clean(self) -> dict[str, Any]:
+        cleaned = super().clean() or {}
+        username = str(cleaned.get("username") or "")
+        first_name = str(cleaned.get("first_name") or "")
+        last_name = str(cleaned.get("last_name") or "")
+        email = str(cleaned.get("email") or "")
+        if username and first_name and last_name:
+            status = notification_recipient_status(
+                user_id=username,
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+            )
+            if not status.ready and "email" not in self.errors:
+                self.add_error("email", "Enter a valid email address for notifications.")
+        return cleaned
+
+
+class RegistrationForm(NotificationReadyUserCreationForm):
+    """Public registration using the canonical notification-ready create boundary."""
 
 
 class NotificationProfileForm(forms.ModelForm):
@@ -40,6 +62,18 @@ class NotificationProfileForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ("first_name", "last_name", "email")
+
+    def clean(self) -> dict[str, Any]:
+        cleaned = super().clean() or {}
+        status = notification_recipient_status(
+            user_id=self.instance.get_username() or "profile-user",
+            first_name=str(cleaned.get("first_name") or ""),
+            last_name=str(cleaned.get("last_name") or ""),
+            email=str(cleaned.get("email") or ""),
+        )
+        if not status.ready and "email" not in self.errors:
+            self.add_error("email", "Enter a valid email address for notifications.")
+        return cleaned
 
 
 class PresentationSettingsForm(forms.Form):
