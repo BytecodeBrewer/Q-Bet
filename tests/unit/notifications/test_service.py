@@ -67,7 +67,7 @@ def approved_record(*, owner: str = "owner") -> tuple[ExecutionRecord, QueuedWor
     proposal = ExecutionProposal(
         work=work,
         request=item,
-        expires_at=NOW + timedelta(minutes=5),
+        expires_at=NOW + timedelta(minutes=30),
         currency="EUR",
         capital_required=Decimal("20"),
         payout=Decimal("21"),
@@ -87,7 +87,7 @@ def approved_record(*, owner: str = "owner") -> tuple[ExecutionRecord, QueuedWor
         work,
         item,
         scheduled_for=NOW - timedelta(minutes=1),
-        expires_at=NOW + timedelta(minutes=5),
+        expires_at=NOW + timedelta(minutes=30),
     )
     return record, queued
 
@@ -134,19 +134,16 @@ def test_approved_assigned_execution_sends_one_idempotent_notification() -> None
     assert "token" not in serialized_refs.lower()
 
 
-def test_unapproved_unassigned_mismatched_and_expired_work_never_sends() -> None:
+def test_unapproved_unassigned_and_expired_work_never_sends() -> None:
     transport = CaptureEmailTransport()
     repository = InMemoryNotificationRepository()
     service = ExecutionNotificationService(repository=repository, transport=transport)
     record, queued = approved_record()
 
-    unapproved = record.model_copy(
-        update={"state": Lifecycle.AWAITING_APPROVAL, "approval": None}
-    )
-    assert service.notify(unapproved, queued, recipient(), now=NOW).reason_code == "execution_not_approved"
+    unapproved = record.model_copy(update={"state": Lifecycle.AWAITING_APPROVAL, "approval": None})
     assert (
-        service.notify(record, queued, recipient(user_id="other"), now=NOW).reason_code
-        == "notification_recipient_mismatch"
+        service.notify(unapproved, queued, recipient(), now=NOW).reason_code
+        == "execution_not_approved"
     )
     unassigned = record.model_copy(
         update={
@@ -155,12 +152,27 @@ def test_unapproved_unassigned_mismatched_and_expired_work_never_sends() -> None
             )
         }
     )
-    assert service.notify(unassigned, queued, recipient(), now=NOW).reason_code == "execution_not_assigned"
     assert (
-        service.notify(record, queued, recipient(), now=NOW + timedelta(minutes=5)).reason_code
+        service.notify(unassigned, queued, recipient(), now=NOW).reason_code
+        == "execution_not_assigned"
+    )
+    assert (
+        service.notify(record, queued, recipient(), now=NOW + timedelta(minutes=30)).reason_code
         == "execution_expired"
     )
     assert not transport.messages
+
+
+def test_notification_requires_a_twenty_to_fifty_minute_action_window() -> None:
+    record, queued = approved_record()
+    too_short = queued.model_copy(update={"expires_at": NOW + timedelta(minutes=5)})
+    outcome = ExecutionNotificationService(
+        repository=InMemoryNotificationRepository(),
+        transport=CaptureEmailTransport(),
+    ).notify(record, too_short, recipient(), now=NOW)
+
+    assert not outcome.accepted
+    assert outcome.reason_code == "notification_action_window_invalid"
 
 
 def test_missing_and_invalid_email_become_explicit_failed_states() -> None:

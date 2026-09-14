@@ -58,3 +58,29 @@ def engine_runtime_control(
     state = "started" if action == "start" else "stopped"
     messages.success(request, f"{engine_id} {workflow_mode.value} {state}.")
     return redirect("dashboard")
+
+
+@login_required
+@require_POST
+def sandbox_execution_control(
+    request: HttpRequest,
+    engine_id: str,
+    action: str,
+) -> HttpResponse:
+    """Administrator-only control for deterministic sandbox Execution."""
+
+    if not bool(getattr(request.user, "is_staff", False)):
+        raise Http404("Sandbox execution control is not available.")
+    if engine_id not in V1_ENGINES or action not in {"start", "stop"}:
+        raise Http404("Sandbox execution control was not found.")
+    try:
+        RoutingConfigurationRepository().set_mode_active(
+            engine=cast(V1Engine, engine_id),
+            mode=WorkflowMode.EXECUTION,
+            active=action == "start",
+        )
+    except RoutingConfigurationPersistenceError:
+        messages.error(request, "Sandbox execution control is temporarily unavailable.")
+        return redirect("dashboard")
+    messages.success(request, f"{engine_id} sandbox execution {action}ed.")
+    return redirect("dashboard")

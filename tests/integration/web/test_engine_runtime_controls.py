@@ -113,3 +113,18 @@ class EngineRuntimeControlTests(TestCase):
         self.assertContains(response, "Simulation is disabled.")
         configuration = RoutingConfigurationRepository().load()
         self.assertTrue(configuration is None or not configuration.bonus.simulation)
+
+    def test_sandbox_execution_control_is_staff_only(self) -> None:
+        self.client.force_login(self.user)
+        denied = self.client.post("/admin-area/sandbox-execution/bonus/start/")
+        self.assertEqual(denied.status_code, 404)
+        self.assertIsNone(RoutingConfigurationRepository().load())
+
+        self.client.force_login(self.staff)
+        allowed = self.client.post("/admin-area/sandbox-execution/bonus/start/")
+        self.assertRedirects(allowed, "/dashboard/")
+        configuration = RoutingConfigurationRepository().load()
+        assert configuration is not None
+        self.assertTrue(configuration.bonus.execution)
+        self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
+        self.assertEqual(ExecutionRecordRow.objects.count(), 0)

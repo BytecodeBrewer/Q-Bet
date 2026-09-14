@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid5
 
@@ -29,9 +29,7 @@ class NotificationDeliveryError(RuntimeError):
 class NotificationRepository(Protocol):
     def load(self, task_id: UUID) -> ExecutionNotificationTask | None: ...
 
-    def create(
-        self, task: ExecutionNotificationTask
-    ) -> tuple[ExecutionNotificationTask, bool]: ...
+    def create(self, task: ExecutionNotificationTask) -> tuple[ExecutionNotificationTask, bool]: ...
 
     def save(self, task: ExecutionNotificationTask) -> ExecutionNotificationTask: ...
 
@@ -53,9 +51,7 @@ class InMemoryNotificationRepository:
     def load(self, task_id: UUID) -> ExecutionNotificationTask | None:
         return self._tasks.get(task_id)
 
-    def create(
-        self, task: ExecutionNotificationTask
-    ) -> tuple[ExecutionNotificationTask, bool]:
+    def create(self, task: ExecutionNotificationTask) -> tuple[ExecutionNotificationTask, bool]:
         existing = self._tasks.get(task.id)
         if existing is not None:
             return existing, False
@@ -105,9 +101,7 @@ class ExecutionNotificationService:
                 task=persisted,
                 accepted=sendable,
                 reason_code=(
-                    None
-                    if sendable
-                    else persisted.failure_reason or "notification_not_sendable"
+                    None if sendable else persisted.failure_reason or "notification_not_sendable"
                 ),
                 duplicate=True,
             )

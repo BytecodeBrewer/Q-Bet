@@ -116,7 +116,7 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
             owner=owner,
             correlation_id=CORRELATION_ID,
             scheduled_for=NOW,
-            expires_at=NOW + timedelta(minutes=5),
+            expires_at=NOW + timedelta(minutes=30),
         )
         dispatcher.dispatch_due(now=NOW, owner=owner)
         return scheduled, dispatcher
