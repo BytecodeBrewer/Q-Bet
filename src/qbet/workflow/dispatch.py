@@ -344,6 +344,22 @@ class ModeDispatchCoordinator:
             if record.state is Lifecycle.SETTLED:
                 return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
 
+            if not item.work.execution_sandbox:
+                self._record_event(
+                    item,
+                    stage="execution",
+                    event_type="sandbox_guard",
+                    status="rejected",
+                    reason_code="execution_sandbox_required",
+                    occurred_at=now,
+                )
+                return self._save_queue(
+                    item.transition(
+                        WorkState.CANCELLED,
+                        now=now,
+                        reason="execution_sandbox_required",
+                    )
+                )
             self._notify_after_revalidation(record, item, now=now)
 
             persisted_record = self._run_execution(

@@ -246,6 +246,9 @@ def _eligibility_reason(
     if queued.state not in {WorkState.PENDING, WorkState.RECHECK, WorkState.PROCESSING}:
         return "execution_not_notifiable"
     deadline = min(record.proposal.expires_at, queued.expires_at)
+    action_window = deadline - queued.scheduled_for
+    if not timedelta(minutes=20) <= action_window <= timedelta(minutes=50):
+        return "notification_action_window_invalid"
     if now >= deadline:
         return "execution_expired"
     return None

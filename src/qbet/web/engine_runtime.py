@@ -74,13 +74,13 @@ def sandbox_execution_control(
     if engine_id not in V1_ENGINES or action not in {"start", "stop"}:
         raise Http404("Sandbox execution control was not found.")
     try:
-        RoutingConfigurationRepository().set_mode_active(
+        RoutingConfigurationRepository().set_execution_sandbox_active(
             engine=cast(V1Engine, engine_id),
-            mode=WorkflowMode.EXECUTION,
             active=action == "start",
         )
     except RoutingConfigurationPersistenceError:
         messages.error(request, "Sandbox execution control is temporarily unavailable.")
         return redirect("dashboard")
-    messages.success(request, f"{engine_id} sandbox execution {action}ed.")
+    state = "started" if action == "start" else "stopped"
+    messages.success(request, f"{engine_id} sandbox execution {state}.")
     return redirect("dashboard")

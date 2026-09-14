@@ -175,6 +175,33 @@ def test_notification_requires_a_twenty_to_fifty_minute_action_window() -> None:
     assert outcome.reason_code == "notification_action_window_invalid"
 
 
+def test_notification_accepts_the_action_window_boundaries() -> None:
+    record, queued = approved_record()
+    service = ExecutionNotificationService(
+        repository=InMemoryNotificationRepository(),
+        transport=CaptureEmailTransport(),
+    )
+
+    twenty_minutes = queued.model_copy(update={"expires_at": NOW + timedelta(minutes=20)})
+    fifty_minutes = queued.model_copy(update={"expires_at": NOW + timedelta(minutes=50)})
+
+    assert service.notify(record, twenty_minutes, recipient(user_id="twenty"), now=NOW).accepted
+    assert service.notify(record, fifty_minutes, recipient(user_id="fifty"), now=NOW).accepted
+
+
+def test_notification_rejects_an_action_window_longer_than_fifty_minutes() -> None:
+    record, queued = approved_record()
+    too_long = queued.model_copy(update={"expires_at": NOW + timedelta(minutes=51)})
+
+    outcome = ExecutionNotificationService(
+        repository=InMemoryNotificationRepository(),
+        transport=CaptureEmailTransport(),
+    ).notify(record, too_long, recipient(), now=NOW)
+
+    assert not outcome.accepted
+    assert outcome.reason_code == "notification_action_window_invalid"
+
+
 def test_missing_and_invalid_email_become_explicit_failed_states() -> None:
     record, queued = approved_record()
     for email, reason in (
