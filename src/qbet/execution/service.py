@@ -87,6 +87,8 @@ class ExecutionService:
         owner: str,
         approve: bool,
         now: datetime,
+        notification_email: str = "",
+        notification_display_name: str = "",
     ) -> tuple[ExecutionRecord, PortfolioLedger]:
         """Persist a human decision without reserving capital or dispatching an adapter."""
 
@@ -119,6 +121,8 @@ class ExecutionService:
             proposal=record.proposal,
             approved_by=actor,
             approved_at=now,
+            notification_email=notification_email,
+            notification_display_name=notification_display_name,
         )
         return self._persist(
             transition(record, Lifecycle.APPROVED, approval=approval),

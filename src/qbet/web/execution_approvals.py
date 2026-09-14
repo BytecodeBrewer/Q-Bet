@@ -24,6 +24,13 @@ def _context(request: HttpRequest, **values: object) -> dict[str, object]:
     return values
 
 
+def _notification_recipient(request: HttpRequest) -> tuple[str, str]:
+    username = request.user.get_username()
+    get_full_name = getattr(request.user, "get_full_name", None)
+    full_name = str(get_full_name()).strip() if callable(get_full_name) else ""
+    return str(getattr(request.user, "email", "") or "").strip(), full_name or username
+
+
 @login_required
 @require_GET
 def execution_approvals(request: HttpRequest) -> HttpResponse:
@@ -63,10 +70,13 @@ def execution_approval_decision(
         raise Http404("Execution decision not found.")
 
     try:
+        notification_email, notification_display_name = _notification_recipient(request)
         record = _EXECUTION_APPROVALS.decide(
             execution_id,
             actor=request.user.get_username(),
             approve=decision == "approve",
+            notification_email=notification_email,
+            notification_display_name=notification_display_name,
         )
     except (KeyError, PermissionError) as error:
         raise Http404("Execution approval not found.") from error

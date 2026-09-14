@@ -9,7 +9,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from asgiref.sync import sync_to_async
-from django.db import transaction
+from django.db import DatabaseError, transaction
 
 from qbet.domain.ledger import PortfolioBalance
 from qbet.domain.verification import ProviderState
@@ -19,6 +19,11 @@ from qbet.execution.service import ExecutionService
 from qbet.execution.sandbox import valuation
 from qbet.ledger import PortfolioLedger
 from qbet.monitoring import MonitoringLevel, MonitoringRecord
+from qbet.notifications import (
+    DjangoEmailTransport,
+    ExecutionNotificationService,
+    NotificationRecipient,
+)
 from qbet.request_handler import ModeRequestHandlers
 from qbet.request_handler.models import ResultStatus
 from qbet.simulation.models import SimulationEngine, SimulationRunConfig
@@ -31,6 +36,10 @@ from qbet.storage.ledger import (
     RoutingConfigurationRepository,
 )
 from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
+from qbet.storage.notifications import (
+    NotificationPersistenceError,
+    PostgresNotificationRepository,
+)
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
 from qbet.workflow.models import (
@@ -57,6 +66,7 @@ class ModeDispatchCoordinator:
         mode_request_handlers: ModeRequestHandlers | None = None,
         monitoring_writer: PostgresMonitoringRepository | None = None,
         readiness_provider: PipelineReadinessProvider | None = None,
+        notification_service: ExecutionNotificationService | None = None,
     ) -> None:
         if configuration is not None and routing_configuration_loader is not None:
             raise ValueError(
@@ -72,6 +82,11 @@ class ModeDispatchCoordinator:
         self._mode_request_handlers = mode_request_handlers
         self._monitoring_writer = monitoring_writer or PostgresMonitoringRepository()
         self._readiness_provider = readiness_provider or Phase2PipelineReadiness()
+        self._notification_service = notification_service or ExecutionNotificationService(
+            repository=PostgresNotificationRepository(),
+            transport=DjangoEmailTransport(),
+            monitoring_writer=self._monitoring_writer,
+        )
 
     def schedule(
         self,
@@ -82,9 +97,7 @@ class ModeDispatchCoordinator:
         scheduled_for: datetime,
         expires_at: datetime,
     ) -> tuple[QueuedWorkItem, ...]:
-        engine: V1Engine = (
-            "bonus" if isinstance(request, BonusEngineRequest) else "sports_capital"
-        )
+        engine: V1Engine = "bonus" if isinstance(request, BonusEngineRequest) else "sports_capital"
         routes = self._routing_orchestrator.route(
             engine,
             request.opportunity_id,
@@ -225,10 +238,7 @@ class ModeDispatchCoordinator:
             )
 
         handler_result = workflow_result.request_handler_result
-        if (
-            handler_result is not None
-            and handler_result.status is ResultStatus.NOT_YET_AVAILABLE
-        ):
+        if handler_result is not None and handler_result.status is ResultStatus.NOT_YET_AVAILABLE:
             return self._save_queue(
                 processing.transition(
                     WorkState.RECHECK,
@@ -244,10 +254,7 @@ class ModeDispatchCoordinator:
                     reason="result_partial",
                 )
             )
-        if (
-            handler_result is not None
-            and handler_result.status is ResultStatus.CANCELLED
-        ):
+        if handler_result is not None and handler_result.status is ResultStatus.CANCELLED:
             self._cancel_approved_execution(
                 processing,
                 now=now,
@@ -332,6 +339,8 @@ class ModeDispatchCoordinator:
             if record.state is Lifecycle.SETTLED:
                 return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
 
+            self._notify_after_revalidation(record, item, now=now)
+
             persisted_record = self._run_execution(
                 item,
                 state_repository=state_repository,
@@ -360,6 +369,37 @@ class ModeDispatchCoordinator:
         with transaction.atomic():
             self._run_simulation(item, now=now)
             return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
+
+    def _notify_after_revalidation(
+        self,
+        record: ExecutionRecord,
+        item: QueuedWorkItem,
+        *,
+        now: datetime,
+    ) -> None:
+        approval = record.approval
+        if record.state is not Lifecycle.APPROVED or approval is None:
+            return
+        try:
+            self._notification_service.notify(
+                record,
+                item,
+                NotificationRecipient(
+                    user_id=approval.approved_by,
+                    email=approval.notification_email,
+                    display_name=approval.notification_display_name or approval.approved_by,
+                ),
+                now=now,
+            )
+        except (DatabaseError, NotificationPersistenceError, ValueError):
+            self._record_event(
+                item,
+                stage="notification",
+                event_type="notification_unavailable",
+                status="failed",
+                reason_code="notification_persistence_unavailable",
+                occurred_at=now,
+            )
 
     def _fail_after_error(
         self,
@@ -438,9 +478,7 @@ class ModeDispatchCoordinator:
         record, ledger = loaded
         if record.state is not Lifecycle.APPROVED:
             return False
-        cancelled, _ = ExecutionService(
-            state_writer=state_repository
-        ).cancel_before_dispatch(
+        cancelled, _ = ExecutionService(state_writer=state_repository).cancel_before_dispatch(
             record,
             ledger,
             reason=reason,
@@ -612,9 +650,7 @@ class ModeDispatchCoordinator:
             status=result.simulation_result.status.value,
             occurred_at=now,
             references=(
-                {"report_id": str(runner.last_report.run_id)}
-                if runner.last_report
-                else {}
+                {"report_id": str(runner.last_report.run_id)} if runner.last_report else {}
             ),
         )
         if runner.last_ledger is not None:
@@ -683,9 +719,7 @@ class ModeDispatchCoordinator:
                 stage="execution",
                 event_type="lifecycle_transition",
                 status=state.value,
-                reason_code=(
-                    persisted_record.error if state is persisted_record.state else None
-                ),
+                reason_code=(persisted_record.error if state is persisted_record.state else None),
                 references=references,
                 occurred_at=now,
             )
@@ -730,10 +764,7 @@ class ModeDispatchCoordinator:
                 continue
             if dispatch_id is not None and command.dispatch_id != dispatch_id:
                 continue
-            if (
-                dispatch_prefix is not None
-                and not command.dispatch_id.startswith(dispatch_prefix)
-            ):
+            if dispatch_prefix is not None and not command.dispatch_id.startswith(dispatch_prefix):
                 continue
 
             updated, decision = cursor.apply(command)
@@ -754,11 +785,7 @@ class ModeDispatchCoordinator:
 
             self._record_event(
                 item,
-                stage=(
-                    "settlement"
-                    if command.operation.value in {"settle", "fail"}
-                    else "ledger"
-                ),
+                stage=("settlement" if command.operation.value in {"settle", "fail"} else "ledger"),
                 event_type="capital_transition",
                 status=status,
                 reason_code=command.operation.value,
@@ -767,9 +794,7 @@ class ModeDispatchCoordinator:
                     "ledger_command_id": command.id,
                     "dispatch_id": command.dispatch_id,
                     "capital_amount": str(command.amount),
-                    "ledger_position_state": (
-                        position.state if position is not None else status
-                    ),
+                    "ledger_position_state": (position.state if position is not None else status),
                     "available": str(balance.available),
                     "reserved": str(balance.reserved),
                     "locked": str(balance.locked),

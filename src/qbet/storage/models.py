@@ -117,3 +117,25 @@ class MonitoringRecordRow(models.Model):
     class Meta:
         db_table = "qbet_monitoring_records"
         ordering = ("occurred_at", "id")
+
+
+class NotificationTaskRow(models.Model):
+    """Durable customer notification state keyed by execution and recipient."""
+
+    task_id = models.UUIDField(primary_key=True, editable=False)
+    execution_id = models.UUIDField(db_index=True)
+    correlation_id = models.UUIDField(db_index=True)
+    recipient_id = models.CharField(max_length=255)
+    state = models.CharField(max_length=32, db_index=True)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_notification_tasks"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("execution_id", "recipient_id"),
+                name="qbet_notification_execution_recipient_unique",
+            )
+        ]
+        ordering = ("-updated_at",)
