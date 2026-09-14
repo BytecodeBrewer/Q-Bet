@@ -245,8 +245,6 @@ def _eligibility_reason(
         return "execution_mode_required"
     if work.owner is None:
         return "execution_not_assigned"
-    if recipient.user_id != work.owner:
-        return "notification_recipient_mismatch"
     if queued.work.id != work.id or queued.work.correlation_id != work.correlation_id:
         return "execution_queue_mismatch"
     if queued.work.owner != work.owner or queued.request != record.proposal.request:
