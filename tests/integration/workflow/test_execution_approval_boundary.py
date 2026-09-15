@@ -1,77 +1,25 @@
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from unittest.mock import patch
 from uuid import UUID
 
 from django.test import TransactionTestCase
 
-from qbet.calculations import QualifyingBetInput
-from qbet.engines import BonusEngineRequest
 from qbet.execution.models import ExecutionRecord, Lifecycle
-from qbet.request_handler import (
-    ExecutionSandboxRequestHandler,
-    ModeRequestHandlers,
-    ResultStatus,
-    RevalidationOutcome,
-    SandboxResultFixture,
-    SandboxRevalidationFixture,
-    SimulationSandboxRequestHandler,
-)
+from qbet.request_handler import RevalidationOutcome
 from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepository
 from qbet.storage.models import ExecutionRecordRow
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.queue import WorkState
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
+from tests.support.workflow import bonus_request, sandbox_mode_handlers
 
 NOW = datetime(2026, 9, 10, 12, tzinfo=UTC)
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
 
 
-def _request(opportunity_id: str = "approval-opportunity") -> BonusEngineRequest:
-    return BonusEngineRequest(
-        opportunity_id=opportunity_id,
-        inputs=QualifyingBetInput(
-            back_odds=Decimal("2.5"),
-            lay_odds=Decimal("2.6"),
-            back_stake=Decimal("10"),
-            exchange_commission=Decimal("0.02"),
-            stake_precision=Decimal("0.01"),
-            max_lay_liability=Decimal("100"),
-        ),
-        currency="EUR",
-        execution_offer_ids=("book", "exchange"),
-        generated_at=NOW,
-    )
-
-
-def _handlers(
-    opportunity_id: str,
-    outcome: RevalidationOutcome = RevalidationOutcome.VALID,
-) -> ModeRequestHandlers:
-    return ModeRequestHandlers(
-        simulation=SimulationSandboxRequestHandler(),
-        execution=ExecutionSandboxRequestHandler(
-            revalidation_fixtures=(
-                SandboxRevalidationFixture(
-                    opportunity_id=opportunity_id,
-                    outcome=outcome,
-                    validated_at=NOW,
-                    reason_code=(
-                        None if outcome is RevalidationOutcome.VALID else "fixture_revalidation"
-                    ),
-                ),
-            ),
-            result_fixtures=(
-                SandboxResultFixture(
-                    opportunity_id=opportunity_id,
-                    status=ResultStatus.SUCCESS,
-                    observed_at=NOW,
-                    result_reference="sandbox-result",
-                ),
-            ),
-        ),
-    )
+def _request(opportunity_id: str = "approval-opportunity"):
+    return bonus_request(opportunity_id, generated_at=NOW)
 
 
 def _coordinator(
@@ -81,7 +29,11 @@ def _coordinator(
     return ModeDispatchCoordinator(
         RoutingConfiguration(bonus=EngineModes(execution=True)),
         queue_repository=ModeWorkQueueRepository(),
-        mode_request_handlers=_handlers(opportunity_id, outcome),
+        mode_request_handlers=sandbox_mode_handlers(
+            opportunity_id,
+            observed_at=NOW,
+            execution_outcome=outcome,
+        ),
     )
 
 
