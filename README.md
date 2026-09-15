@@ -24,6 +24,7 @@ The current system includes:
 - a bunq bank adapter with explicit read-only and official sandbox modes, approval-gated fake-money sandbox payments, and opt-in E2E coverage
 - approval-gated, idempotent Execution notifications with a replaceable Django email transport and deterministic no-network test adapter
 - CI/CD with Ruff, Pyright, pytest, Django checks, package builds, PostgreSQL-backed tests, gated Vercel previews, and a separate protected bunq sandbox E2E workflow
+- a dedicated Phase 3 performance baseline for connected workflow, PostgreSQL, Monitoring, web projection, and engine evaluation paths
 
 Still under development are broader real-provider coverage, production bank onboarding, live execution integrations, additional engines, and the later multi-user/cloud execution model.
 
@@ -110,6 +111,7 @@ The README stays intentionally high-level. The detailed design lives in the proj
 - [Expectation Model](docs/expectation-model.md) — product direction, phase boundaries, safety model, and long-term target state
 - [Pipeline Architecture](docs/pipeline-architecture.md) — workflow structure, component responsibilities, and architecture diagrams
 - [Phase 3 Integration Register](docs/phase-3-integration-register.md) — external integration work and implementation sequencing
+- [Phase 3 Performance Baseline](docs/phase-3-performance-baseline.md) — connected internal performance measurements and scope
 - [bunq Adapter](docs/bunq.md) — read-only/sandbox modes, secret configuration, and protected E2E execution
 - [The Odds API](docs/the-odds-api.md) — current market-data adapter and development smoke path
 - [Django Web Shell](docs/django-web-shell.md) — Django/Supabase bootstrap and operational notes
