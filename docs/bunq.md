@@ -10,6 +10,7 @@ Q-Bet connects bunq through the existing provider-neutral bank boundaries. The a
 
 - the adapter is explicitly configured with `QBET_BUNQ_MODE=sandbox`;
 - the caller provides an already approved `BankFundingProposal`;
+- the approved proposal has not expired when the provider write is attempted;
 - the proposal targets the `execution` capital context;
 - the proposal direction is funding;
 - a sandbox recipient is explicitly configured.
@@ -54,20 +55,24 @@ Normal `pytest` runs use fake transports. They cover:
 - unavailable/invalid provider responses;
 - authentication, timeout, and rate-limit reason codes;
 - write blocking in read-only mode;
-- approval and Execution-context guards;
+- approval, expiry, and Execution-context guards;
 - idempotent sandbox payment attempts.
 
 No `API_KEY_BUNQ` means normal CI performs no bunq network request.
 
 ## Protected Sandbox E2E
 
-`.github/workflows/bunq-sandbox-e2e.yml` is manual-only and uses the GitHub Environment `bunq-sandbox`.
+`.github/workflows/bunq-sandbox-e2e.yml` is opt-in only and uses the GitHub Environment `bunq-sandbox`.
 
 Configure that environment with:
 
 - secret `API_KEY_BUNQ` containing a sandbox API key;
 - variable `QBET_BUNQ_ACCOUNT_REFERENCE` containing only the redacted Q-Bet account label;
 - secret `QBET_BUNQ_SANDBOX_RECIPIENT_EMAIL` containing the sandbox recipient alias.
+
+While this workflow is still being introduced through a pull request targeting `develop`, GitHub cannot expose its `workflow_dispatch` button yet because the workflow file is not on the repository default branch. The same-repository PR path therefore supports an explicit bootstrap trigger: add the existing `qbet:approved` label to that PR only when the protected sandbox environment is configured and the EUR 0.01 fake-money test payment is intentionally authorized. The workflow reacts only to that label event and refuses forked PR heads.
+
+Once the workflow file has reached the default branch, `workflow_dispatch` provides the normal manual Actions trigger and can target the desired branch or tag.
 
 The workflow forces `QBET_BUNQ_MODE=sandbox` and `QBET_BUNQ_E2E=1`. The E2E test reads the sandbox balance and sends exactly EUR 0.01 through the approved Q-Bet funding boundary. It refuses to run in read-only mode and skips the payment when the configured fake-money account has insufficient sandbox balance.
 
