@@ -366,6 +366,8 @@ class BunqSandboxFundingAdapter:
             return "bunq_write_forbidden"
         if proposal.state is not FundingProposalState.APPROVED:
             return "proposal_not_approved"
+        if datetime.now(UTC) >= proposal.expires_at:
+            return "proposal_expired"
         if proposal.target_mode != "execution":
             return "bunq_sandbox_payment_requires_execution_context"
         if proposal.direction is not FundingDirection.FUNDING:
