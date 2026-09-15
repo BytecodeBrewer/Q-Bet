@@ -29,6 +29,7 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
     "bunq_e2e: opt-in test against the official bunq sandbox",
+    "performance: opt-in Phase 3 connected performance baseline suite",
 ]
 
 [tool.ruff]
