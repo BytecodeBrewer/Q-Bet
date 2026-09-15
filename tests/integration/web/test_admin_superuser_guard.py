@@ -114,6 +114,7 @@ class LastActiveSuperuserGuardTests(TestCase):
                 "last_name": "User",
                 "email": "",
                 "is_active": "on",
+                "date_joined": ready.date_joined,
             },
             instance=ready,
         )
@@ -131,6 +132,7 @@ class LastActiveSuperuserGuardTests(TestCase):
                 "last_name": "",
                 "email": "",
                 "is_active": "on",
+                "date_joined": legacy.date_joined,
             },
             instance=legacy,
         )
