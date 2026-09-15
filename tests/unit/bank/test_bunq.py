@@ -28,7 +28,7 @@ from qbet.bank.funding import (
 )
 from qbet.data.models import DataSourceMetadata, SourceTransport
 
-NOW = datetime(2026, 9, 15, 12, 0, tzinfo=UTC)
+NOW = datetime.now(UTC).replace(microsecond=0)
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
 PROPOSAL_ID = UUID("87654321-4321-8765-4321-876543218765")
 SOURCE = DataSourceMetadata(provider_id="bunq", source_id="bunq_test", transport=SourceTransport.API)
@@ -117,7 +117,7 @@ def approved_proposal(**changes: object) -> BankFundingProposal:
         "target_context": "owner:execution",
         "correlation_id": CORRELATION_ID,
         "created_at": NOW - timedelta(minutes=2),
-        "expires_at": NOW + timedelta(minutes=3),
+        "expires_at": NOW + timedelta(minutes=30),
         "state": FundingProposalState.APPROVED,
         "lifecycle_at": NOW,
         "approval": FundingApproval(
@@ -300,6 +300,18 @@ def test_live_read_only_mode_technically_blocks_provider_writes() -> None:
                 "lifecycle_at": NOW - timedelta(minutes=1),
             },
             "proposal_not_approved",
+        ),
+        (
+            {
+                "created_at": NOW - timedelta(minutes=10),
+                "expires_at": NOW - timedelta(minutes=1),
+                "lifecycle_at": NOW - timedelta(minutes=2),
+                "approval": FundingApproval(
+                    approver=FundingApprover(identity="staff-1", is_authenticated=True),
+                    approved_at=NOW - timedelta(minutes=2),
+                ),
+            },
+            "proposal_expired",
         ),
         (
             {
