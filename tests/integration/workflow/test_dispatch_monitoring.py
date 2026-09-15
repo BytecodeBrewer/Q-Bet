@@ -1,25 +1,13 @@
 """PostgreSQL integration coverage for reconstructable administrator Monitoring traces."""
 
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from unittest.mock import patch
 from uuid import UUID
 
 from django.db import connection
 from django.test import TransactionTestCase
 
-from qbet.calculations.qualifying_bet import QualifyingBetInput
-from qbet.engines import BonusEngineRequest
 from qbet.monitoring import MonitoringQuery, MonitoringRecord
-from qbet.request_handler import (
-    ExecutionSandboxRequestHandler,
-    ModeRequestHandlers,
-    RevalidationOutcome,
-    ResultStatus,
-    SandboxResultFixture,
-    SandboxRevalidationFixture,
-    SimulationSandboxRequestHandler,
-)
 from qbet.storage.models import (
     ExecutionRecordRow,
     ModeWorkQueueRow,
@@ -32,49 +20,9 @@ from qbet.workflow import WorkflowMode, WorkState
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
+from tests.support.workflow import bonus_request, sandbox_mode_handlers
 
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
-
-
-def _bonus_request(now: datetime, opportunity_id: str = "monitoring-bonus") -> BonusEngineRequest:
-    return BonusEngineRequest(
-        opportunity_id=opportunity_id,
-        inputs=QualifyingBetInput(
-            back_odds=Decimal("2.5"),
-            lay_odds=Decimal("2.6"),
-            back_stake=Decimal("10"),
-            exchange_commission=Decimal("0.02"),
-            stake_precision=Decimal("0.01"),
-            max_lay_liability=Decimal("100"),
-        ),
-        currency="EUR",
-        execution_offer_ids=("book", "exchange"),
-        generated_at=now,
-    )
-
-
-def _handlers(opportunity_id: str, now: datetime) -> ModeRequestHandlers:
-    revalidation = SandboxRevalidationFixture(
-        opportunity_id=opportunity_id,
-        outcome=RevalidationOutcome.VALID,
-        validated_at=now,
-    )
-    result = SandboxResultFixture(
-        opportunity_id=opportunity_id,
-        status=ResultStatus.SUCCESS,
-        observed_at=now,
-        result_reference="sandbox-result",
-    )
-    return ModeRequestHandlers(
-        simulation=SimulationSandboxRequestHandler(
-            revalidation_fixtures=(revalidation,),
-            result_fixtures=(result,),
-        ),
-        execution=ExecutionSandboxRequestHandler(
-            revalidation_fixtures=(revalidation,),
-            result_fixtures=(result,),
-        ),
-    )
 
 
 class _FailOnceSettlementMonitoringRepository(PostgresMonitoringRepository):
@@ -121,12 +69,15 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
         now: datetime,
         monitoring_writer: PostgresMonitoringRepository | None = None,
     ) -> ModeDispatchCoordinator:
-        request = _bonus_request(now)
+        request = bonus_request("monitoring-bonus", generated_at=now)
         return ModeDispatchCoordinator(
             RoutingConfiguration(
                 bonus=EngineModes(simulation=simulation, execution=execution)
             ),
-            mode_request_handlers=_handlers(request.opportunity_id, now),
+            mode_request_handlers=sandbox_mode_handlers(
+                request.opportunity_id,
+                observed_at=now,
+            ),
             monitoring_writer=monitoring_writer,
         )
 
@@ -136,7 +87,7 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
         *,
         now: datetime,
     ):
-        request = _bonus_request(now)
+        request = bonus_request("monitoring-bonus", generated_at=now)
         scheduled = coordinator.schedule(
             request,
             owner="owner",
