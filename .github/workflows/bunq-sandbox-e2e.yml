@@ -2,12 +2,24 @@ name: bunq Sandbox E2E
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - develop
+    types:
+      - labeled
 
 permissions:
   contents: read
 
 jobs:
   bunq-sandbox-e2e:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'pull_request' &&
+        github.event.label.name == 'qbet:approved' &&
+        github.event.pull_request.head.repo.full_name == github.repository
+      )
     name: bunq sandbox balance and payment
     runs-on: ubuntu-latest
     environment: bunq-sandbox
