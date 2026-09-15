@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from qbet.calculations import QualifyingBetInput
+from qbet.domain.models import Currency, Identifier
 from qbet.engines import BonusEngineRequest
 from qbet.request_handler import (
     ExecutionSandboxRequestHandler,
@@ -17,7 +18,7 @@ from qbet.request_handler import (
 
 
 def bonus_request(
-    opportunity_id: str,
+    opportunity_id: Identifier,
     *,
     generated_at: datetime,
     back_odds: Decimal = Decimal("2.5"),
@@ -26,8 +27,8 @@ def bonus_request(
     exchange_commission: Decimal = Decimal("0.02"),
     stake_precision: Decimal = Decimal("0.01"),
     max_lay_liability: Decimal = Decimal("100"),
-    execution_offer_ids: tuple[str, ...] = ("book", "exchange"),
-    currency: str = "EUR",
+    execution_offer_ids: tuple[Identifier, Identifier] = ("book", "exchange"),
+    currency: Currency = "EUR",
 ) -> BonusEngineRequest:
     """Build the common deterministic BonusEngine request used across workflow tests."""
     return BonusEngineRequest(
@@ -47,11 +48,11 @@ def bonus_request(
 
 
 def sandbox_revalidation_fixture(
-    opportunity_id: str,
+    opportunity_id: Identifier,
     *,
     validated_at: datetime,
     outcome: RevalidationOutcome = RevalidationOutcome.VALID,
-    reason_code: str = "fixture_revalidation",
+    reason_code: Identifier = "fixture_revalidation",
 ) -> SandboxRevalidationFixture:
     return SandboxRevalidationFixture(
         opportunity_id=opportunity_id,
@@ -62,12 +63,12 @@ def sandbox_revalidation_fixture(
 
 
 def sandbox_result_fixture(
-    opportunity_id: str,
+    opportunity_id: Identifier,
     *,
     observed_at: datetime,
     status: ResultStatus = ResultStatus.SUCCESS,
-    reason_code: str = "fixture_result_status",
-    result_reference: str = "sandbox-result",
+    reason_code: Identifier = "fixture_result_status",
+    result_reference: Identifier = "sandbox-result",
 ) -> SandboxResultFixture:
     return SandboxResultFixture(
         opportunity_id=opportunity_id,
@@ -79,15 +80,15 @@ def sandbox_result_fixture(
 
 
 def sandbox_mode_handlers(
-    opportunity_id: str,
+    opportunity_id: Identifier,
     *,
     observed_at: datetime,
     simulation_outcome: RevalidationOutcome = RevalidationOutcome.VALID,
     execution_outcome: RevalidationOutcome = RevalidationOutcome.VALID,
     result_status: ResultStatus = ResultStatus.SUCCESS,
-    simulation_reason_code: str = "fixture_revalidation",
-    execution_reason_code: str = "fixture_revalidation",
-    result_reason_code: str = "fixture_result_status",
+    simulation_reason_code: Identifier = "fixture_revalidation",
+    execution_reason_code: Identifier = "fixture_revalidation",
+    result_reason_code: Identifier = "fixture_result_status",
 ) -> ModeRequestHandlers:
     """Build isolated Simulation/Execution sandbox handlers with explicit overrides."""
     result = sandbox_result_fixture(
