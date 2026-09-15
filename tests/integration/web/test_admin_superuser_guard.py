@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from qbet.web.admin import ProtectedUserAdmin, ProtectedUserChangeForm
 from qbet.web.admin_guard import last_superuser_message
+from qbet.web.forms import NotificationReadyUserCreationForm
 
 
 class LastActiveSuperuserGuardTests(TestCase):
@@ -62,6 +63,80 @@ class LastActiveSuperuserGuardTests(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn(last_superuser_message(), form.non_field_errors())
+
+    def test_admin_add_form_requires_notification_ready_identity(self) -> None:
+        registered_admin = admin.site._registry[User]
+        self.assertIs(registered_admin.add_form, NotificationReadyUserCreationForm)
+
+        incomplete = registered_admin.add_form(
+            data={
+                "username": "admin-created-incomplete",
+                "password1": "Strong-pass-123",
+                "password2": "Strong-pass-123",
+            }
+        )
+        self.assertFalse(incomplete.is_valid())
+        self.assertIn("first_name", incomplete.errors)
+        self.assertIn("last_name", incomplete.errors)
+        self.assertIn("email", incomplete.errors)
+
+        complete = registered_admin.add_form(
+            data={
+                "username": "admin-created-ready",
+                "first_name": "Admin",
+                "last_name": "Created",
+                "email": "admin-created@example.test",
+                "password1": "Strong-pass-123",
+                "password2": "Strong-pass-123",
+            }
+        )
+        self.assertTrue(complete.is_valid(), complete.errors)
+        created = complete.save()
+        self.assertEqual(
+            (created.first_name, created.last_name, created.email),
+            ("Admin", "Created", "admin-created@example.test"),
+        )
+
+    def test_admin_change_form_cannot_degrade_ready_profile_but_legacy_can_remain_unready(
+        self,
+    ) -> None:
+        ready = User.objects.create_user(
+            "ready-user",
+            password="Strong-pass-123",
+            first_name="Ready",
+            last_name="User",
+            email="ready@example.test",
+        )
+        degraded = ProtectedUserChangeForm(
+            data={
+                "username": ready.username,
+                "first_name": "Ready",
+                "last_name": "User",
+                "email": "",
+                "is_active": "on",
+                "date_joined": ready.date_joined,
+            },
+            instance=ready,
+        )
+        self.assertFalse(degraded.is_valid())
+        self.assertIn(
+            "Notification-ready users must keep first name, last name, and a valid email.",
+            degraded.non_field_errors(),
+        )
+
+        legacy = User.objects.create_user("legacy-user", password="Strong-pass-123")
+        unchanged_legacy = ProtectedUserChangeForm(
+            data={
+                "username": legacy.username,
+                "first_name": "",
+                "last_name": "",
+                "email": "",
+                "is_active": "on",
+                "date_joined": legacy.date_joined,
+            },
+            instance=legacy,
+        )
+        self.assertTrue(unchanged_legacy.is_valid(), unchanged_legacy.errors)
 
     def test_admin_delete_model_rejects_last_active_superuser(self) -> None:
         registered_admin = admin.site._registry[User]

@@ -11,6 +11,7 @@ from uuid import UUID
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.models import User
 from django.db import DatabaseError
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -21,6 +22,7 @@ from qbet.monitoring import MonitoringQuery, MonitoringService as WorkflowMonito
 from qbet.monitoring.exports import csv_header as monitoring_csv_header
 from qbet.monitoring.exports import csv_rows as monitoring_csv_rows
 from qbet.monitoring.exports import json_document as monitoring_json_document
+from qbet.notifications import notification_recipient_status
 from qbet.reporting import (
     CustomerReportUnavailable,
     CustomerResultReport,
@@ -44,6 +46,7 @@ from qbet.web.controls import (
     save_presentation_preferences,
 )
 from qbet.web.forms import (
+    NotificationProfileForm,
     PresentationSettingsForm,
     RegistrationForm,
     SimulationAvailabilityForm,
@@ -190,6 +193,23 @@ def register(request: HttpRequest) -> HttpResponse:
         )
 
     return render(request, "qbet_web/register.html", _context(request, form=form))
+
+
+@login_required
+def profile(request: HttpRequest) -> HttpResponse:
+    user = cast(User, request.user)
+    form = NotificationProfileForm(request.POST or None, instance=user)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Profile updated.")
+        return redirect("profile")
+    status = notification_recipient_status(
+        user_id=user.get_username(),
+        first_name=user.first_name,
+        last_name=user.last_name,
+        email=user.email,
+    )
+    return render(request, "qbet_web/profile.html", _context(request, form=form, status=status))
 
 
 @login_required
