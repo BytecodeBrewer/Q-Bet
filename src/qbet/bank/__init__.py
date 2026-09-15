@@ -1,4 +1,4 @@
-"""Read-only, provider-neutral bank balance boundary."""
+"""Provider-neutral bank boundaries and concrete bank adapters."""
 
 from .balances import (
     BankBalance,
@@ -10,6 +10,18 @@ from .balances import (
     BankBalanceStatus,
     DeterministicBankBalanceProvider,
     ReadOnlyBankBalanceService,
+)
+from .bunq import (
+    BunqAccountSnapshot,
+    BunqBalanceProvider,
+    BunqConfigurationError,
+    BunqOperatingMode,
+    BunqSandboxFundingAdapter,
+    BunqSandboxPaymentResult,
+    BunqSdkTransport,
+    BunqSettings,
+    BunqTransport,
+    BunqTransportError,
 )
 from .funding import (
     BankFundingProposal,
@@ -33,6 +45,16 @@ __all__ = [
     "BankBalanceStatus",
     "DeterministicBankBalanceProvider",
     "ReadOnlyBankBalanceService",
+    "BunqAccountSnapshot",
+    "BunqBalanceProvider",
+    "BunqConfigurationError",
+    "BunqOperatingMode",
+    "BunqSandboxFundingAdapter",
+    "BunqSandboxPaymentResult",
+    "BunqSdkTransport",
+    "BunqSettings",
+    "BunqTransport",
+    "BunqTransportError",
     "BankFundingProposal",
     "BankFundingProposalService",
     "DeterministicFundingSandboxAdapter",

@@ -20,11 +20,12 @@ The current system includes:
 - customer-facing Reporting separated from administrator-only technical Monitoring
 - bounded CSV/JSON Monitoring exports and correlated workflow reconstruction
 - connected end-to-end coverage for the complete GUI-to-workflow path
-- a real read-only The Odds API adapter, provider-neutral market/result contracts, a deterministic read-only bank-balance boundary, and an approval-gated funding-proposal sandbox
+- a real read-only The Odds API adapter, provider-neutral market/result contracts, and a deterministic read-only bank-balance boundary
+- a bunq bank adapter with explicit read-only and official sandbox modes, approval-gated fake-money sandbox payments, and opt-in E2E coverage
 - approval-gated, idempotent Execution notifications with a replaceable Django email transport and deterministic no-network test adapter
-- CI/CD with Ruff, Pyright, pytest, Django checks, package builds, PostgreSQL-backed tests, and gated Vercel previews
+- CI/CD with Ruff, Pyright, pytest, Django checks, package builds, PostgreSQL-backed tests, gated Vercel previews, and a separate protected bunq sandbox E2E workflow
 
-Still under development are broader real-provider coverage, live execution integrations, account/bank connectivity, additional engines, and the later multi-user/cloud execution model.
+Still under development are broader real-provider coverage, production bank onboarding, live execution integrations, additional engines, and the later multi-user/cloud execution model.
 
 ## Engine Portfolio
 
@@ -84,7 +85,7 @@ python manage.py check
 python -m build
 ```
 
-The GitHub Actions pipeline runs the same quality gates against an isolated PostgreSQL service.
+The GitHub Actions pipeline runs the same quality gates against an isolated PostgreSQL service. Provider-specific E2E workflows are opt-in and isolated from the normal offline validation path.
 
 ## Deployment
 
@@ -109,6 +110,7 @@ The README stays intentionally high-level. The detailed design lives in the proj
 - [Expectation Model](docs/expectation-model.md) — product direction, phase boundaries, safety model, and long-term target state
 - [Pipeline Architecture](docs/pipeline-architecture.md) — workflow structure, component responsibilities, and architecture diagrams
 - [Phase 3 Integration Register](docs/phase-3-integration-register.md) — external integration work and implementation sequencing
+- [bunq Adapter](docs/bunq.md) — read-only/sandbox modes, secret configuration, and protected E2E execution
 - [The Odds API](docs/the-odds-api.md) — current market-data adapter and development smoke path
 - [Django Web Shell](docs/django-web-shell.md) — Django/Supabase bootstrap and operational notes
 
