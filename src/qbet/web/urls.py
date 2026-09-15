@@ -3,7 +3,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from qbet.web import views
-from qbet.web.engine_runtime import engine_runtime_control
+from qbet.web.engine_runtime import engine_runtime_control, sandbox_execution_control
 from qbet.web.execution_approvals import execution_approval_decision, execution_approvals
 from qbet.web.routing_settings import routing_settings
 
@@ -24,6 +24,11 @@ urlpatterns = [
         "engines/<str:engine_id>/<str:mode>/<str:action>/",
         engine_runtime_control,
         name="engine-runtime-control",
+    ),
+    path(
+        "admin-area/sandbox-execution/<str:engine_id>/<str:action>/",
+        sandbox_execution_control,
+        name="sandbox-execution-control",
     ),
     path("engines/<str:engine_id>/", views.engine_detail, name="engine-detail"),
     path("simulation/", views.simulation, name="simulation"),

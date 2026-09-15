@@ -1,4 +1,4 @@
-"""Notification contracts, delivery adapters, and recipient readiness."""
+"""Notification contracts, delivery adapters, recipient readiness, and resolution."""
 
 from .email import CaptureEmailTransport, CapturedEmail, DjangoEmailTransport
 from .models import (
@@ -8,7 +8,12 @@ from .models import (
     NotificationRecipient,
     NotificationStatus,
 )
-from .recipients import NotificationRecipientStatus, notification_recipient_status
+from .recipients import (
+    ActiveUserNotificationRecipientResolver,
+    NotificationRecipientResolver,
+    NotificationRecipientStatus,
+    notification_recipient_status,
+)
 from .service import (
     ExecutionNotificationService,
     InMemoryNotificationRepository,
@@ -18,6 +23,7 @@ from .service import (
 )
 
 __all__ = [
+    "ActiveUserNotificationRecipientResolver",
     "CaptureEmailTransport",
     "CapturedEmail",
     "DjangoEmailTransport",
@@ -28,6 +34,7 @@ __all__ = [
     "NotificationDeliveryError",
     "NotificationOutcome",
     "NotificationRecipient",
+    "NotificationRecipientResolver",
     "NotificationRecipientStatus",
     "NotificationRepository",
     "NotificationStatus",

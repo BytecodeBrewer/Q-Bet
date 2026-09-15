@@ -1,11 +1,16 @@
-"""Validated notification-recipient state independent of any delivery transport."""
+"""Validated notification-recipient state and recipient resolution boundaries."""
 
 from __future__ import annotations
 
+from typing import Protocol
+
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 
 from qbet.domain.models import DomainModel, Identifier
+
+from .models import NotificationRecipient
 
 
 class NotificationRecipientStatus(DomainModel):
@@ -58,3 +63,29 @@ def notification_recipient_status(
         email=normalized_email,
         ready=True,
     )
+
+
+class NotificationRecipientResolver(Protocol):
+    """Resolves the audience for one shared execution opportunity."""
+
+    def resolve(self) -> tuple[NotificationRecipient, ...]: ...
+
+
+class ActiveUserNotificationRecipientResolver:
+    """Returns every active Q-Bet user, including explicit invalid-email outcomes."""
+
+    def resolve(self) -> tuple[NotificationRecipient, ...]:
+        User = get_user_model()
+        recipients: list[NotificationRecipient] = []
+        for user in User.objects.filter(is_active=True).order_by("pk"):
+            username = user.get_username() or str(user.pk)
+            get_full_name = getattr(user, "get_full_name", None)
+            full_name = str(get_full_name()).strip() if callable(get_full_name) else ""
+            recipients.append(
+                NotificationRecipient(
+                    user_id=username,
+                    email=str(getattr(user, "email", "") or "").strip(),
+                    display_name=full_name or username,
+                )
+            )
+        return tuple(recipients)

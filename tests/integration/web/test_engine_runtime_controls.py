@@ -26,6 +26,7 @@ class EngineRuntimeControlTests(TestCase):
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
         self.assertTrue(configuration.bonus.execution)
+        self.assertTrue(configuration.bonus.execution_sandbox)
         self.assertFalse(configuration.bonus.simulation)
         self.assertFalse(configuration.sports_capital.execution)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
@@ -83,6 +84,7 @@ class EngineRuntimeControlTests(TestCase):
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
         self.assertTrue(configuration.bonus.execution)
+        self.assertTrue(configuration.bonus.execution_sandbox)
         self.assertTrue(configuration.bonus.simulation)
 
         dashboard = self.client.get("/dashboard/")
@@ -102,6 +104,7 @@ class EngineRuntimeControlTests(TestCase):
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
         self.assertTrue(configuration.bonus.execution)
+        self.assertTrue(configuration.bonus.execution_sandbox)
         self.assertFalse(configuration.bonus.simulation)
 
     def test_staff_cannot_start_simulation_engine_when_simulation_layer_is_disabled(self) -> None:
@@ -113,3 +116,25 @@ class EngineRuntimeControlTests(TestCase):
         self.assertContains(response, "Simulation is disabled.")
         configuration = RoutingConfigurationRepository().load()
         self.assertTrue(configuration is None or not configuration.bonus.simulation)
+
+    def test_sandbox_execution_control_is_staff_only(self) -> None:
+        self.client.force_login(self.user)
+        denied = self.client.post("/admin-area/sandbox-execution/bonus/start/")
+        self.assertEqual(denied.status_code, 404)
+        self.assertIsNone(RoutingConfigurationRepository().load())
+
+        self.client.force_login(self.staff)
+        allowed = self.client.post("/admin-area/sandbox-execution/bonus/start/")
+        self.assertRedirects(allowed, "/dashboard/")
+        configuration = RoutingConfigurationRepository().load()
+        assert configuration is not None
+        self.assertTrue(configuration.bonus.execution)
+        self.assertTrue(configuration.bonus.execution_sandbox)
+        stopped = self.client.post("/admin-area/sandbox-execution/bonus/stop/")
+        self.assertRedirects(stopped, "/dashboard/")
+        configuration = RoutingConfigurationRepository().load()
+        assert configuration is not None
+        self.assertFalse(configuration.bonus.execution)
+        self.assertFalse(configuration.bonus.execution_sandbox)
+        self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
+        self.assertEqual(ExecutionRecordRow.objects.count(), 0)

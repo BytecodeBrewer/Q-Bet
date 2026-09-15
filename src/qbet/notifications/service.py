@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid5
 
@@ -30,9 +30,7 @@ class NotificationDeliveryError(RuntimeError):
 class NotificationRepository(Protocol):
     def load(self, task_id: UUID) -> ExecutionNotificationTask | None: ...
 
-    def create(
-        self, task: ExecutionNotificationTask
-    ) -> tuple[ExecutionNotificationTask, bool]: ...
+    def create(self, task: ExecutionNotificationTask) -> tuple[ExecutionNotificationTask, bool]: ...
 
     def save(self, task: ExecutionNotificationTask) -> ExecutionNotificationTask: ...
 
@@ -54,9 +52,7 @@ class InMemoryNotificationRepository:
     def load(self, task_id: UUID) -> ExecutionNotificationTask | None:
         return self._tasks.get(task_id)
 
-    def create(
-        self, task: ExecutionNotificationTask
-    ) -> tuple[ExecutionNotificationTask, bool]:
+    def create(self, task: ExecutionNotificationTask) -> tuple[ExecutionNotificationTask, bool]:
         existing = self._tasks.get(task.id)
         if existing is not None:
             return existing, False
@@ -111,9 +107,7 @@ class ExecutionNotificationService:
                 task=persisted,
                 accepted=sendable,
                 reason_code=(
-                    None
-                    if sendable
-                    else persisted.failure_reason or "notification_not_sendable"
+                    None if sendable else persisted.failure_reason or "notification_not_sendable"
                 ),
                 duplicate=True,
             )
@@ -266,8 +260,6 @@ def _eligibility_reason(
         return "execution_mode_required"
     if work.owner is None:
         return "execution_not_assigned"
-    if recipient.user_id != work.owner:
-        return "notification_recipient_mismatch"
     if queued.work.id != work.id or queued.work.correlation_id != work.correlation_id:
         return "execution_queue_mismatch"
     if queued.work.owner != work.owner or queued.request != record.proposal.request:
@@ -275,6 +267,9 @@ def _eligibility_reason(
     if queued.state not in {WorkState.PENDING, WorkState.RECHECK, WorkState.PROCESSING}:
         return "execution_not_notifiable"
     deadline = min(record.proposal.expires_at, queued.expires_at)
+    action_window = deadline - queued.scheduled_for
+    if not timedelta(minutes=20) <= action_window <= timedelta(minutes=50):
+        return "notification_action_window_invalid"
     if now >= deadline:
         return "execution_expired"
     return None

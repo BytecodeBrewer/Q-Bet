@@ -48,7 +48,7 @@ def _approved() -> tuple[ExecutionRecord, QueuedWorkItem]:
     proposal = ExecutionProposal(
         work=work,
         request=request,
-        expires_at=NOW + timedelta(minutes=2),
+        expires_at=NOW + timedelta(minutes=30),
         currency="EUR",
         capital_required=Decimal("20"),
         payout=Decimal("21"),
@@ -68,7 +68,7 @@ def _approved() -> tuple[ExecutionRecord, QueuedWorkItem]:
         work,
         request,
         scheduled_for=NOW,
-        expires_at=NOW + timedelta(minutes=2),
+        expires_at=NOW + timedelta(minutes=30),
     )
     return record, queued
 
@@ -89,7 +89,7 @@ def test_late_acknowledgement_expires_sent_notification_without_resending() -> N
     expired = service.acknowledge(
         sent.task.id,
         recipient_id="owner",
-        now=NOW + timedelta(minutes=2),
+        now=NOW + timedelta(minutes=30),
     )
 
     assert not expired.accepted
