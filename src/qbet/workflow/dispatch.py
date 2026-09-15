@@ -20,9 +20,10 @@ from qbet.execution.sandbox import valuation
 from qbet.ledger import PortfolioLedger
 from qbet.monitoring import MonitoringLevel, MonitoringRecord
 from qbet.notifications import (
+    ActiveUserNotificationRecipientResolver,
     DjangoEmailTransport,
     ExecutionNotificationService,
-    NotificationRecipient,
+    NotificationRecipientResolver,
 )
 from qbet.request_handler import ModeRequestHandlers
 from qbet.request_handler.models import ResultStatus
@@ -67,6 +68,7 @@ class ModeDispatchCoordinator:
         monitoring_writer: PostgresMonitoringRepository | None = None,
         readiness_provider: PipelineReadinessProvider | None = None,
         notification_service: ExecutionNotificationService | None = None,
+        notification_recipient_resolver: NotificationRecipientResolver | None = None,
     ) -> None:
         if configuration is not None and routing_configuration_loader is not None:
             raise ValueError(
@@ -86,6 +88,9 @@ class ModeDispatchCoordinator:
             repository=PostgresNotificationRepository(),
             transport=DjangoEmailTransport(),
             monitoring_writer=self._monitoring_writer,
+        )
+        self._notification_recipient_resolver = (
+            notification_recipient_resolver or ActiveUserNotificationRecipientResolver()
         )
 
     def schedule(
@@ -339,6 +344,22 @@ class ModeDispatchCoordinator:
             if record.state is Lifecycle.SETTLED:
                 return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
 
+            if not item.work.execution_sandbox:
+                self._record_event(
+                    item,
+                    stage="execution",
+                    event_type="sandbox_guard",
+                    status="rejected",
+                    reason_code="execution_sandbox_required",
+                    occurred_at=now,
+                )
+                return self._save_queue(
+                    item.transition(
+                        WorkState.CANCELLED,
+                        now=now,
+                        reason="execution_sandbox_required",
+                    )
+                )
             self._notify_after_revalidation(record, item, now=now)
 
             persisted_record = self._run_execution(
@@ -381,16 +402,7 @@ class ModeDispatchCoordinator:
         if record.state is not Lifecycle.APPROVED or approval is None:
             return
         try:
-            self._notification_service.notify(
-                record,
-                item,
-                NotificationRecipient(
-                    user_id=approval.approved_by,
-                    email=approval.notification_email,
-                    display_name=approval.notification_display_name or approval.approved_by,
-                ),
-                now=now,
-            )
+            recipients = self._notification_recipient_resolver.resolve()
         except (DatabaseError, NotificationPersistenceError, ValueError):
             self._record_event(
                 item,
@@ -399,6 +411,47 @@ class ModeDispatchCoordinator:
                 status="failed",
                 reason_code="notification_persistence_unavailable",
                 occurred_at=now,
+            )
+            return
+
+        if not recipients:
+            self._record_event(
+                item,
+                stage="notification",
+                event_type="notification_delivery",
+                status="failed",
+                reason_code="notification_no_active_recipients",
+                occurred_at=now,
+            )
+            return
+
+        for recipient in recipients:
+            try:
+                outcome = self._notification_service.notify(
+                    record,
+                    item,
+                    recipient,
+                    now=now,
+                )
+            except (DatabaseError, NotificationPersistenceError, ValueError):
+                self._record_event(
+                    item,
+                    stage="notification",
+                    event_type="notification_unavailable",
+                    status="failed",
+                    reason_code="notification_persistence_unavailable",
+                    occurred_at=now,
+                    references={"recipient_id": recipient.user_id},
+                )
+                continue
+            self._record_event(
+                item,
+                stage="notification",
+                event_type="notification_delivery",
+                status=(outcome.task.status.value if outcome.task is not None else "failed"),
+                reason_code=outcome.reason_code,
+                occurred_at=now,
+                references={"recipient_id": recipient.user_id},
             )
 
     def _fail_after_error(

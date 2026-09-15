@@ -116,7 +116,7 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
             owner=owner,
             correlation_id=CORRELATION_ID,
             scheduled_for=NOW,
-            expires_at=NOW + timedelta(minutes=5),
+            expires_at=NOW + timedelta(minutes=30),
         )
         dispatcher.dispatch_due(now=NOW, owner=owner)
         return scheduled, dispatcher
@@ -190,6 +190,53 @@ class ExecutionEmailIntegrationTests(TransactionTestCase):
 
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("Hello fallback-user", mail.outbox[0].body)
+
+    def test_dispatch_notifies_each_active_user_once(self) -> None:
+        owner = create_user(
+            username="execution-owner",
+            password="test-password-123",
+            email="owner@example.com",
+        )
+        create_user(
+            username="active-recipient",
+            password="test-password-123",
+            email="recipient@example.com",
+            first_name="Active",
+            last_name="Recipient",
+        )
+        create_user(
+            username="inactive-recipient",
+            password="test-password-123",
+            email="inactive@example.com",
+            is_active=False,
+        )
+        scheduled, dispatcher = self.stage(
+            owner=owner.get_username(), opportunity_id="shared-opportunity"
+        )
+        self.client.force_login(owner)
+        self.client.post(
+            reverse("execution-approval-decision", args=[scheduled.work.id]),
+            {"decision": "approve"},
+        )
+
+        dispatch_after_approval(
+            dispatcher,
+            work_id=scheduled.work.id,
+            owner=owner.get_username(),
+        )
+        dispatch_after_approval(
+            dispatcher,
+            work_id=scheduled.work.id,
+            owner=owner.get_username(),
+        )
+
+        self.assertEqual(NotificationTaskRow.objects.count(), 2)
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(
+            {message.to[0] for message in mail.outbox},
+            {"owner@example.com", "recipient@example.com"},
+        )
+        self.assertTrue(any("Hello Active Recipient" in message.body for message in mail.outbox))
 
     def test_missing_email_is_persisted_as_failed_without_delivery(self) -> None:
         user = create_user(

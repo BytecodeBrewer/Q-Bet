@@ -103,3 +103,17 @@ def test_routing_models_reject_unknown_configuration_fields() -> None:
         )
     with pytest.raises(ValidationError):
         EngineModes.model_validate({"simulation": True, "live": True})
+
+
+def test_execution_routes_preserve_the_configured_sandbox_guard() -> None:
+    routes = resolve_routes(
+        RoutingConfiguration(bonus=EngineModes(execution=True, execution_sandbox=False)),
+        "bonus",
+        "opportunity",
+        CORRELATION_ID,
+        "owner",
+    )
+
+    assert len(routes) == 1
+    assert routes[0].mode is WorkflowMode.EXECUTION
+    assert not routes[0].execution_sandbox

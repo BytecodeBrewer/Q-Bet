@@ -8,6 +8,10 @@ from .models import (
     NotificationRecipient,
     NotificationStatus,
 )
+from .recipients import (
+    ActiveUserNotificationRecipientResolver,
+    NotificationRecipientResolver,
+)
 from .service import (
     ExecutionNotificationService,
     InMemoryNotificationRepository,
@@ -17,6 +21,7 @@ from .service import (
 )
 
 __all__ = [
+    "ActiveUserNotificationRecipientResolver",
     "CaptureEmailTransport",
     "CapturedEmail",
     "DjangoEmailTransport",
@@ -27,6 +32,7 @@ __all__ = [
     "NotificationDeliveryError",
     "NotificationOutcome",
     "NotificationRecipient",
+    "NotificationRecipientResolver",
     "NotificationRepository",
     "NotificationStatus",
     "NotificationTransport",

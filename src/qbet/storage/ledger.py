@@ -155,9 +155,7 @@ class ExecutionStateRepository:
                 record_row.correlation_id = record.proposal.work.correlation_id
                 record_row.state = record.state.value
                 record_row.payload = record.model_dump(mode="json")
-                record_row.save(
-                    update_fields=("correlation_id", "state", "payload", "updated_at")
-                )
+                record_row.save(update_fields=("correlation_id", "state", "payload", "updated_at"))
                 return record, ledger
         except DatabaseError as error:
             raise AuthoritativePersistenceError(
@@ -209,9 +207,9 @@ class ExecutionRecordRepository:
         return ExecutionRecord.model_validate(row.payload)
 
     def list_awaiting_approval(self, *, owner: str) -> tuple[ExecutionRecord, ...]:
-        rows = ExecutionRecordRow.objects.filter(
-            state=Lifecycle.AWAITING_APPROVAL.value
-        ).order_by("updated_at")
+        rows = ExecutionRecordRow.objects.filter(state=Lifecycle.AWAITING_APPROVAL.value).order_by(
+            "updated_at"
+        )
         records = tuple(ExecutionRecord.model_validate(row.payload) for row in rows)
         return tuple(record for record in records if record.proposal.work.owner == owner)
 
@@ -262,6 +260,34 @@ class RoutingConfigurationRepository:
                 current = RoutingConfiguration.model_validate(row.payload)
                 modes = engine_modes(current, engine)
                 updated_modes = modes.model_copy(update={mode.value: active})
+                updated = current.model_copy(update={engine: updated_modes})
+                row.payload = updated.model_dump(mode="json")
+                row.save(update_fields=("payload", "updated_at"))
+                return updated
+        except (DatabaseError, ValidationError) as error:
+            raise RoutingConfigurationPersistenceError(
+                "routing configuration is unavailable"
+            ) from error
+
+    def set_execution_sandbox_active(
+        self,
+        *,
+        engine: V1Engine,
+        active: bool,
+    ) -> RoutingConfiguration:
+        """Persist an execution route that can only use the deterministic sandbox."""
+
+        try:
+            with transaction.atomic():
+                row, _ = RoutingConfigurationRow.objects.select_for_update().get_or_create(
+                    pk=1,
+                    defaults={"payload": RoutingConfiguration().model_dump(mode="json")},
+                )
+                current = RoutingConfiguration.model_validate(row.payload)
+                modes = engine_modes(current, engine)
+                updated_modes = modes.model_copy(
+                    update={"execution": active, "execution_sandbox": active}
+                )
                 updated = current.model_copy(update={engine: updated_modes})
                 row.payload = updated.model_dump(mode="json")
                 row.save(update_fields=("payload", "updated_at"))
