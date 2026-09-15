@@ -22,7 +22,7 @@ from qbet.data.models import DataSourceMetadata, SourceTransport
 from qbet.domain.ledger import PortfolioBalance
 from qbet.ledger import PortfolioLedger
 
-NOW = datetime(2026, 9, 15, 12, 0, tzinfo=UTC)
+NOW = datetime.now(UTC).replace(microsecond=0)
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
 PROPOSAL_ID = UUID("87654321-4321-8765-4321-876543218765")
 SOURCE = DataSourceMetadata(provider_id="bunq", source_id="bunq_sandbox", transport=SourceTransport.API)
