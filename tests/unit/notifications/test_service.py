@@ -165,11 +165,23 @@ def test_unapproved_unassigned_and_expired_work_never_sends() -> None:
 
 def test_notification_requires_a_twenty_to_fifty_minute_action_window() -> None:
     record, queued = approved_record()
-    too_short = queued.model_copy(update={"expires_at": NOW + timedelta(minutes=5)})
+    too_short_record = record.model_copy(
+        update={
+            "proposal": record.proposal.model_copy(
+                update={"expires_at": NOW + timedelta(minutes=5)}
+            )
+        }
+    )
+    too_short = queued.model_copy(
+        update={
+            "scheduled_for": NOW,
+            "expires_at": NOW + timedelta(minutes=5),
+        }
+    )
     outcome = ExecutionNotificationService(
         repository=InMemoryNotificationRepository(),
         transport=CaptureEmailTransport(),
-    ).notify(record, too_short, recipient(), now=NOW)
+    ).notify(too_short_record, too_short, recipient(), now=NOW)
 
     assert not outcome.accepted
     assert outcome.reason_code == "notification_action_window_invalid"
@@ -182,21 +194,57 @@ def test_notification_accepts_the_action_window_boundaries() -> None:
         transport=CaptureEmailTransport(),
     )
 
-    twenty_minutes = queued.model_copy(update={"expires_at": NOW + timedelta(minutes=20)})
-    fifty_minutes = queued.model_copy(update={"expires_at": NOW + timedelta(minutes=50)})
+    twenty_record = record.model_copy(
+        update={
+            "proposal": record.proposal.model_copy(
+                update={"expires_at": NOW + timedelta(minutes=20)}
+            )
+        }
+    )
+    twenty_minutes = queued.model_copy(
+        update={
+            "scheduled_for": NOW,
+            "expires_at": NOW + timedelta(minutes=20),
+        }
+    )
+    fifty_record = record.model_copy(
+        update={
+            "proposal": record.proposal.model_copy(
+                update={"expires_at": NOW + timedelta(minutes=50)}
+            )
+        }
+    )
+    fifty_minutes = queued.model_copy(
+        update={
+            "scheduled_for": NOW,
+            "expires_at": NOW + timedelta(minutes=50),
+        }
+    )
 
-    assert service.notify(record, twenty_minutes, recipient(user_id="twenty"), now=NOW).accepted
-    assert service.notify(record, fifty_minutes, recipient(user_id="fifty"), now=NOW).accepted
+    assert service.notify(twenty_record, twenty_minutes, recipient(user_id="twenty"), now=NOW).accepted
+    assert service.notify(fifty_record, fifty_minutes, recipient(user_id="fifty"), now=NOW).accepted
 
 
 def test_notification_rejects_an_action_window_longer_than_fifty_minutes() -> None:
     record, queued = approved_record()
-    too_long = queued.model_copy(update={"expires_at": NOW + timedelta(minutes=51)})
+    too_long_record = record.model_copy(
+        update={
+            "proposal": record.proposal.model_copy(
+                update={"expires_at": NOW + timedelta(minutes=51)}
+            )
+        }
+    )
+    too_long = queued.model_copy(
+        update={
+            "scheduled_for": NOW,
+            "expires_at": NOW + timedelta(minutes=51),
+        }
+    )
 
     outcome = ExecutionNotificationService(
         repository=InMemoryNotificationRepository(),
         transport=CaptureEmailTransport(),
-    ).notify(record, too_long, recipient(), now=NOW)
+    ).notify(too_long_record, too_long, recipient(), now=NOW)
 
     assert not outcome.accepted
     assert outcome.reason_code == "notification_action_window_invalid"
