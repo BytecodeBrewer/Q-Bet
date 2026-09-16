@@ -5,72 +5,33 @@ from uuid import UUID
 from django.contrib.auth.models import User
 from django.test import TestCase
 
-from qbet.calculations import QualifyingBetInput
 from qbet.domain.ledger import LedgerCommand, LedgerOperation, PortfolioBalance
-from qbet.engines import BonusEngineRequest
 from qbet.execution.models import Lifecycle
 from qbet.ledger import PortfolioLedger
-from qbet.request_handler import (
-    ExecutionSandboxRequestHandler,
-    ModeRequestHandlers,
-    ResultStatus,
-    RevalidationOutcome,
-    SandboxResultFixture,
-    SandboxRevalidationFixture,
-    SimulationSandboxRequestHandler,
-)
 from qbet.simulation import SimulationEngine
-from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepository, RoutingConfigurationRepository
+from qbet.storage.ledger import (
+    ExecutionStateRepository,
+    ModeWorkQueueRepository,
+    RoutingConfigurationRepository,
+)
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
 from qbet.web.models import SimulationAvailability
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.queue import WorkState
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
+from tests.support.workflow import bonus_request, sandbox_mode_handlers
 
 NOW = datetime(2026, 9, 10, 12, tzinfo=UTC)
 ALICE_CORRELATION = UUID("32345678-1234-5678-1234-567812345678")
 BOB_CORRELATION = UUID("42345678-1234-5678-1234-567812345678")
 
 
-def _request(opportunity_id: str) -> BonusEngineRequest:
-    return BonusEngineRequest(
-        opportunity_id=opportunity_id,
-        inputs=QualifyingBetInput(
-            back_odds=Decimal("2.5"),
-            lay_odds=Decimal("2.6"),
-            back_stake=Decimal("10"),
-            exchange_commission=Decimal("0.02"),
-            stake_precision=Decimal("0.01"),
-            max_lay_liability=Decimal("100"),
-        ),
-        currency="EUR",
-        execution_offer_ids=("book", "exchange"),
-        generated_at=NOW,
-    )
+def _request(opportunity_id: str):
+    return bonus_request(opportunity_id, generated_at=NOW)
 
 
-def _handlers(opportunity_id: str) -> ModeRequestHandlers:
-    revalidation = SandboxRevalidationFixture(
-        opportunity_id=opportunity_id,
-        outcome=RevalidationOutcome.VALID,
-        validated_at=NOW,
-    )
-    result = SandboxResultFixture(
-        opportunity_id=opportunity_id,
-        status=ResultStatus.SUCCESS,
-        observed_at=NOW,
-        result_reference="sandbox-result",
-    )
-    return ModeRequestHandlers(
-        simulation=SimulationSandboxRequestHandler(
-            revalidation_fixtures=(revalidation,),
-            result_fixtures=(result,),
-        ),
-        execution=ExecutionSandboxRequestHandler(
-            revalidation_fixtures=(revalidation,),
-            result_fixtures=(result,),
-        ),
-    )
+def _handlers(opportunity_id: str):
+    return sandbox_mode_handlers(opportunity_id, observed_at=NOW)
 
 
 class Issue112ReviewRegressionTests(TestCase):
