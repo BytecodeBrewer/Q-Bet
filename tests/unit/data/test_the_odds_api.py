@@ -18,9 +18,12 @@ from qbet.data import (
     SourceTransport,
     THE_ODDS_API_PROVIDER_ID,
     TheOddsApiAdapter,
+    TheOddsApiAuthenticationError,
     TheOddsApiConfigurationError,
     TheOddsApiError,
     TheOddsApiPayloadError,
+    TheOddsApiRateLimitError,
+    TheOddsApiTransportError,
 )
 from qbet.data.sports_match_builder import (
     TwoWayArbitrageMatchMetadata,
@@ -219,21 +222,33 @@ def test_transport_failure_does_not_chain_or_expose_the_api_key() -> None:
 
     value = TheOddsApiAdapter(api_key=api_key, clock=lambda: NOW, http_get=rate_limited)
 
-    with pytest.raises(TheOddsApiError, match="request failed") as raised:
+    with pytest.raises(TheOddsApiRateLimitError, match="request failed") as raised:
         value.fetch(request())
 
+    assert isinstance(raised.value, TheOddsApiError)
     assert api_key not in str(raised.value)
     assert raised.value.__cause__ is None
 
 
-def test_non_success_response_is_a_stable_provider_error() -> None:
+@pytest.mark.parametrize(
+    ("status", "error_type"),
+    [
+        (401, TheOddsApiAuthenticationError),
+        (403, TheOddsApiAuthenticationError),
+        (429, TheOddsApiRateLimitError),
+        (503, TheOddsApiTransportError),
+    ],
+)
+def test_adapter_classifies_non_success_responses(
+    status: int, error_type: type[TheOddsApiError]
+) -> None:
     value = TheOddsApiAdapter(
         api_key="configured-for-test",
         clock=lambda: NOW,
-        http_get=lambda _: (429, {}, b""),
+        http_get=lambda _: (status, {}, b""),
     )
 
-    with pytest.raises(TheOddsApiError, match="HTTP 429"):
+    with pytest.raises(error_type, match=f"HTTP {status}"):
         value.fetch(request())
 
 
