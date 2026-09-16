@@ -6,27 +6,21 @@ Q-Bet combines quantitative strategy logic with a persistent workflow platform. 
 
 ## Current Status
 
-**v3.0 completes the deterministic internal platform.**
+Q-Bet is in **Phase 3: connected external operation and closed system loops**. The deterministic internal platform is established: `BonusEngine` and `SportsCapitalEngine`, PostgreSQL-backed workflow and ledger state, Simulation/Execution separation, approval boundaries, settlement, Reporting, Monitoring, GUI routing controls, and CI/CD are in place. The first real external boundaries are also implemented through The Odds API, the bunq read-only/sandbox adapter, email notifications, deterministic Smart Polling foundations, and a repeatable connected performance baseline.
 
-The current system includes:
+The main work is now composition rather than adding isolated building blocks. External adapters, RequestHandler revalidation, engine-specific preparation, risk/liquidity, Simulation/Execution, sandbox capital movement, settlement, Portfolio Ledger updates, notifications/approvals, and UI state must be connected into complete real-world-like flows. A flow is only considered end-to-end when the relevant business loop is actually closed; groups of integration tests do not substitute for that.
 
-- `BonusEngine` and `SportsCapitalEngine` with Decimal-based calculation logic for matched betting, arbitrage, dutching, fees, tax, rounding, stake and liability constraints
-- a connected workflow from engine evaluation through risk, liquidity, Simulation or controlled Execution
-- persistent PostgreSQL-backed workflow, approval, ledger, routing, reporting, monitoring, and notification state
-- isolated Simulation and Execution capital/state boundaries
-- explicit user approval before deterministic Execution dispatch
-- restart-safe and replay-safe workflow handling with idempotent settlement
-- administrator-controlled engine/mode routing through the Django GUI
-- customer-facing Reporting separated from administrator-only technical Monitoring
-- bounded CSV/JSON Monitoring exports and correlated workflow reconstruction
-- connected end-to-end coverage for the complete GUI-to-workflow path
-- a real read-only The Odds API adapter, provider-neutral market/result contracts, and a deterministic read-only bank-balance boundary
-- a bunq bank adapter with explicit read-only and official sandbox modes, approval-gated fake-money sandbox payments, and opt-in E2E coverage
-- approval-gated, idempotent Execution notifications with a replaceable Django email transport and deterministic no-network test adapter
-- CI/CD with Ruff, Pyright, pytest, Django checks, package builds, PostgreSQL-backed tests, gated Vercel previews, and a separate protected bunq sandbox E2E workflow
-- a dedicated Phase 3 performance baseline for connected workflow, PostgreSQL, Monitoring, web projection, and engine evaluation paths
+Phase 3 intentionally prioritizes technical pipeline completion and sandbox realism before the larger GUI/settings redesign. Multi-user isolation, broader live-capital operation, and higher-automation browser execution remain Phase 4 concerns.
 
-Still under development are broader real-provider coverage, production bank onboarding, live execution integrations, additional engines, and the later multi-user/cloud execution model.
+## Phase 3 Focus
+
+- connect `RequestHandler` to targeted real adapter refreshes instead of replaying broad ingestion
+- make Smart Polling provider-, quota-, cost-, timing-, and engine-aware through persistent configuration rather than fixed code defaults
+- close the Simulation capital loop through external sandbox systems and back into `PortfolioLedger`
+- add genuine data-pipeline and liquidity/capital end-to-end tests, then remove redundant or obsolete test coverage
+- add Prometheus-compatible observability and dashboard tooling before the later Admin Control Center, Settings, Reporting, and UX expansion
+
+The detailed completion plan and Definition of Done for these items lives in [Phase 3 Missing Points](docs/phase-3-missing-points.md).
 
 ## Engine Portfolio
 
@@ -110,7 +104,8 @@ The README stays intentionally high-level. The detailed design lives in the proj
 
 - [Expectation Model](docs/expectation-model.md) — product direction, phase boundaries, safety model, and long-term target state
 - [Pipeline Architecture](docs/pipeline-architecture.md) — workflow structure, component responsibilities, and architecture diagrams
-- [Phase 3 Integration Register](docs/phase-3-integration-register.md) — external integration work and implementation sequencing
+- [Phase 3 Missing Points](docs/phase-3-missing-points.md) — prioritized completion plan, current gaps, E2E definitions, and Definitions of Done
+- [Phase 3 Integration Register](docs/phase-3-integration-register.md) — concrete external integration choices and implementation status
 - [Phase 3 Performance Baseline](docs/phase-3-performance-baseline.md) — connected internal performance measurements and scope
 - [bunq Adapter](docs/bunq.md) — read-only/sandbox modes, secret configuration, and protected E2E execution
 - [The Odds API](docs/the-odds-api.md) — current market-data adapter and development smoke path

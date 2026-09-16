@@ -2,7 +2,7 @@
 
 This file is the companion register for concrete Phase 3 external integrations. It stores user-approved or user-provided integration choices so ticket and development agents do not repeatedly research providers that have already been selected.
 
-`docs/expectation-model.md` remains the authoritative architecture and roadmap document. This register supplies concrete Phase 3 integration inputs only; it does not override architecture contracts.
+`docs/expectation-model.md` remains the authoritative architecture and roadmap document. `docs/phase-3-missing-points.md` is the Phase 3 completion plan. This register supplies concrete integration inputs and current implementation status only; it does not override architecture contracts.
 
 ## Agent Rules
 
@@ -19,15 +19,15 @@ This file is the companion register for concrete Phase 3 external integrations. 
 
 | Area | Phase 3 intent | Concrete choice | Status |
 | --- | --- | --- | --- |
-| Data Aggregation / odds | Feed normalized candidate markets and quotations into the sports pipeline through typed adapters. | The Odds API is the selected first read-only quotation adapter; Odds-API.io, OddsPapi, BetBurger, and OddsJam remain future candidates. | The Odds API adapter connected |
-| RequestHandler revalidation | Perform targeted event-specific refreshes close to execution using current quotation/provider state rather than repeating broad ingestion. | Reuse selected quotation adapters with source-aware targeted pulls and optional cross-checking. | architecture direction confirmed |
+| Data Aggregation / odds | Feed normalized candidate markets and quotations into the sports pipeline through typed adapters. | The Odds API is the selected first read-only quotation adapter; Odds-API.io, OddsPapi, BetBurger, and OddsJam remain future candidates. | The Odds API adapter connected; full connected engine composition still pending |
+| RequestHandler revalidation | Perform targeted event-specific refreshes close to action time using current quotation/provider state rather than repeating broad ingestion. | Reuse selected quotation adapters with source-aware targeted pulls and optional cross-checking. | contracts/router/sandbox handlers exist; real adapter-backed targeted revalidation pending |
 | Result data / settlement | Resolve final match/result state independently from normal quotation ingestion where practical. | football-data.org, OpenLigaDB, API-Football, and a score endpoint from The Odds API are user-provided candidates. | candidates supplied; first adapter selection pending |
-| Bank / account data | Connect balances, transactions, sandbox execution, and later account-backed flows through the bank adapter boundary. | bunq is the first concrete bank integration. Automated transactions and official sandbox operation have already been checked by the user in bunq documentation/SDK. | capability direction confirmed; adapter implementation pending |
-| Notifications | Notify the user when an opportunity, approval, or capital action requires attention instead of automatically navigating a provider website. | Email first. | confirmed direction |
-| Pipeline observability | Add established pipeline monitoring/metrics tooling around the existing structured Monitoring plane. | Prometheus-compatible metrics; additional tools to be selected. | confirmed direction |
-| Execution adapters | Prefer official APIs where supported; otherwise keep the Phase 3 flow notification/manual-action-first. | Provider-specific execution choices still pending. | pending input |
-| Performance validation | Add repeatable performance/load measurements and operator-driven test runs against the connected system, not only unit/integration test execution. | Tooling to be selected as needed. | confirmed direction |
-| GUI/product experience | Continue incremental visual refinement, animations, interaction polish, and clearer product surfaces while integrations are added. | Existing Django GUI remains the product surface. | ongoing |
+| Bank / account data | Connect balances, transactions, sandbox execution, and later account-backed flows through the bank adapter boundary. | bunq is the first concrete bank integration. | bunq read-only + official sandbox adapter implemented; closed Simulation capital loop still pending |
+| Notifications | Notify the user when an opportunity, approval, or capital action requires attention instead of automatically navigating a provider website. | Email first. | notification domain + Django email transport implemented; richer preferences/inbox later |
+| Pipeline observability | Add established pipeline monitoring/metrics tooling around the existing structured Monitoring plane. | Prometheus-compatible metrics; dashboard tooling to be selected. | structured Monitoring exists; Prometheus/Grafana-style infrastructure observability pending |
+| Execution adapters | Prefer official APIs where supported; otherwise keep the Phase 3 flow notification/manual-action-first. | Provider-specific execution choices still pending. | sandbox bank execution boundary exists; provider execution integrations pending |
+| Performance validation | Add repeatable performance/load measurements and operator-driven test runs against the connected system, not only unit/integration test execution. | Dedicated internal connected baseline first; provider/network hot paths later. | Phase 3 internal performance baseline implemented |
+| GUI/product experience | Continue incremental visual refinement, animations, interaction polish, and clearer product surfaces while integrations are added. | Existing Django GUI remains the product surface. | functional controls exist; larger Settings/Admin/UX expansion later in Phase 3 |
 | Cloud runtime | Keep the current Vercel + Supabase production baseline while Phase 3 validates integrations. Broader container orchestration and per-user cloud isolation are Phase 4 concerns. | Vercel + Supabase current baseline. | existing |
 
 ## Data Source Roles
@@ -54,6 +54,7 @@ Source selection should prefer useful free tiers, free test quotas, sandbox/test
 - Prefer the freshest suitable source that still has quota/capacity available.
 - A second source may be used as a cross-check when the opportunity value, data confidence, or configured policy justifies it.
 - Revalidation remains event-specific and should not trigger an unnecessary full-market refresh.
+- Current code has the typed mode router/contracts and deterministic sandbox handlers; the remaining Phase 3 step is a real adapter-backed targeted implementation.
 
 ### Result / Settlement Sources
 
@@ -64,17 +65,19 @@ Result adapters determine match completion/finality and validated settlement inp
 - **API-Football** — candidate for richer match status/result information.
 - **The Odds API score endpoint** — candidate for same-provider score/result retrieval where useful.
 
-Result ingestion remains a separate role even when the selected quotation provider also exposes scores. This lets Q-Bet choose an independent settlement source or cross-check when useful without coupling ledger settlement to the quotation polling budget.
+Result ingestion remains a separate role even when the selected quotation provider also exposes scores. This lets Q-Bet choose an independent settlement source or cross-check when useful without coupling ledger settlement to the quotation polling budget. Result polling should only continue for actions that actually need settlement tracking.
 
 ## Source Balancing And Smart Polling
 
-Phase 3 should add a small source-balancing policy instead of treating every configured API equally on every cycle.
+A deterministic provider-neutral `SmartPollingPolicy` already exists for market/result freshness, retry limits, terminal state and scheduling. It is the foundation, not the final Phase 3 scheduler.
+
+Phase 3 must extend this into configurable source balancing rather than treating every configured API equally on every cycle.
 
 - Prefer free/test quota and lower-cost sources when their freshness/coverage is sufficient; escalate to another source only when the opportunity or required confidence justifies it.
-- Polling becomes more targeted as an event approaches and as an opportunity becomes more relevant. A representative configurable cadence may tighten from roughly T-3d to T-1d, T-12h, and T-1h rather than continuously requesting the same market.
-- Final pre-execution revalidation remains separate from ordinary aggregation.
-- After the final useful pre-match check, a user notification may be scheduled with configurable jitter inside a short window (for example within the following ~40 minutes) rather than every qualifying opportunity producing an identical notification timestamp, provided the opportunity is still valid when acted on.
-- Exact timings belong to configuration and later performance/provider-limit tuning; the architecture requirement is adaptive, quota-aware, opportunity-focused polling rather than fixed high-frequency crawling.
+- Polling becomes more targeted as an event approaches and as an opportunity becomes more relevant. A representative configurable cadence may include T-24h, T-12h, T-1h or other administrator-defined points rather than continuously requesting the same market.
+- Final pre-action revalidation remains separate from ordinary aggregation.
+- Provider/engine strategy must account for current rate limits, quota/subscription capacity, cost and required freshness.
+- Exact timings belong to persisted/configurable strategy so changing an API plan does not require Python code changes.
 
 ## User-Provided Historical Candidate Notes
 
@@ -99,9 +102,9 @@ No claim in this register about current WebSocket availability, exact free-tier 
 
 ### Bank / Account Integration
 
-- **bunq** is the first concrete bank/account integration and the user already has a personal bunq account available for controlled development work.
-- The user has already checked bunq documentation/SDK and confirmed that automated transactions are supported and that bunq provides an official sandbox suitable for repeated development/test setups. Phase 3 tickets should use the official documentation/SDK for the concrete authentication, endpoint, and sandbox setup mechanics instead of reopening the capability question.
-- The first bank adapter should deliberately exercise the official bunq sandbox end to end: account/balance/transaction reads plus automated sandbox transactions and the resulting ledger/monitoring state. Sandbox transaction automation is part of the intended test surface, not something to suppress with live-money guardrails.
+- **bunq** is the first concrete bank/account integration and a read-only plus official-sandbox adapter is implemented.
+- The user has already checked bunq documentation/SDK and confirmed that automated transactions are supported and that bunq provides an official sandbox suitable for repeated development/test setups. Phase 3 tickets should use the official documentation/SDK for concrete authentication, endpoint, and sandbox mechanics instead of reopening the capability question.
+- The adapter supports account/balance reads and guarded fake-money sandbox payment execution. The remaining architecture task is to compose this boundary into the complete Liquidity/Simulation capital round-trip and Portfolio Ledger feedback path.
 - The existing personal account can be connected separately when a Phase 3 ticket needs real account data or a user-approved account-backed flow; sandbox and personal-account modes must remain explicit configuration boundaries.
 - The expected repository/deployment secret name for the existing credential is `API_KEY_BUNQ`. Only the secret reference/name may appear in code or documentation; the value must never be printed, committed, logged, copied into issues, or embedded in test data.
 - The personal payment/share link is intentionally not stored in the repository because it is not required for the technical adapter contract.
@@ -113,6 +116,7 @@ No claim in this register about current WebSocket availability, exact free-tier 
 - higher-automation execution paths, including explicitly permitted browser execution where an official API is unavailable
 - graceful engine shutdown/drain semantics for live work: stop new work without abandoning already-dispatched or unsettled positions
 - production-scale reliability, recovery, security, and high-availability hardening
+- broader live-capital and multi-user execution architecture
 
 ## Remaining Selection Work
 
@@ -130,20 +134,21 @@ A ticket agent should use the candidates above directly. Do not open broad provi
 
 ### Bank / Account Integration
 
-- First adapter: bunq.
+- First adapter: bunq, implemented in read-only and official sandbox modes.
 - First test environment: official bunq sandbox.
 - Credential reference: `API_KEY_BUNQ` through secret/environment handling only.
-- Capability direction already established by the user: automated transactions plus sandbox operation are supported; consult bunq documentation/SDK for exact implementation mechanics.
+- Next integration objective: use the adapter inside a complete sandbox capital-flow E2E scenario rather than testing it only as an isolated external boundary.
 
 ### Monitoring / Metrics Stack
 
 - Prometheus-compatible metrics are in scope.
-- Additional tooling: TBD.
+- Grafana or equivalent dashboard tooling can be selected for infrastructure visualization rather than reimplementing that concern in the Q-Bet GUI.
 
 ### Notification Delivery
 
-- Email is the initial channel.
-- Provider/service: TBD.
+- Email is the initial channel and the Django email transport exists.
+- Deployment mail provider/back-end configuration remains environment-specific.
+- Internal inbox, channel preferences and SMS are later Phase 3 GUI/product work.
 
 ### Provider / Exchange Execution APIs
 
