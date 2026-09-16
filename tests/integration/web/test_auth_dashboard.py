@@ -16,6 +16,9 @@ class AuthenticationAndDashboardTests(TestCase):
             "/register/",
             {
                 "username": "new-user",
+                "first_name": "New",
+                "last_name": "User",
+                "email": "new-user@example.com",
                 "password1": "Strong-pass-123",
                 "password2": "Strong-pass-123",
             },
@@ -25,6 +28,7 @@ class AuthenticationAndDashboardTests(TestCase):
         self.assertRedirects(response, "/dashboard/")
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
+        self.assertEqual(user.email, "new-user@example.com")
         self.assertTrue(response.wsgi_request.user.is_authenticated)
 
     def test_invalid_registration_shows_generic_error(self) -> None:
@@ -32,6 +36,31 @@ class AuthenticationAndDashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Registration details were not accepted.")
+
+    def test_profile_requires_login_and_marks_missing_email_unavailable(self) -> None:
+        self.assertRedirects(self.client.get("/profile/"), "/accounts/login/?next=/profile/")
+        user = User.objects.create_user("profile-user", password="Strong-pass-123")
+        self.client.force_login(user)
+
+        response = self.client.get("/profile/")
+
+        self.assertContains(response, "recipient_email_missing")
+
+    def test_profile_validates_and_updates_notification_identity(self) -> None:
+        user = User.objects.create_user("profile-user", password="Strong-pass-123")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/profile/",
+            {"first_name": "Profile", "last_name": "User", "email": "profile@example.com"},
+        )
+
+        user.refresh_from_db()
+        self.assertRedirects(response, "/profile/")
+        self.assertEqual(
+            (user.first_name, user.last_name, user.email),
+            ("Profile", "User", "profile@example.com"),
+        )
 
     def test_duplicate_registration_does_not_disclose_existing_account(self) -> None:
         User.objects.create_user("protected-user", password="Strong-pass-123")

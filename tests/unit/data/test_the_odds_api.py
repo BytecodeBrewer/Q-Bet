@@ -255,3 +255,25 @@ def test_adapter_rejects_invalid_odds() -> None:
     invalid_odds["bookmakers"][0]["markets"][0]["outcomes"][0]["price"] = "Infinity"
     with pytest.raises(TheOddsApiPayloadError, match="price must be finite"):
         adapter(invalid_odds).fetch(request())
+
+
+def test_snapshot_validation_errors_are_translated_to_payload_error() -> None:
+    invalid = payload(
+        bookmakers=[
+            {
+                "key": "book-one",
+                "markets": [
+                    {
+                        "key": "h2h",
+                        "outcomes": [
+                            {"name": "Home", "price": 2.25},
+                            {"name": "Home", "price": 2.4},
+                        ],
+                    }
+                ],
+            }
+        ]
+    )
+
+    with pytest.raises(TheOddsApiPayloadError, match="payload validation failed"):
+        adapter(invalid).fetch(request())

@@ -17,6 +17,7 @@ class EngineModes(DomainModel):
 
     simulation: bool = False
     execution: bool = False
+    execution_sandbox: bool = True
 
 
 class RoutingConfiguration(DomainModel):
@@ -34,6 +35,7 @@ class RoutedWorkItem(DomainModel):
     opportunity_id: str = Field(min_length=1)
     capital_context: str
     owner: str | None = None
+    execution_sandbox: bool = False
 
 
 def engine_modes(configuration: RoutingConfiguration, engine: V1Engine) -> EngineModes:
@@ -61,6 +63,9 @@ def resolve_routes(
             opportunity_id=opportunity_id,
             capital_context=f"{owner}:{mode.value}",
             owner=owner,
+            execution_sandbox=(
+                modes.execution_sandbox if mode is WorkflowMode.EXECUTION else False
+            ),
         )
         for mode, enabled in (
             (WorkflowMode.SIMULATION, modes.simulation),

@@ -7,7 +7,7 @@ from uuid import UUID
 
 from django.test import TransactionTestCase
 
-from qbet.calculations import ArbitrageOffer, QualifyingBetInput, TwoWayArbitrageInput
+from qbet.calculations import ArbitrageOffer, TwoWayArbitrageInput
 from qbet.domain.ledger import LedgerOperation, PortfolioBalance
 from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
@@ -15,15 +15,7 @@ from qbet.execution.models import ExecutionProposal, ExecutionRecord, Lifecycle,
 from qbet.execution.sandbox import valuation
 from qbet.execution.service import ExecutionService
 from qbet.ledger import PortfolioLedger
-from qbet.request_handler import (
-    ExecutionSandboxRequestHandler,
-    ModeRequestHandlers,
-    RevalidationOutcome,
-    SandboxRevalidationFixture,
-    SandboxResultFixture,
-    ResultStatus,
-    SimulationSandboxRequestHandler,
-)
+from qbet.request_handler import ResultStatus, RevalidationOutcome
 from qbet.settlement import SettlementService, ledger_command, transition
 from qbet.simulation import (
     SimulationEngine,
@@ -54,26 +46,14 @@ from qbet.workflow import (
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration, resolve_routes
+from tests.support.workflow import bonus_request, sandbox_mode_handlers
 
 NOW = datetime(2026, 9, 6, 12, tzinfo=UTC)
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
 
 
 def _bonus_request() -> BonusEngineRequest:
-    return BonusEngineRequest(
-        opportunity_id="bonus-e2e",
-        inputs=QualifyingBetInput(
-            back_odds=Decimal("2.5"),
-            lay_odds=Decimal("2.6"),
-            back_stake=Decimal("10"),
-            exchange_commission=Decimal("0.02"),
-            stake_precision=Decimal("0.01"),
-            max_lay_liability=Decimal("100"),
-        ),
-        currency="EUR",
-        execution_offer_ids=("book", "exchange"),
-        generated_at=NOW,
-    )
+    return bonus_request("bonus-e2e", generated_at=NOW)
 
 
 def _sports_request() -> SportsCapitalEngineRequest:
@@ -104,29 +84,14 @@ def _handlers(
     outcome: RevalidationOutcome = RevalidationOutcome.VALID,
     result_status: ResultStatus = ResultStatus.SUCCESS,
 ):
-    reason_code = None if outcome is RevalidationOutcome.VALID else "fixture_rejected"
-    fixture = SandboxRevalidationFixture(
-        opportunity_id=opportunity_id,
-        outcome=outcome,
-        validated_at=NOW,
-        reason_code=reason_code,
-    )
-    result_fixture = SandboxResultFixture(
-        opportunity_id=opportunity_id,
-        status=result_status,
+    return sandbox_mode_handlers(
+        opportunity_id,
         observed_at=NOW,
-        reason_code=None if result_status is ResultStatus.SUCCESS else "fixture_result_status",
-        result_reference="sandbox-result" if result_status is ResultStatus.SUCCESS else None,
-    )
-    return ModeRequestHandlers(
-        simulation=SimulationSandboxRequestHandler(
-            revalidation_fixtures=(fixture,),
-            result_fixtures=(result_fixture,),
-        ),
-        execution=ExecutionSandboxRequestHandler(
-            revalidation_fixtures=(fixture,),
-            result_fixtures=(result_fixture,),
-        ),
+        simulation_outcome=outcome,
+        execution_outcome=outcome,
+        result_status=result_status,
+        simulation_reason_code="fixture_rejected",
+        execution_reason_code="fixture_rejected",
     )
 
 

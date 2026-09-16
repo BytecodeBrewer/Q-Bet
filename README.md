@@ -6,24 +6,14 @@ Q-Bet combines quantitative strategy logic with a persistent workflow platform. 
 
 ## Current Status
 
-**v3.0 completes the deterministic internal platform.**
+Q-Bet is a cloud-backed Python/Django application with PostgreSQL/Supabase as its durable operational backend and Vercel as the web deployment layer. The web application already exposes user and administrator capabilities on top of persistent workflow, ledger, reporting, monitoring, simulation, approval, and notification state. Local development and validation run against isolated PostgreSQL environments, while CI/CD covers the automated quality gates and deployment checks.
 
-The current system includes:
+The core system is structurally available from data ingestion to user-facing output. `BonusEngine` and `SportsCapitalEngine` are implemented, external market data can enter through The Odds API, bunq provides the first bank bridge including an official sandbox path, and execution-related events can be delivered through the notification system. Simulation, controlled Execution, Portfolio Ledger state, Monitoring, Reporting, and approval boundaries are already part of the application.
 
-- `BonusEngine` and `SportsCapitalEngine` with Decimal-based calculation logic for matched betting, arbitrage, dutching, fees, tax, rounding, stake and liability constraints
-- a connected workflow from engine evaluation through risk, liquidity, Simulation or controlled Execution
-- persistent PostgreSQL-backed workflow, approval, ledger, routing, reporting, and monitoring state
-- isolated Simulation and Execution capital/state boundaries
-- explicit user approval before deterministic Execution dispatch
-- restart-safe and replay-safe workflow handling with idempotent settlement
-- administrator-controlled engine/mode routing through the Django GUI
-- customer-facing Reporting separated from administrator-only technical Monitoring
-- bounded CSV/JSON Monitoring exports and correlated workflow reconstruction
-- connected end-to-end coverage for the complete GUI-to-workflow path
-- a real read-only The Odds API adapter plus provider-neutral market/result contracts
-- CI/CD with Ruff, Pyright, pytest, Django checks, package builds, PostgreSQL-backed tests, and gated Vercel previews
+The current operating direction is API- and notification-first. Additional engines, broader live execution, and browser-based execution are deliberately not part of the current scope; the focus is on connecting the existing components into complete, realistic system flows and hardening those paths before expanding the product surface.
 
-Still under development are broader real-provider coverage, live execution integrations, account/bank connectivity, additional engines, and the later multi-user/cloud execution model.
+> [!NOTE]
+> Q-Bet is currently in Phase 3. The remaining integration work and Definitions of Done are tracked in [Phase 3 Missing Points](docs/phase-3-missing-points.md).
 
 ## Engine Portfolio
 
@@ -83,7 +73,7 @@ python manage.py check
 python -m build
 ```
 
-The GitHub Actions pipeline runs the same quality gates against an isolated PostgreSQL service.
+The GitHub Actions pipeline runs the same quality gates against an isolated PostgreSQL service. Provider-specific E2E workflows are opt-in and isolated from the normal offline validation path.
 
 ## Deployment
 
@@ -107,7 +97,10 @@ The README stays intentionally high-level. The detailed design lives in the proj
 
 - [Expectation Model](docs/expectation-model.md) — product direction, phase boundaries, safety model, and long-term target state
 - [Pipeline Architecture](docs/pipeline-architecture.md) — workflow structure, component responsibilities, and architecture diagrams
-- [Phase 3 Integration Register](docs/phase-3-integration-register.md) — external integration work and implementation sequencing
+- [Phase 3 Missing Points](docs/phase-3-missing-points.md) — prioritized completion plan, current gaps, E2E definitions, and Definitions of Done
+- [Phase 3 Integration Register](docs/phase-3-integration-register.md) — concrete external integration choices and implementation status
+- [Phase 3 Performance Baseline](docs/phase-3-performance-baseline.md) — connected internal performance measurements and scope
+- [bunq Adapter](docs/bunq.md) — read-only/sandbox modes, secret configuration, and protected E2E execution
 - [The Odds API](docs/the-odds-api.md) — current market-data adapter and development smoke path
 - [Django Web Shell](docs/django-web-shell.md) — Django/Supabase bootstrap and operational notes
 

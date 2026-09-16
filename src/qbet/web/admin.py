@@ -7,16 +7,18 @@ from django.contrib.auth.forms import UserChangeForm
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
 
+from qbet.notifications import notification_recipient_status
 from qbet.web.admin_guard import (
     has_other_active_admin,
     is_active_admin,
     last_superuser_message,
 )
+from qbet.web.forms import NotificationReadyUserCreationForm
 from qbet.web.models import CustomerReportAccess
 
 
 class ProtectedUserChangeForm(UserChangeForm):
-    """Give administrators a friendly validation error before the DB guard fires."""
+    """Protect admin invariants while allowing legacy incomplete profiles to remain visible."""
 
     def clean(self):
         cleaned_data = super().clean() or {}
@@ -36,11 +38,51 @@ class ProtectedUserChangeForm(UserChangeForm):
         if is_active_admin(original) and not resulting_active_admin:
             if not has_other_active_admin(exclude_pk=original.pk):
                 raise forms.ValidationError(last_superuser_message())
+
+        original_status = notification_recipient_status(
+            user_id=original.get_username(),
+            first_name=original.first_name,
+            last_name=original.last_name,
+            email=original.email,
+        )
+        original_complete = bool(
+            original_status.ready and original.first_name.strip() and original.last_name.strip()
+        )
+        if original_complete:
+            first_name = str(cleaned_data.get("first_name", original.first_name) or "").strip()
+            last_name = str(cleaned_data.get("last_name", original.last_name) or "").strip()
+            resulting_status = notification_recipient_status(
+                user_id=str(cleaned_data.get("username", original.get_username()) or ""),
+                first_name=first_name,
+                last_name=last_name,
+                email=str(cleaned_data.get("email", original.email) or ""),
+            )
+            if not first_name or not last_name or not resulting_status.ready:
+                raise forms.ValidationError(
+                    "Notification-ready users must keep first name, last name, and a valid email."
+                )
         return cleaned_data
 
 
 class ProtectedUserAdmin(UserAdmin):
     form = ProtectedUserChangeForm
+    add_form = NotificationReadyUserCreationForm
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "password1",
+                    "password2",
+                ),
+            },
+        ),
+    )
 
     def delete_model(self, request, obj: User) -> None:
         if is_active_admin(obj) and not has_other_active_admin(exclude_pk=obj.pk):

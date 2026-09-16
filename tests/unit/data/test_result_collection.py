@@ -12,6 +12,7 @@ from qbet.data import (
     NormalizedMatchResult,
     ResultAvailability,
     ResultCollectionRequest,
+    ResultCollectionOutcome,
     ResultCollectionStatus,
     ResultCollector,
     SourceTransport,
@@ -106,6 +107,19 @@ def test_missing_fixture_returns_not_yet_available() -> None:
     assert outcome.reason_code == "result_not_yet_available"
 
 
+def test_non_available_resultless_fixture_is_returned_by_match_id() -> None:
+    outcome = collector(
+        DeterministicResultFixture(
+            match_id="match-1",
+            status=ResultCollectionStatus.CANCELLED,
+            reason_code="event_cancelled",
+        )
+    ).collect(request())
+
+    assert outcome.status is ResultCollectionStatus.CANCELLED
+    assert outcome.reason_code == "event_cancelled"
+
+
 @pytest.mark.parametrize(
     "changes",
     [
@@ -138,6 +152,15 @@ def test_stale_results_are_rejected_before_the_post_event_boundary() -> None:
     assert outcome.reason_code == "result_stale"
 
 
+def test_available_outcome_rejects_result_identity_mismatch() -> None:
+    with pytest.raises(ValueError, match="available result only"):
+        ResultCollectionOutcome(
+            request=request(),
+            status=ResultCollectionStatus.AVAILABLE,
+            result=result(execution_id="other-execution"),
+        )
+
+
 def test_fixture_replay_is_deterministic() -> None:
     source = collector(DeterministicResultFixture(result=result()))
 
@@ -147,7 +170,7 @@ def test_fixture_replay_is_deterministic() -> None:
 def test_result_models_reject_invalid_contracts() -> None:
     with pytest.raises(ValueError, match="require an outcome"):
         result(provider_outcome=None)
-    with pytest.raises(ValueError, match="require a result"):
+    with pytest.raises(ValueError, match="require match_id"):
         DeterministicResultFixture()
 
 

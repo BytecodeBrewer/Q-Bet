@@ -175,7 +175,8 @@ class PollingSchedule:
     def schedule(self, decision: PollingDecision) -> PollingDecision:
         if decision.outcome is not PollingOutcome.SCHEDULED:
             return decision
-        if decision.request.key in self._entries:
+        existing = self._entries.get(decision.request.key)
+        if existing is not None and existing.request.next_poll_at == decision.request.next_poll_at:
             return PollingDecision(
                 request=decision.request,
                 outcome=PollingOutcome.DUPLICATE,
@@ -183,6 +184,9 @@ class PollingSchedule:
             )
         self._entries[decision.request.key] = decision
         return decision
+
+    def complete(self, request: PollingRequest) -> None:
+        self._entries.pop(request.key, None)
 
     def entries(self) -> tuple[PollingDecision, ...]:
         return tuple(self._entries.values())

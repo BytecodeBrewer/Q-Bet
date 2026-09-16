@@ -1,26 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from unittest.mock import patch
 from uuid import UUID
 
 from django.contrib.auth.models import User
 from django.test import TransactionTestCase
 
-from qbet.calculations import QualifyingBetInput
-from qbet.engines import BonusEngineRequest
 from qbet.execution.models import Lifecycle
 from qbet.monitoring import MonitoringQuery
-from qbet.request_handler import (
-    ExecutionSandboxRequestHandler,
-    ModeRequestHandlers,
-    ResultStatus,
-    RevalidationOutcome,
-    SandboxResultFixture,
-    SandboxRevalidationFixture,
-    SimulationSandboxRequestHandler,
-)
+from qbet.request_handler import RevalidationOutcome
 from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
@@ -32,67 +21,11 @@ from qbet.web.models import SimulationAvailability
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.models import WorkflowMode
 from qbet.workflow.queue import WorkState
+from tests.support.workflow import bonus_request, sandbox_mode_handlers
 
 NOW = datetime(2026, 9, 11, 3, 30, tzinfo=UTC)
 CORRELATION_ID = UUID("32345678-1234-5678-1234-567812345678")
 REJECTED_CORRELATION_ID = UUID("42345678-1234-5678-1234-567812345678")
-
-
-def _request(opportunity_id: str) -> BonusEngineRequest:
-    return BonusEngineRequest(
-        opportunity_id=opportunity_id,
-        inputs=QualifyingBetInput(
-            back_odds=Decimal("2.5"),
-            lay_odds=Decimal("2.6"),
-            back_stake=Decimal("10"),
-            exchange_commission=Decimal("0.02"),
-            stake_precision=Decimal("0.01"),
-            max_lay_liability=Decimal("100"),
-        ),
-        currency="EUR",
-        execution_offer_ids=("book", "exchange"),
-        generated_at=NOW,
-    )
-
-
-def _valid_revalidation(opportunity_id: str) -> SandboxRevalidationFixture:
-    return SandboxRevalidationFixture(
-        opportunity_id=opportunity_id,
-        outcome=RevalidationOutcome.VALID,
-        validated_at=NOW,
-    )
-
-
-def _successful_result(opportunity_id: str) -> SandboxResultFixture:
-    return SandboxResultFixture(
-        opportunity_id=opportunity_id,
-        status=ResultStatus.SUCCESS,
-        observed_at=NOW,
-        result_reference="sandbox-result",
-    )
-
-
-def _handlers(
-    opportunity_id: str,
-    outcome: RevalidationOutcome = RevalidationOutcome.VALID,
-) -> ModeRequestHandlers:
-    return ModeRequestHandlers(
-        simulation=SimulationSandboxRequestHandler(
-            revalidation_fixtures=(_valid_revalidation(opportunity_id),),
-            result_fixtures=(_successful_result(opportunity_id),),
-        ),
-        execution=ExecutionSandboxRequestHandler(
-            revalidation_fixtures=(
-                SandboxRevalidationFixture(
-                    opportunity_id=opportunity_id,
-                    outcome=outcome,
-                    validated_at=NOW,
-                    reason_code=None if outcome is RevalidationOutcome.VALID else "fixture_revalidation",
-                ),
-            ),
-            result_fixtures=(_successful_result(opportunity_id),),
-        ),
-    )
 
 
 class Phase2OperabilityGateTests(TransactionTestCase):
@@ -134,7 +67,11 @@ class Phase2OperabilityGateTests(TransactionTestCase):
         return ModeDispatchCoordinator(
             routing_configuration_loader=RoutingConfigurationRepository().load,
             queue_repository=ModeWorkQueueRepository(),
-            mode_request_handlers=_handlers(opportunity_id, outcome),
+            mode_request_handlers=sandbox_mode_handlers(
+                opportunity_id,
+                observed_at=NOW,
+                execution_outcome=outcome,
+            ),
         )
 
     def test_gui_routing_modes_remain_deterministic_before_user_intent(self) -> None:
@@ -154,7 +91,7 @@ class Phase2OperabilityGateTests(TransactionTestCase):
                 self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
                 scheduled = self._coordinator(f"route-{selection}").schedule(
-                    _request(f"route-{selection}"),
+                    bonus_request(f"route-{selection}", generated_at=NOW),
                     owner=self.user.get_username(),
                     correlation_id=UUID(int=index + 1),
                     scheduled_for=NOW,
@@ -174,7 +111,7 @@ class Phase2OperabilityGateTests(TransactionTestCase):
 
         coordinator = self._coordinator(opportunity_id)
         scheduled = coordinator.schedule(
-            _request(opportunity_id),
+            bonus_request(opportunity_id, generated_at=NOW),
             owner=self.user.get_username(),
             correlation_id=CORRELATION_ID,
             scheduled_for=NOW,
@@ -295,7 +232,7 @@ class Phase2OperabilityGateTests(TransactionTestCase):
         self._save_routing(bonus="execution")
         coordinator = self._coordinator(opportunity_id)
         (scheduled,) = coordinator.schedule(
-            _request(opportunity_id),
+            bonus_request(opportunity_id, generated_at=NOW),
             owner=self.user.get_username(),
             correlation_id=REJECTED_CORRELATION_ID,
             scheduled_for=NOW,

@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 import pytest
+from unittest.mock import patch
 
 from qbet.data import (
     DataSourceMetadata,
@@ -23,6 +24,7 @@ def collected_result(
     *,
     availability: ResultAvailability = ResultAvailability.AVAILABLE,
     match_id: str | None = None,
+    provider_outcome: str = "success",
 ) -> ResultCollectionOutcome:
     source = DataSourceMetadata(
         provider_id="result_fixture",
@@ -43,7 +45,7 @@ def collected_result(
         source=source,
         availability=availability,
         observed_at=datetime(2026, 1, 1, 1, tzinfo=UTC),
-        provider_outcome="settled" if availability is ResultAvailability.AVAILABLE else None,
+        provider_outcome=provider_outcome if availability is ResultAvailability.AVAILABLE else None,
         reason_code=None if availability is ResultAvailability.AVAILABLE else "not_available",
     )
     fixture = DeterministicResultFixture(
@@ -73,11 +75,44 @@ def test_collected_result_reaches_existing_execution_settlement_path() -> None:
     assert settled.state is Lifecycle.SETTLED
 
 
+def test_collected_result_provider_outcome_controls_settlement_state() -> None:
+    record = ExecutionRecord(proposal=proposal())
+    outcome = collected_result(record, provider_outcome="failed")
+
+    settled, _ = ExecutionService().decide(
+        record,
+        ledger(),
+        actor="owner",
+        owner="owner",
+        approve=True,
+        now=datetime(2026, 1, 1, tzinfo=UTC),
+        collected_result=outcome,
+    )
+
+    assert settled.state is Lifecycle.FAILED
+
+
 def test_unavailable_collected_result_stops_before_settlement() -> None:
     record = ExecutionRecord(proposal=proposal())
     outcome = collected_result(record, availability=ResultAvailability.CANCELLED)
 
     with pytest.raises(ValueError, match="not available"):
+        ExecutionService().decide(
+            record,
+            ledger(),
+            actor="owner",
+            owner="owner",
+            approve=True,
+            now=datetime(2026, 1, 1, tzinfo=UTC),
+            collected_result=outcome,
+        )
+
+
+def test_unmapped_provider_outcome_is_rejected_before_settlement() -> None:
+    record = ExecutionRecord(proposal=proposal())
+    outcome = collected_result(record, provider_outcome="home_win")
+
+    with pytest.raises(ValueError, match="collected_result_outcome_unmapped"):
         ExecutionService().decide(
             record,
             ledger(),
@@ -109,3 +144,23 @@ def test_wrong_match_result_stops_before_settlement_or_ledger_change() -> None:
     assert original.balance.reserved == 0
     assert original.balance.locked == 0
     assert original.balance.pending == 0
+
+
+def test_mismatched_collected_result_does_not_dispatch_adapter() -> None:
+    record = ExecutionRecord(proposal=proposal())
+    outcome = collected_result(record, match_id="other-match")
+
+    with patch(
+        "qbet.execution.service.BonusSandboxAdapter.dispatch",
+        side_effect=AssertionError("dispatch must not run"),
+    ):
+        with pytest.raises(ValueError, match="collected_result_identity_mismatch"):
+            ExecutionService().decide(
+                record,
+                ledger(),
+                actor="owner",
+                owner="owner",
+                approve=True,
+                now=datetime(2026, 1, 1, tzinfo=UTC),
+                collected_result=outcome,
+            )
