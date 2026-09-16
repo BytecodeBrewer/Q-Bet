@@ -6,21 +6,14 @@ Q-Bet combines quantitative strategy logic with a persistent workflow platform. 
 
 ## Current Status
 
-Q-Bet is in **Phase 3: connected external operation and closed system loops**. The deterministic internal platform is established: `BonusEngine` and `SportsCapitalEngine`, PostgreSQL-backed workflow and ledger state, Simulation/Execution separation, approval boundaries, settlement, Reporting, Monitoring, GUI routing controls, and CI/CD are in place. The first real external boundaries are also implemented through The Odds API, the bunq read-only/sandbox adapter, email notifications, deterministic Smart Polling foundations, and a repeatable connected performance baseline.
+Q-Bet is a cloud-backed Python/Django application with PostgreSQL/Supabase as its durable operational backend and Vercel as the web deployment layer. The web application already exposes user and administrator capabilities on top of persistent workflow, ledger, reporting, monitoring, simulation, approval, and notification state. Local development and validation run against isolated PostgreSQL environments, while CI/CD covers the automated quality gates and deployment checks.
 
-The main work is now composition rather than adding isolated building blocks. External adapters, RequestHandler revalidation, engine-specific preparation, risk/liquidity, Simulation/Execution, sandbox capital movement, settlement, Portfolio Ledger updates, notifications/approvals, and UI state must be connected into complete real-world-like flows. A flow is only considered end-to-end when the relevant business loop is actually closed; groups of integration tests do not substitute for that.
+The core system is structurally available from data ingestion to user-facing output. `BonusEngine` and `SportsCapitalEngine` are implemented, external market data can enter through The Odds API, bunq provides the first bank bridge including an official sandbox path, and execution-related events can be delivered through the notification system. Simulation, controlled Execution, Portfolio Ledger state, Monitoring, Reporting, and approval boundaries are already part of the application.
 
-Phase 3 intentionally prioritizes technical pipeline completion and sandbox realism before the larger GUI/settings redesign. Multi-user isolation, broader live-capital operation, and higher-automation browser execution remain Phase 4 concerns.
+The current operating direction is API- and notification-first. Additional engines, broader live execution, and browser-based execution are deliberately not part of the current scope; the focus is on connecting the existing components into complete, realistic system flows and hardening those paths before expanding the product surface.
 
-## Phase 3 Focus
-
-- connect `RequestHandler` to targeted real adapter refreshes instead of replaying broad ingestion
-- make Smart Polling provider-, quota-, cost-, timing-, and engine-aware through persistent configuration rather than fixed code defaults
-- close the Simulation capital loop through external sandbox systems and back into `PortfolioLedger`
-- add genuine data-pipeline and liquidity/capital end-to-end tests, then remove redundant or obsolete test coverage
-- add Prometheus-compatible observability and dashboard tooling before the later Admin Control Center, Settings, Reporting, and UX expansion
-
-The detailed completion plan and Definition of Done for these items lives in [Phase 3 Missing Points](docs/phase-3-missing-points.md).
+> [!NOTE]
+> Q-Bet is currently in Phase 3. The remaining integration work and Definitions of Done are tracked in [Phase 3 Missing Points](docs/phase-3-missing-points.md).
 
 ## Engine Portfolio
 
