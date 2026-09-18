@@ -17,7 +17,7 @@ from qbet.data.polling import (
 )
 from qbet.notifications import notification_recipient_status
 from qbet.simulation import SimulationEngine
-from qbet.workflow.routing import EngineModes, RoutingConfiguration
+from qbet.workflow.routing import EngineModes, RoutingConfiguration, V1Engine
 
 _ROUTING_MODE_CHOICES = (
     ("inactive", "Inactive"),
@@ -226,6 +226,7 @@ class PollingStrategyForm(forms.Form):
                 )
                 else None
             )
+            engine = _polling_engine(cleaned.get("engine"))
             self._strategy = PollingStrategy(
                 source=DataSourceMetadata(
                     provider_id=str(cleaned["provider_id"]),
@@ -233,7 +234,7 @@ class PollingStrategyForm(forms.Form):
                     transport=SourceTransport(str(cleaned["transport"])),
                 ),
                 target=target,
-                engine=str(cleaned.get("engine") or "") or None,
+                engine=engine,
                 enabled=bool(cleaned.get("enabled")),
                 freshness_window=timedelta(minutes=int(cleaned["freshness_minutes"])),
                 market_refresh_points=points,
@@ -287,6 +288,17 @@ class SimulationStartForm(forms.Form):
         initial=60,
         help_text="Bounded simulated duration; never more than 48 hours.",
     )
+
+
+def _polling_engine(value: object) -> V1Engine | None:
+    engine = str(value or "")
+    if not engine:
+        return None
+    if engine == "bonus":
+        return "bonus"
+    if engine == "sports_capital":
+        return "sports_capital"
+    raise ValueError("unsupported polling strategy engine")
 
 
 def _engine_modes(choice: str) -> EngineModes:
