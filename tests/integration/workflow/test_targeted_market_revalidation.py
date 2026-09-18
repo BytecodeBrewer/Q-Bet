@@ -5,6 +5,9 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
+from django.test import TransactionTestCase
+
+from qbet.calculations import ArbitrageOffer, TwoWayArbitrageInput
 from qbet.data import (
     DataSourceMetadata,
     DataTarget,
@@ -12,19 +15,33 @@ from qbet.data import (
     TheOddsApiAdapter,
 )
 from qbet.domain.models import OfferSide
+from qbet.engines import SportsCapitalEngineRequest
 from qbet.request_handler import (
     ExecutionMarketRequestHandler,
     ExecutionSandboxRequestHandler,
     ExpectedMarketOffer,
+    ModeRequest,
     ModeRequestHandlers,
+    RequestHandlerResult,
+    ResultStatus,
     RevalidationOutcome,
+    RevalidationResult,
     SandboxRevalidationFixture,
     SimulationSandboxRequestHandler,
     TargetedMarketRevalidationContext,
     TheOddsApiTargetedMarketProvider,
 )
-from qbet.workflow import WorkflowDecision, WorkflowMode, WorkflowRequest, WorkflowStage
+from qbet.storage.ledger import ModeWorkQueueRepository
+from qbet.workflow import (
+    WorkflowDecision,
+    WorkflowMode,
+    WorkflowRequest,
+    WorkflowStage,
+    WorkState,
+)
+from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.orchestrator import WorkflowOrchestrator
+from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
 NOW = datetime(2026, 9, 16, 12, 0, tzinfo=UTC)
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
@@ -153,3 +170,100 @@ def test_simulation_keeps_deterministic_handler_and_makes_no_provider_request() 
 
     assert result.final_decision is WorkflowDecision.ALLOW
     assert requested_urls == []
+
+
+class RecordingExecutionResultHandler:
+    def __init__(self) -> None:
+        self.requests: list[ModeRequest] = []
+
+    def revalidate(self, request: ModeRequest) -> RevalidationResult:
+        raise AssertionError("result delegate must not own market revalidation")
+
+    def retrieve_result(self, request: ModeRequest) -> RequestHandlerResult:
+        self.requests.append(request)
+        return RequestHandlerResult(
+            **request.model_dump(),
+            observed_at=NOW,
+            status=ResultStatus.NOT_YET_AVAILABLE,
+            reason_code="result_not_yet_available",
+        )
+
+
+def sports_request() -> SportsCapitalEngineRequest:
+    def offer(outcome: str) -> ArbitrageOffer:
+        return ArbitrageOffer(
+            outcome=outcome,
+            odds=Decimal("2.20"),
+            available_liquidity=Decimal("100"),
+            stake_precision=Decimal("0.01"),
+            currency="EUR",
+        )
+
+    return SportsCapitalEngineRequest(
+        opportunity_id="opportunity-1",
+        inputs=TwoWayArbitrageInput(
+            first_offer=offer("home"),
+            second_offer=offer("away"),
+            requested_total_stake=Decimal("20"),
+        ),
+        currency="EUR",
+        execution_offer_ids=("home", "away"),
+        generated_at=NOW,
+    )
+
+
+class TargetedMarketRevalidationPersistenceTests(TransactionTestCase):
+    def test_durable_execution_restores_context_and_reaches_one_targeted_refresh(self) -> None:
+        requested_urls: list[str] = []
+        adapter = TheOddsApiAdapter(
+            api_key="configured-for-test",
+            available_stake=Decimal("100"),
+            clock=lambda: NOW,
+            http_get=lambda url: (
+                requested_urls.append(url) or 200,
+                {},
+                payload(Decimal("2.25")),
+            ),
+        )
+        result_delegate = RecordingExecutionResultHandler()
+        coordinator = ModeDispatchCoordinator(
+            RoutingConfiguration(sports_capital=EngineModes(execution=True)),
+            queue_repository=ModeWorkQueueRepository(),
+            mode_request_handlers=ModeRequestHandlers(
+                simulation=SimulationSandboxRequestHandler(),
+                execution=ExecutionMarketRequestHandler(
+                    provider=TheOddsApiTargetedMarketProvider(adapter),
+                    result_handler=result_delegate,
+                    clock=lambda: NOW,
+                ),
+            ),
+        )
+        expected_context = context(Decimal("2.25"))
+
+        scheduled = coordinator.schedule(
+            sports_request(),
+            owner="owner",
+            correlation_id=CORRELATION_ID,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+            market_revalidation=expected_context,
+        )
+
+        self.assertEqual(len(scheduled), 1)
+        persisted = ModeWorkQueueRepository().load(scheduled[0].work.id)
+        self.assertIsNotNone(persisted)
+        assert persisted is not None
+        self.assertEqual(persisted.market_revalidation, expected_context)
+
+        dispatched = coordinator.dispatch_due(now=NOW, owner="owner")
+
+        self.assertEqual(len(requested_urls), 1)
+        self.assertIn("/sports/soccer_epl/events/event-123/odds?", requested_urls[0])
+        self.assertIn("markets=h2h", requested_urls[0])
+        self.assertEqual(tuple(item.state for item in dispatched), (WorkState.RECHECK,))
+        self.assertEqual(dispatched[0].history[-1].reason, "result_not_yet_available")
+        self.assertEqual(len(result_delegate.requests), 1)
+        delegated = result_delegate.requests[0]
+        self.assertEqual(delegated.correlation_id, CORRELATION_ID)
+        self.assertEqual(delegated.lifecycle_id, str(scheduled[0].work.id))
+        self.assertEqual(delegated.market_revalidation, expected_context)

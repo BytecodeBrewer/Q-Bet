@@ -26,7 +26,7 @@ from qbet.notifications import (
     NotificationRecipientResolver,
 )
 from qbet.request_handler import ModeRequestHandlers
-from qbet.request_handler.models import ResultStatus
+from qbet.request_handler.models import ResultStatus, TargetedMarketRevalidationContext
 from qbet.simulation.models import SimulationEngine, SimulationRunConfig
 from qbet.simulation.workflow import WorkflowSimulationRequest, WorkflowSimulationRunner
 from qbet.storage.ledger import (
@@ -101,6 +101,7 @@ class ModeDispatchCoordinator:
         correlation_id: UUID,
         scheduled_for: datetime,
         expires_at: datetime,
+        market_revalidation: TargetedMarketRevalidationContext | None = None,
     ) -> tuple[QueuedWorkItem, ...]:
         engine: V1Engine = "bonus" if isinstance(request, BonusEngineRequest) else "sports_capital"
         routes = self._routing_orchestrator.route(
@@ -116,6 +117,7 @@ class ModeDispatchCoordinator:
                     request,
                     scheduled_for=scheduled_for,
                     expires_at=expires_at,
+                    market_revalidation=market_revalidation,
                 )
             )
             for route in routes
@@ -186,6 +188,7 @@ class ModeDispatchCoordinator:
                 opportunity_id=processing.work.opportunity_id,
                 mode=processing.work.mode,
                 correlation_id=processing.work.correlation_id,
+                market_revalidation=processing.market_revalidation,
                 stages=(
                     WorkflowStage.DATA_AGGREGATION,
                     WorkflowStage.ENGINE_PREPARATION,
