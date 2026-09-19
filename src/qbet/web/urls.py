@@ -5,6 +5,7 @@ from django.urls import path
 from qbet.web import views
 from qbet.web.engine_runtime import engine_runtime_control, sandbox_execution_control
 from qbet.web.execution_approvals import execution_approval_decision, execution_approvals
+from qbet.web.polling_settings import polling_settings
 from qbet.web.routing_settings import routing_settings
 
 urlpatterns = [
@@ -47,6 +48,7 @@ urlpatterns = [
     ),
     path("admin-area/", views.admin_area, name="admin-area"),
     path("admin-area/gui-settings/", routing_settings, name="admin-gui-settings"),
+    path("admin-area/polling/", polling_settings, name="admin-polling-settings"),
     path(
         "admin-area/gui-settings/simulation/",
         views.admin_simulation_availability,

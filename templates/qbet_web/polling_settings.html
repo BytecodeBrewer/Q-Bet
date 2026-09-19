@@ -1,0 +1,73 @@
+{% extends "qbet_web/base.html" %}
+{% block content %}
+<section class="page-heading">
+  <p><a href="{% url 'admin-area' %}">Admin</a></p>
+  <h1>Smart Polling strategies</h1>
+  <p>Configure provider-aware market and result refresh policies without changing application code.</p>
+</section>
+
+<section class="detail-panel">
+  <h2>Configured strategies</h2>
+  {% if polling_error %}
+    <p class="status-warning">Polling strategy configuration is temporarily unavailable. No changes were applied.</p>
+  {% elif polling_strategies %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Provider</th><th>Source</th><th>Target</th><th>Engine</th><th>Timing</th><th>State</th><th>Capacity</th><th>Control</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for strategy in polling_strategies %}
+          <tr>
+            <td>{{ strategy.source.provider_id }}</td>
+            <td>{{ strategy.source.source_id }}</td>
+            <td>{{ strategy.target }}</td>
+            <td>{% if strategy.engine %}{{ strategy.engine }}{% else %}Provider default{% endif %}</td>
+            <td>
+              {% if strategy.market_refresh_points %}
+                {{ strategy.market_refresh_points|join:", " }} before event
+              {% elif strategy.market_interval %}
+                Every {{ strategy.market_interval }}
+              {% else %}
+                Result retry {{ strategy.result_retry_interval }}
+              {% endif %}
+            </td>
+            <td>{% if strategy.enabled %}Enabled{% else %}Disabled{% endif %}</td>
+            <td>{{ strategy.capacity_class }} / {{ strategy.capacity_units|default_if_none:"unbounded" }} units</td>
+            <td>
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="toggle">
+                <input type="hidden" name="provider_id" value="{{ strategy.source.provider_id }}">
+                <input type="hidden" name="source_id" value="{{ strategy.source.source_id }}">
+                <input type="hidden" name="target" value="{{ strategy.target }}">
+                <input type="hidden" name="engine" value="{{ strategy.engine|default_if_none:'' }}">
+                <input type="hidden" name="enabled" value="{% if strategy.enabled %}false{% else %}true{% endif %}">
+                <button type="submit">{% if strategy.enabled %}Disable{% else %}Enable{% endif %}</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">No persisted Smart Polling strategies yet.</p>
+  {% endif %}
+</section>
+
+{% if not polling_error %}
+<section class="detail-panel">
+  <h2>Create or update strategy</h2>
+  <p class="muted">Saving an existing provider/source/target/engine identity updates it. An engine-specific strategy overrides the provider/target default. Final Execution revalidation remains separate.</p>
+  <form method="post">
+    {% csrf_token %}
+    {{ polling_form.non_field_errors }}
+    {{ polling_form.as_p }}
+    <button type="submit">Save Smart Polling strategy</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}
