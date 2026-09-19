@@ -34,9 +34,9 @@ The central success criterion is not the number of available components. The com
 | Area | Current state | Main Phase 3 gap |
 | --- | --- | --- |
 | Internal workflow | Calculation, risk, liquidity, Simulation/Execution boundaries, persistence, approvals, settlement, reporting and monitoring exist | compose them with the real external paths instead of deterministic local-only inputs |
-| Market data | The Odds API read-only adapter is connected | use real adapter output in complete engine flows and targeted RequestHandler refreshes |
-| RequestHandler | typed contracts, mode routing and sandbox handlers exist | live targeted adapter-backed revalidation/result retrieval |
-| Smart Polling | deterministic provider-neutral policy exists | persistent/configurable provider-, quota-, cost-, timing- and engine-aware strategies |
+| Market data | The Odds API feeds GUI-started SportsCapital Simulation through normalized snapshots and the Sports Match Builder | broaden connected data composition only when another engine/provider requires it |
+| RequestHandler | targeted Execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | real result retrieval remains tied to the later settlement-source integration |
+| Smart Polling | persisted provider/target/engine strategies, quota/cost metadata and staff configuration are implemented | multi-provider source selection can be added when another source is introduced |
 | Bank/account | bunq read-only and official sandbox modes are implemented, including guarded sandbox payments | close the Simulation/Liquidity capital loop through the sandbox and back into Portfolio Ledger |
 | Notifications | approval-gated notification domain and Django email transport exist | user preferences, internal inbox/SMS later, and composition with broader approval flows |
 | Results/settlement data | provider-neutral result concepts exist | select/connect the first real result adapter and follow only actually executed work |
@@ -82,38 +82,17 @@ The same principle applies to external execution sandboxes: fake money is still 
 
 ## Priority 1 — Complete Technical Pipeline Composition
 
-### 1. Real Data Flow Into Engine Pipelines
+### Completed Composition Foundations
 
-**Problem:** external adapters and the GUI/internal Simulation path exist, but adapter output is not yet the universal source of a complete connected Simulation run.
+The first external-data composition slices are implemented:
 
-**Expected behavior:** the applicable engine receives normalized real adapter data, passes through only the preparation stages it actually needs, and then continues through risk/liquidity and the selected mode.
+- #146 connects controlled Execution RequestHandler revalidation to a targeted The Odds API refresh through the durable dispatch path.
+- #147 persists provider/target/engine Smart Polling strategies with quota/cost metadata and staff configuration.
+- #150 connects GUI-started SportsCapital Simulation to normalized The Odds API data through deterministic two-outcome selection and the existing Sports Match Builder.
 
-**Definition of Done:**
+These capabilities are no longer Phase 3 missing points. The remaining Priority 1 work starts at the external capital/result loop.
 
-- a real adapter can feed the selected engine without hand-built GUI opportunity fixtures;
-- sports data passes through the necessary match/market preparation path;
-- engines without such preparation are not forced through a fake equivalent stage;
-- correlation/identity survives through the flow;
-- failures are mapped to safe application states rather than raw provider exceptions.
-
-### 2. RequestHandler -> Targeted Adapter Revalidation
-
-**Problem:** RequestHandler routing/contracts exist, but it does not yet provide the complete live targeted refresh behavior required by Phase 3.
-
-**Expected behavior:** RequestHandler can call a configured adapter for the exact event/market/provider state that needs refreshing, without replaying broad ingestion.
-
-It must support provider-aware behavior such as freshness, rate limits, API cost/quota, engine/mode context and optional cross-checking.
-
-**Definition of Done:**
-
-- a real adapter-backed RequestHandler implementation exists;
-- event-specific revalidation is used close to action time;
-- a rejected/changed/unavailable refresh produces the correct workflow decision;
-- broad ingestion is not re-run solely for a targeted check;
-- provider errors and quota/rate-limit states are mapped to stable reason codes;
-- Simulation and Execution retain separate handler instances/state where required.
-
-### 3. Close the Liquidity/Capital Simulation Loop
+### 1. Close the Liquidity/Capital Simulation Loop
 
 **Problem:** internal Simulation capital state and the bunq sandbox adapter exist, but the intended closed capital loop is not yet the default connected Simulation path.
 
@@ -129,7 +108,7 @@ It must support provider-aware behavior such as freshness, rate limits, API cost
 - replay/retry remains idempotent;
 - no real-money write is possible from Simulation configuration.
 
-### 4. Result/Settlement Source
+### 2. Result/Settlement Source
 
 Select/connect the first real result source from the existing candidate set when the complete flow needs final result state.
 
@@ -181,26 +160,7 @@ Do not mass-delete unit tests. Remove/replace tests because their architectural 
 
 ## Priority 4 — Operative Infrastructure
 
-### Configurable Smart Polling
-
-The existing deterministic Smart Polling policy is a foundation, not the final scheduler.
-
-Polling strategy must be configurable rather than hard-coded. Configuration should be capable of expressing:
-
-- multiple refresh points such as T-24h, T-12h, T-1h and other intervals;
-- provider-specific rate limits/quotas;
-- free vs paid subscription capacity/cost;
-- required freshness;
-- engine-specific behavior;
-- increasing/decreasing polling aggressiveness;
-- final targeted revalidation separately from ordinary aggregation;
-- result polling only for work that needs settlement tracking.
-
-The pipeline should execute the configured strategy reliably; it should not contain provider business assumptions scattered throughout workflow code.
-
-### Admin-Editable Polling
-
-Phase 3 should persist polling/provider strategy so an admin can later change cadence and source behavior without a code deployment. A higher-limit paid API plan should therefore be usable by editing configuration rather than modifying Python constants.
+Smart Polling configuration and its staff-editable persistence are implemented by #147. The remaining operative-infrastructure focus is external observability and later multi-provider source balancing when another provider is actually introduced.
 
 ### Observability
 
@@ -281,16 +241,14 @@ Phase 4 is expected to follow the same pattern: establish a stable transition ar
 
 ## Recommended Ticket Sequence
 
-1. Connect RequestHandler to targeted real adapter revalidation.
-2. Make Smart Polling configuration-driven and provider/quota/cost aware.
-3. Compose the first closed connected Simulation pipeline, including the sandbox financial round-trip and Portfolio Ledger feedback.
-4. Add genuine data-pipeline and capital-loop E2E tests for that connected flow.
-5. Audit/refactor the broader test suite against the now-real architecture.
-6. Connect the first real result/settlement provider as required by the closed lifecycle.
-7. Add Prometheus-compatible metrics and dashboard integration.
-8. Expand Admin Control Center, Settings, Approval Inbox, Reporting/Monitoring dashboards and visual UX.
+1. Close the Simulation liquidity/capital loop through the bunq sandbox and feed the correlated provider outcome back into Portfolio Ledger exactly once.
+2. Connect the first real result/settlement provider when the closed lifecycle requires final result state.
+3. Add genuine data-pipeline and capital-loop E2E tests for the connected external flow.
+4. Audit/refactor the broader test suite against the now-real architecture.
+5. Add Prometheus-compatible metrics and dashboard integration.
+6. Expand Admin Control Center, Settings, Approval Inbox, Reporting/Monitoring dashboards and visual UX.
 
-The exact order between items 3, 4 and 6 may shift when a chosen E2E scenario requires final result data, but the closed-loop definition must not be weakened to make a test easier to label E2E.
+The exact order between the first three items may shift if settlement data is required to prove the selected capital-loop scenario, but the closed-loop definition must not be weakened merely to make a test easier to label E2E.
 
 ## Documentation Hygiene
 
