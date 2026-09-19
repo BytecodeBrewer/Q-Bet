@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field
 
+from qbet.data.results import NormalizedMatchResult
 from qbet.domain.ledger import FiniteBalance
 from qbet.domain.models import Currency, DomainModel
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
@@ -55,4 +56,5 @@ class ExecutionRecord(DomainModel):
     transitions: tuple[Lifecycle, ...] = (Lifecycle.PROPOSED, Lifecycle.AWAITING_APPROVAL)
     approval: ApprovedExecutionRequest | None = None
     result: SandboxResult | None = None
+    collected_result: NormalizedMatchResult | None = None
     error: str | None = None

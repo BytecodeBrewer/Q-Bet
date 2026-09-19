@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
-from pydantic import AwareDatetime, model_validator
+from pydantic import AwareDatetime, Field, model_validator
 
 from qbet.data.models import DataSourceMetadata
 from qbet.domain.models import DomainModel, Identifier
@@ -42,6 +43,20 @@ _STATUS_FOR_UNAVAILABLE_RESULT = {
 }
 
 
+class ResultProviderTarget(DomainModel):
+    """Provider event identity kept separate from Q-Bet opportunity identity."""
+
+    sport: Identifier
+    event_id: Identifier
+
+
+class ResultScore(DomainModel):
+    """Provider-neutral final score evidence for one participant."""
+
+    participant: Identifier
+    score: Decimal = Field(ge=Decimal(0), allow_inf_nan=False)
+
+
 class ResultCollectionRequest(DomainModel):
     """Provider-neutral selection and correlation context for one result read."""
 
@@ -50,6 +65,7 @@ class ResultCollectionRequest(DomainModel):
     correlation_id: UUID
     source: DataSourceMetadata
     fresh_after: AwareDatetime
+    provider_target: ResultProviderTarget | None = None
 
 
 class NormalizedMatchResult(DomainModel):
@@ -63,12 +79,23 @@ class NormalizedMatchResult(DomainModel):
     observed_at: AwareDatetime
     provider_outcome: Identifier | None = None
     reason_code: Identifier | None = None
+    provider_target: ResultProviderTarget | None = None
+    completed: bool | None = None
+    scores: tuple[ResultScore, ...] = ()
 
     @model_validator(mode="after")
     def validates_availability_fields(self) -> "NormalizedMatchResult":
         if self.availability is ResultAvailability.AVAILABLE:
-            if self.provider_outcome is None or self.reason_code is not None:
-                raise ValueError("available results require an outcome and no reason_code")
+            if self.reason_code is not None:
+                raise ValueError("available results must not include a reason_code")
+            if self.provider_outcome is None and self.completed is not True:
+                raise ValueError(
+                    "available results require a financial outcome or completed event evidence"
+                )
+            if self.completed is False:
+                raise ValueError("available results cannot describe an incomplete event")
+            if len({score.participant for score in self.scores}) != len(self.scores):
+                raise ValueError("result scores must use distinct participants")
         elif self.reason_code is None:
             raise ValueError("unavailable results require a reason_code")
         return self
@@ -88,7 +115,6 @@ class ResultCollectionOutcome(DomainModel):
             if (
                 self.result is None
                 or self.result.availability is not ResultAvailability.AVAILABLE
-                or self.result.provider_outcome is None
                 or not _matches_request(self.result, self.request)
                 or self.reason_code is not None
             ):
@@ -106,7 +132,6 @@ class ResultCollectionOutcome(DomainModel):
             self.status is not ResultCollectionStatus.AVAILABLE
             or self.result is None
             or self.result.availability is not ResultAvailability.AVAILABLE
-            or self.result.provider_outcome is None
         ):
             raise ValueError("result collection outcome is not available")
         return self.result
@@ -192,6 +217,7 @@ def _matches_request(result: NormalizedMatchResult, request: ResultCollectionReq
         and result.execution_id == request.execution_id
         and result.correlation_id == request.correlation_id
         and result.source == request.source
+        and result.provider_target == request.provider_target
     )
 
 
