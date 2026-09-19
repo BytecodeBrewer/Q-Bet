@@ -190,6 +190,7 @@ class WorkflowOrchestrator:
             mode=RequestHandlerMode(context.request.mode.value),
             correlation_id=context.correlation_id,
             lifecycle_id=context.request.id,
+            market_revalidation=context.request.market_revalidation,
         )
 
     @staticmethod

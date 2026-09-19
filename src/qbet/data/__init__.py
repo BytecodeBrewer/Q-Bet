@@ -35,9 +35,12 @@ from .results import (
 from .the_odds_api import (
     THE_ODDS_API_PROVIDER_ID,
     TheOddsApiAdapter,
+    TheOddsApiAuthenticationError,
     TheOddsApiConfigurationError,
     TheOddsApiError,
     TheOddsApiPayloadError,
+    TheOddsApiRateLimitError,
+    TheOddsApiTransportError,
 )
 
 __all__ = [
@@ -70,7 +73,10 @@ __all__ = [
     "ResultCollector",
     "THE_ODDS_API_PROVIDER_ID",
     "TheOddsApiAdapter",
+    "TheOddsApiAuthenticationError",
     "TheOddsApiConfigurationError",
     "TheOddsApiError",
     "TheOddsApiPayloadError",
+    "TheOddsApiRateLimitError",
+    "TheOddsApiTransportError",
 ]
