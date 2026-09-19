@@ -1,4 +1,4 @@
-"""bunq bank adapter with strict read-only and official sandbox execution modes."""
+"""bunq bank adapter with strict read-only and official sandbox modes."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from hashlib import sha256
 from importlib import import_module
 import os
 import re
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
 from pydantic import AwareDatetime, field_validator, model_validator
@@ -316,9 +316,16 @@ class BunqSandboxPaymentResult(DomainModel):
 class BunqSandboxFundingAdapter:
     """Execute an already-approved funding proposal only against bunq's fake-money sandbox."""
 
-    def __init__(self, *, transport: BunqTransport, recipient_email: str | None) -> None:
+    def __init__(
+        self,
+        *,
+        transport: BunqTransport,
+        recipient_email: str | None,
+        target_mode: Literal["simulation", "execution"] = "execution",
+    ) -> None:
         self._transport = transport
         self._recipient_email = recipient_email
+        self._target_mode = target_mode
         self._attempts: dict[UUID, tuple[BankFundingProposal, BunqSandboxPaymentResult]] = {}
 
     def execute(self, proposal: BankFundingProposal) -> BunqSandboxPaymentResult:
@@ -368,8 +375,8 @@ class BunqSandboxFundingAdapter:
             return "proposal_not_approved"
         if datetime.now(UTC) >= proposal.expires_at:
             return "proposal_expired"
-        if proposal.target_mode != "execution":
-            return "bunq_sandbox_payment_requires_execution_context"
+        if proposal.target_mode != self._target_mode:
+            return f"bunq_sandbox_payment_requires_{self._target_mode}_context"
         if proposal.direction is not FundingDirection.FUNDING:
             return "bunq_sandbox_payment_direction_unsupported"
         if not self._recipient_email:
