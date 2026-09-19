@@ -35,7 +35,7 @@ The central success criterion is not the number of available components. The com
 | --- | --- | --- |
 | Internal workflow | Calculation, risk, liquidity, Simulation/Execution boundaries, persistence, approvals, settlement, reporting and monitoring exist | compose them with the real external paths instead of deterministic local-only inputs |
 | Market data | The Odds API feeds GUI-started SportsCapital Simulation through normalized snapshots and the Sports Match Builder | broaden connected data composition only when another engine/provider requires it |
-| RequestHandler | targeted Execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | real result retrieval remains tied to the later settlement-source integration |
+| RequestHandler | targeted pre-execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | no remaining core Phase 3 gap; post-event result collection is a separate settlement boundary |
 | Smart Polling | persisted provider/target/engine strategies, quota/cost metadata and staff configuration are implemented | multi-provider source selection can be added when another source is introduced |
 | Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback into Portfolio Ledger | compose the accepted bank boundary into the genuine connected E2E gate |
 | Notifications | approval-gated notification domain and Django email transport exist | user preferences, internal inbox/SMS later, and composition with broader approval flows |
@@ -90,7 +90,7 @@ The first external-data composition slices are implemented:
 - #147 persists provider/target/engine Smart Polling strategies with quota/cost metadata and staff configuration.
 - #150 connects GUI-started SportsCapital Simulation to normalized The Odds API data through deterministic two-outcome selection and the existing Sports Match Builder.
 
-These capabilities are no longer Phase 3 missing points. The remaining Priority 1 work starts at the external capital/result loop.
+These capabilities are no longer Phase 3 missing points. The external capital/result foundations are recorded separately below.
 
 ### Completed External Capital and Result Boundaries
 
