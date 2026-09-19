@@ -11,6 +11,7 @@ from uuid import UUID
 from asgiref.sync import sync_to_async
 from django.db import DatabaseError, transaction
 
+from qbet.data.results import ResultProviderTarget
 from qbet.domain.ledger import PortfolioBalance
 from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
@@ -721,6 +722,16 @@ class ModeDispatchCoordinator:
     @staticmethod
     def _execution_proposal(item: QueuedWorkItem) -> ExecutionProposal:
         capital, payout = valuation(item.request)
+        revalidation = item.market_revalidation
+        result_source = revalidation.source if revalidation is not None else None
+        result_provider_target = (
+            ResultProviderTarget(
+                sport=revalidation.sport,
+                event_id=revalidation.event_id,
+            )
+            if revalidation is not None
+            else None
+        )
         return ExecutionProposal(
             work=item.work,
             request=item.request,
@@ -728,6 +739,8 @@ class ModeDispatchCoordinator:
             currency=item.request.currency,
             capital_required=capital,
             payout=payout,
+            result_source=result_source,
+            result_provider_target=result_provider_target,
         )
 
     def _execution_state(

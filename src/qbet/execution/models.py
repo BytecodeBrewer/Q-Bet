@@ -2,9 +2,10 @@ from enum import StrEnum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field
+from pydantic import AwareDatetime, Field, model_validator
 
-from qbet.data.results import NormalizedMatchResult
+from qbet.data.models import DataSourceMetadata
+from qbet.data.results import NormalizedMatchResult, ResultProviderTarget
 from qbet.domain.ledger import FiniteBalance
 from qbet.domain.models import Currency, DomainModel
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
@@ -30,6 +31,16 @@ class ExecutionProposal(DomainModel):
     currency: Currency
     capital_required: FiniteBalance
     payout: FiniteBalance
+    result_source: DataSourceMetadata | None = None
+    result_provider_target: ResultProviderTarget | None = None
+
+    @model_validator(mode="after")
+    def result_identity_is_bound_atomically(self) -> "ExecutionProposal":
+        if (self.result_source is None) != (self.result_provider_target is None):
+            raise ValueError(
+                "result_source and result_provider_target must be configured together"
+            )
+        return self
 
 
 class ApprovedExecutionRequest(DomainModel):

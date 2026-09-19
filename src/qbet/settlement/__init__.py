@@ -73,6 +73,12 @@ class SettlementService:
             or result.correlation_id != work.correlation_id
         ):
             raise ValueError("collected_result_identity_mismatch")
+        proposal = record.proposal
+        if proposal.result_source is not None and (
+            outcome.request.source != proposal.result_source
+            or outcome.request.provider_target != proposal.result_provider_target
+        ):
+            raise ValueError("collected_result_provider_identity_mismatch")
         return result
 
     @classmethod

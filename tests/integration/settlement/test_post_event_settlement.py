@@ -86,7 +86,13 @@ def acknowledged_execution(*, mode: WorkflowMode = WorkflowMode.EXECUTION):
             "capital_context": mode.value,
         }
     )
-    prepared = base.model_copy(update={"work": work})
+    prepared = base.model_copy(
+        update={
+            "work": work,
+            "result_source": SOURCE,
+            "result_provider_target": TARGET,
+        }
+    )
     record = ExecutionRecord(proposal=prepared)
     approval = ApprovedExecutionRequest(
         proposal=prepared,
@@ -220,6 +226,33 @@ class PostEventSettlementTests(TransactionTestCase):
         wrong = request_for(record).model_copy(update={"match_id": "other-opportunity"})
 
         with self.assertRaisesMessage(ValueError, "collected_result_identity_mismatch"):
+            PostEventSettlementService(
+                collector,
+                state_repository=repository,
+            ).collect_and_settle(wrong)
+
+        self.assertEqual(collector.requests, [])
+
+
+
+    def test_wrong_provider_event_is_rejected_before_provider_call(self) -> None:
+        record, ledger = acknowledged_execution()
+        repository = ExecutionStateRepository()
+        repository.load_or_create(record, ledger)
+        collector = RecordingCollector()
+        wrong = request_for(record).model_copy(
+            update={
+                "provider_target": ResultProviderTarget(
+                    sport="soccer_epl",
+                    event_id="other-event",
+                )
+            }
+        )
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "collected_result_provider_identity_mismatch",
+        ):
             PostEventSettlementService(
                 collector,
                 state_repository=repository,

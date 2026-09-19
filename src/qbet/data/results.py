@@ -88,10 +88,11 @@ class NormalizedMatchResult(DomainModel):
         if self.availability is ResultAvailability.AVAILABLE:
             if self.reason_code is not None:
                 raise ValueError("available results must not include a reason_code")
-            if self.provider_outcome is None and self.completed is not True:
-                raise ValueError(
-                    "available results require a financial outcome or completed event evidence"
-                )
+            if self.provider_outcome is None:
+                if self.completed is not True or len(self.scores) < 2:
+                    raise ValueError(
+                        "score-only available results require completed final score evidence"
+                    )
             if self.completed is False:
                 raise ValueError("available results cannot describe an incomplete event")
             if len({score.participant for score in self.scores}) != len(self.scores):
