@@ -291,7 +291,8 @@ class TheOddsApiSportsSimulationOpportunitySource:
         return SimulationOpportunityBundle(
             opportunities=(built.request,),
             provider_state=ProviderState(
-                provider_id=THE_ODDS_API_PROVIDER_ID,
+                # Market-data source identity must not be reused as sportsbook/execution state.
+                provider_id="gui-sandbox-provider",
                 active_bets_count=0,
             ),
             customer_report_input=CustomerReportInput(
