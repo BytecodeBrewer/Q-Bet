@@ -162,3 +162,21 @@ class PollingStrategyRow(models.Model):
             )
         ]
         ordering = ("provider_id", "source_id", "target", "engine")
+
+
+class SandboxFundingOutcomeRow(models.Model):
+    """Durable bunq sandbox provider outcome and Simulation ledger feedback state."""
+
+    proposal_id = models.UUIDField(primary_key=True, editable=False)
+    correlation_id = models.UUIDField(db_index=True)
+    provider_id = models.CharField(max_length=64)
+    sent = models.BooleanField()
+    provider_reference = models.CharField(max_length=255, null=True, blank=True)
+    reason_code = models.CharField(max_length=255, null=True, blank=True)
+    ledger_applied = models.BooleanField(default=False)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_sandbox_funding_outcomes"
+        ordering = ("-updated_at",)

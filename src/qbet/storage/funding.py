@@ -1,0 +1,181 @@
+"""Durable bunq sandbox funding feedback into the Simulation ledger."""
+
+from __future__ import annotations
+
+import re
+from uuid import UUID
+
+from django.db import DatabaseError, transaction
+from pydantic import ValidationError, model_validator
+
+from qbet.bank.bunq import BunqSandboxPaymentResult
+from qbet.bank.funding import BankFundingProposal, FundingDirection, FundingProposalState
+from qbet.domain.models import DomainModel
+from qbet.ledger import PortfolioLedger
+from qbet.storage.models import PortfolioLedgerRow, SandboxFundingOutcomeRow
+
+
+_REDACTED_BUNQ_REFERENCE = re.compile(r"^bunq-payment-[0-9a-f]{12}$")
+
+
+class SandboxFundingFeedbackPersistenceError(RuntimeError):
+    """Raised when durable sandbox funding feedback cannot be restored or applied safely."""
+
+
+class SandboxFundingFeedbackConflict(ValueError):
+    """Raised when one proposal identity is replayed with conflicting provider data."""
+
+
+class SandboxFundingFeedbackRecord(DomainModel):
+    """Canonical provider outcome plus whether its capital feedback reached the ledger."""
+
+    proposal: BankFundingProposal
+    provider_result: BunqSandboxPaymentResult
+    ledger_applied: bool = False
+    duplicate: bool = False
+
+    @model_validator(mode="after")
+    def validates_feedback(self) -> "SandboxFundingFeedbackRecord":
+        result = self.provider_result
+        if self.proposal.id != result.proposal_id:
+            raise ValueError("sandbox funding proposal identity mismatch")
+        if self.proposal.correlation_id != result.correlation_id:
+            raise ValueError("sandbox funding correlation mismatch")
+        if self.proposal.state is not FundingProposalState.APPROVED:
+            raise ValueError("sandbox funding feedback requires an approved proposal")
+        if self.proposal.target_mode != "simulation":
+            raise ValueError("sandbox funding feedback requires Simulation context")
+        if self.proposal.direction is not FundingDirection.FUNDING:
+            raise ValueError("sandbox funding feedback supports funding only")
+        if result.test_reference != f"qbet-sandbox-{self.proposal.id}":
+            raise ValueError("sandbox funding test reference mismatch")
+        if (
+            result.provider_reference is not None
+            and not _REDACTED_BUNQ_REFERENCE.fullmatch(result.provider_reference)
+        ):
+            raise ValueError("sandbox funding provider reference must be redacted")
+        if self.ledger_applied and not result.sent:
+            raise ValueError("failed sandbox funding cannot be applied to the ledger")
+        return self
+
+
+class SandboxFundingFeedbackRepository:
+    """Atomically persist one bunq sandbox result and its Simulation ledger credit."""
+
+    _provider_id = "bunq"
+
+    def apply(
+        self,
+        proposal: BankFundingProposal,
+        result: BunqSandboxPaymentResult,
+    ) -> SandboxFundingFeedbackRecord:
+        canonical_result = result.model_copy(update={"duplicate": False})
+        try:
+            incoming = SandboxFundingFeedbackRecord(
+                proposal=proposal,
+                provider_result=canonical_result,
+            )
+        except ValidationError as error:
+            raise SandboxFundingFeedbackConflict("sandbox_funding_feedback_invalid") from error
+
+        try:
+            with transaction.atomic():
+                row, created = SandboxFundingOutcomeRow.objects.select_for_update().get_or_create(
+                    proposal_id=proposal.id,
+                    defaults={
+                        "correlation_id": proposal.correlation_id,
+                        "provider_id": self._provider_id,
+                        "sent": canonical_result.sent,
+                        "provider_reference": canonical_result.provider_reference,
+                        "reason_code": canonical_result.reason_code,
+                        "ledger_applied": False,
+                        "payload": incoming.model_dump(mode="json"),
+                    },
+                )
+                if created:
+                    stored = incoming
+                else:
+                    stored = self._record_from_row(row)
+                    if (
+                        stored.proposal != proposal
+                        or stored.provider_result != canonical_result
+                    ):
+                        raise SandboxFundingFeedbackConflict(
+                            "sandbox_funding_feedback_conflict"
+                        )
+                    if stored.ledger_applied or not canonical_result.sent:
+                        return stored.model_copy(update={"duplicate": True})
+
+                if not canonical_result.sent:
+                    return stored
+
+                ledger_row = (
+                    PortfolioLedgerRow.objects.select_for_update()
+                    .filter(mode="simulation", currency=proposal.currency)
+                    .first()
+                )
+                if ledger_row is None:
+                    raise SandboxFundingFeedbackPersistenceError(
+                        "simulation_ledger_missing"
+                    )
+                ledger = PortfolioLedger.model_validate(ledger_row.payload)
+                updated, decision = ledger.fund_external(
+                    command_id=_ledger_command_id(proposal.id),
+                    dispatch_id=_ledger_dispatch_id(proposal.id),
+                    correlation_id=str(proposal.correlation_id),
+                    amount=proposal.amount,
+                )
+                if not decision.accepted:
+                    if decision.reason == "idempotency_conflict":
+                        raise SandboxFundingFeedbackConflict(
+                            "sandbox_funding_ledger_conflict"
+                        )
+                    raise SandboxFundingFeedbackPersistenceError(
+                        "sandbox_funding_ledger_rejected"
+                    )
+
+                ledger_row.payload = updated.model_dump(mode="json")
+                ledger_row.save(update_fields=("payload", "updated_at"))
+
+                applied = stored.model_copy(update={"ledger_applied": True})
+                row.ledger_applied = True
+                row.payload = applied.model_dump(mode="json")
+                row.save(update_fields=("ledger_applied", "payload", "updated_at"))
+                return applied
+        except (DatabaseError, ValidationError) as error:
+            raise SandboxFundingFeedbackPersistenceError(
+                "sandbox_funding_feedback_unavailable"
+            ) from error
+
+    def load(self, proposal_id: UUID) -> SandboxFundingFeedbackRecord | None:
+        try:
+            row = SandboxFundingOutcomeRow.objects.filter(proposal_id=proposal_id).first()
+            return None if row is None else self._record_from_row(row)
+        except (DatabaseError, ValidationError) as error:
+            raise SandboxFundingFeedbackPersistenceError(
+                "sandbox_funding_feedback_unavailable"
+            ) from error
+
+    def _record_from_row(self, row: SandboxFundingOutcomeRow) -> SandboxFundingFeedbackRecord:
+        record = SandboxFundingFeedbackRecord.model_validate(row.payload)
+        result = record.provider_result
+        if (
+            row.correlation_id != record.proposal.correlation_id
+            or row.provider_id != self._provider_id
+            or row.sent != result.sent
+            or row.provider_reference != result.provider_reference
+            or row.reason_code != result.reason_code
+            or row.ledger_applied != record.ledger_applied
+        ):
+            raise SandboxFundingFeedbackPersistenceError(
+                "sandbox_funding_feedback_metadata_mismatch"
+            )
+        return record
+
+
+def _ledger_command_id(proposal_id: UUID) -> str:
+    return f"funding:{proposal_id}:credit"
+
+
+def _ledger_dispatch_id(proposal_id: UUID) -> str:
+    return f"funding:{proposal_id}"

@@ -121,6 +121,22 @@ class PortfolioLedger(DomainModel):
             )
         )
 
+    def fund_external(
+        self, *, command_id: str, dispatch_id: str, correlation_id: str, amount: Decimal
+    ) -> tuple["PortfolioLedger", LedgerDecision]:
+        """Credit externally confirmed capital without inventing a settlement position."""
+
+        return self.apply(
+            _command(
+                command_id,
+                dispatch_id,
+                correlation_id,
+                self.balance.currency,
+                LedgerOperation.FUND,
+                amount,
+            )
+        )
+
     def apply(self, command: LedgerCommand) -> tuple["PortfolioLedger", LedgerDecision]:
         def reject(reason: str) -> tuple["PortfolioLedger", LedgerDecision]:
             return self, LedgerDecision(accepted=False, balance=self.balance, reason=reason)
@@ -150,6 +166,12 @@ class PortfolioLedger(DomainModel):
                 return reject("insufficient_available_capital")
             balances["available"] -= amount
             balances["cost"] += amount
+        elif operation is LedgerOperation.FUND:
+            if position is not None:
+                return reject("funding_dispatch_conflict")
+            if amount <= 0:
+                return reject("funding_amount_must_be_positive")
+            balances["available"] += amount
         else:
             if position is None:
                 return reject("unknown_dispatch")
