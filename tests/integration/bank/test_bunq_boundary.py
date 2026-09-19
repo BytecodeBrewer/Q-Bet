@@ -23,7 +23,7 @@ from qbet.bank.funding import (
 from qbet.data.models import DataSourceMetadata, SourceTransport
 from qbet.domain.ledger import PortfolioBalance
 from qbet.ledger import PortfolioLedger
-from qbet.storage.funding import SandboxFundingFeedbackRepository
+from qbet.storage.funding import BunqSandboxSimulationFundingService
 from qbet.storage.ledger import PortfolioLedgerRepository
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
 
@@ -199,25 +199,18 @@ class BunqSandboxSimulationFundingBoundaryTests(TestCase):
         )
         assert approved.accepted
 
-        provider_result = BunqSandboxFundingAdapter(
+        funding_service = BunqSandboxSimulationFundingService(
             transport=transport,
             recipient_email="sandbox@example.invalid",
-            target_mode="simulation",
-        ).execute(approved.proposal)
-        first = SandboxFundingFeedbackRepository().apply(
-            approved.proposal,
-            provider_result,
         )
-        replay = SandboxFundingFeedbackRepository().apply(
-            approved.proposal,
-            provider_result,
-        )
+        first = funding_service.execute(approved.proposal)
+        replay = funding_service.execute(approved.proposal)
         persisted = PortfolioLedgerRepository().load(
             mode="simulation",
             currency="EUR",
         )
 
-        assert provider_result.sent
+        assert first.provider_result.sent
         assert first.ledger_applied
         assert replay.duplicate
         assert transport.payment_calls == 1

@@ -8,7 +8,11 @@ from uuid import UUID
 from django.db import DatabaseError, transaction
 from pydantic import ValidationError, model_validator
 
-from qbet.bank.bunq import BunqSandboxPaymentResult
+from qbet.bank.bunq import (
+    BunqSandboxFundingAdapter,
+    BunqSandboxPaymentResult,
+    BunqTransport,
+)
 from qbet.bank.funding import BankFundingProposal, FundingDirection, FundingProposalState
 from qbet.domain.models import DomainModel
 from qbet.ledger import PortfolioLedger
@@ -57,6 +61,30 @@ class SandboxFundingFeedbackRecord(DomainModel):
         if self.ledger_applied and not result.sent:
             raise ValueError("failed sandbox funding cannot be applied to the ledger")
         return self
+
+
+class BunqSandboxSimulationFundingService:
+    """Production boundary for sandbox execution plus durable Simulation feedback."""
+
+    def __init__(
+        self,
+        *,
+        transport: BunqTransport,
+        recipient_email: str | None,
+        feedback_repository: SandboxFundingFeedbackRepository | None = None,
+    ) -> None:
+        self._adapter = BunqSandboxFundingAdapter(
+            transport=transport,
+            recipient_email=recipient_email,
+            target_mode="simulation",
+        )
+        self._feedback_repository = feedback_repository or SandboxFundingFeedbackRepository()
+
+    def execute(self, proposal: BankFundingProposal) -> SandboxFundingFeedbackRecord:
+        """Execute the fake-money sandbox action and persist its capital feedback."""
+
+        provider_result = self._adapter.execute(proposal)
+        return self._feedback_repository.apply(proposal, provider_result)
 
 
 class SandboxFundingFeedbackRepository:
