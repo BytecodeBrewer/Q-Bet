@@ -135,6 +135,23 @@ DATABASES = {
     )
 }
 QBET_SIMULATION_MODE_ENABLED = _environment_flag("QBET_SIMULATION_MODE_ENABLED")
+QBET_SIMULATION_SPORTS_SOURCE = os.environ.get(
+    "QBET_SIMULATION_SPORTS_SOURCE", "fixture"
+).strip().lower()
+QBET_SIMULATION_ODDS_SPORT = os.environ.get("QBET_SIMULATION_ODDS_SPORT", "").strip()
+QBET_SIMULATION_ODDS_EVENT_ID = os.environ.get(
+    "QBET_SIMULATION_ODDS_EVENT_ID", ""
+).strip()
+QBET_SIMULATION_ODDS_MARKET = os.environ.get("QBET_SIMULATION_ODDS_MARKET", "").strip()
+QBET_SIMULATION_ASSUMED_LIQUIDITY = os.environ.get(
+    "QBET_SIMULATION_ASSUMED_LIQUIDITY", ""
+).strip()
+QBET_SIMULATION_REQUESTED_TOTAL_STAKE = os.environ.get(
+    "QBET_SIMULATION_REQUESTED_TOTAL_STAKE", ""
+).strip()
+QBET_SIMULATION_STAKE_PRECISION = os.environ.get(
+    "QBET_SIMULATION_STAKE_PRECISION", ""
+).strip()
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

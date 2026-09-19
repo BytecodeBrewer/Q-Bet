@@ -19,8 +19,8 @@ This file is the companion register for concrete Phase 3 external integrations. 
 
 | Area | Phase 3 intent | Concrete choice | Status |
 | --- | --- | --- | --- |
-| Data Aggregation / odds | Feed normalized candidate markets and quotations into the sports pipeline through typed adapters. | The Odds API is the selected first read-only quotation adapter; Odds-API.io, OddsPapi, BetBurger, and OddsJam remain future candidates. | The Odds API adapter connected; full connected engine composition still pending |
-| RequestHandler revalidation | Perform targeted event-specific refreshes close to action time using current quotation/provider state rather than repeating broad ingestion. | Reuse selected quotation adapters with source-aware targeted pulls and optional cross-checking. | contracts/router/sandbox handlers exist; real adapter-backed targeted revalidation pending |
+| Data Aggregation / odds | Feed normalized candidate markets and quotations into the sports pipeline through typed adapters. | The Odds API is the selected first read-only quotation adapter; Odds-API.io, OddsPapi, BetBurger, and OddsJam remain future candidates. | The Odds API adapter is connected to GUI-started SportsCapital Simulation through normalized snapshots and the Sports Match Builder |
+| RequestHandler revalidation | Perform targeted event-specific refreshes close to action time using current quotation/provider state rather than repeating broad ingestion. | Reuse selected quotation adapters with source-aware targeted pulls and optional cross-checking. | real The Odds API-backed targeted Execution revalidation implemented through the durable dispatch path |
 | Result data / settlement | Resolve final match/result state independently from normal quotation ingestion where practical. | football-data.org, OpenLigaDB, API-Football, and a score endpoint from The Odds API are user-provided candidates. | candidates supplied; first adapter selection pending |
 | Bank / account data | Connect balances, transactions, sandbox execution, and later account-backed flows through the bank adapter boundary. | bunq is the first concrete bank integration. | bunq read-only + official sandbox adapter implemented; closed Simulation capital loop still pending |
 | Notifications | Notify the user when an opportunity, approval, or capital action requires attention instead of automatically navigating a provider website. | Email first. | notification domain + Django email transport implemented; richer preferences/inbox later |
@@ -38,7 +38,7 @@ The same external provider does not have to serve every pipeline responsibility.
 
 Data Aggregation performs the broader read-only discovery/import work that produces normalized market candidates for the engines.
 
-- **The Odds API** — selected and connected first read-only adapter for structured pre-match/live quotation ingestion.
+- **The Odds API** — selected and connected first read-only adapter for structured pre-match/live quotation ingestion; GUI-started SportsCapital Simulation consumes one configured two-outcome event/market through normalized snapshots and the Sports Match Builder.
 - **Odds-API.io** — cost-conscious candidate for structured German/international bookmaker coverage.
 - **OddsPapi** — lightweight candidate for development and ingestion testing.
 - **BetBurger** — professional scanner/data candidate for higher-frequency arbitrage-oriented inputs where suitable API/data access exists.
@@ -54,7 +54,7 @@ Source selection should prefer useful free tiers, free test quotas, sandbox/test
 - Prefer the freshest suitable source that still has quota/capacity available.
 - A second source may be used as a cross-check when the opportunity value, data confidence, or configured policy justifies it.
 - Revalidation remains event-specific and should not trigger an unnecessary full-market refresh.
-- Current code has the typed mode router/contracts and deterministic sandbox handlers; the remaining Phase 3 step is a real adapter-backed targeted implementation.
+- The targeted Execution path uses a real The Odds API-backed RequestHandler implementation and preserves request context through the durable queue/dispatch boundary.
 
 ### Result / Settlement Sources
 
@@ -69,15 +69,15 @@ Result ingestion remains a separate role even when the selected quotation provid
 
 ## Source Balancing And Smart Polling
 
-A deterministic provider-neutral `SmartPollingPolicy` already exists for market/result freshness, retry limits, terminal state and scheduling. It is the foundation, not the final Phase 3 scheduler.
+The provider-neutral `SmartPollingPolicy` resolves persisted provider/target/engine strategies with configurable refresh points, freshness, bounded attempts, quota/capacity metadata, cost class and staff-managed enablement. Final Execution revalidation remains a separate RequestHandler concern.
 
-Phase 3 must extend this into configurable source balancing rather than treating every configured API equally on every cycle.
+Automatic balancing across multiple quotation providers remains a later slice to introduce when another real source is connected; the current persisted strategy boundary already allows plan/capacity changes without editing Python constants.
 
 - Prefer free/test quota and lower-cost sources when their freshness/coverage is sufficient; escalate to another source only when the opportunity or required confidence justifies it.
 - Polling becomes more targeted as an event approaches and as an opportunity becomes more relevant. A representative configurable cadence may include T-24h, T-12h, T-1h or other administrator-defined points rather than continuously requesting the same market.
 - Final pre-action revalidation remains separate from ordinary aggregation.
 - Provider/engine strategy must account for current rate limits, quota/subscription capacity, cost and required freshness.
-- Exact timings belong to persisted/configurable strategy so changing an API plan does not require Python code changes.
+- Exact timings are persisted/configurable, so changing an API plan or configured capacity does not require Python code changes.
 
 ## User-Provided Historical Candidate Notes
 
