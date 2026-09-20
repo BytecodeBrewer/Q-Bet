@@ -192,9 +192,11 @@ jobs:
           health="$(
             vercel curl /health/ \
               --deployment "$DEPLOYMENT_URL" \
-              --fail --silent
+              --silent
           )"
+          printf 'Hosted readiness: %s\n' "$health"
           printf '%s' "$health" | grep -q '"status": "ok"'
+          printf '%s' "$health" | grep -q '"persistence": "ready"'
 
           home="$(
             vercel curl / \
