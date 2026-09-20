@@ -134,20 +134,7 @@ bank/sandbox adapter -> Portfolio/Liquidity state -> LiquidityChecker
 
 The loop is complete only when the post-action capital/result state returns to the ledger.
 
-### Test-Suite Refactor
-
-The repository already has a large test surface. Test count is not a quality metric by itself.
-
-After connected paths replace older component-only architecture, review the complete suite for:
-
-- missing tests for critical real paths;
-- redundant tests that protect the same contract repeatedly;
-- tests that preserve obsolete architecture;
-- excessively detailed low-value cases;
-- unit tests that remain valuable because they isolate important calculations/contracts;
-- genuine E2E coverage that should replace groups of weaker integration tests.
-
-Do not mass-delete unit tests. Remove/replace tests because their architectural responsibility is obsolete or redundant, not because the suite is large.
+Regression ownership, legacy-gate consolidation, and the durable test-layer strategy are now documented in `docs/test-strategy.md`. The connected Phase 3 SportsCapital gate remains the canonical composition regression while focused tests retain recovery, idempotency, authorization, calculation, and fail-closed responsibilities.
 
 ## Priority 4 — Operative Infrastructure
 
@@ -232,9 +219,8 @@ Phase 4 is expected to follow the same pattern: establish a stable transition ar
 
 ## Recommended Ticket Sequence
 
-1. Audit/refactor the broader test suite against the now-real architecture, replacing obsolete or redundant component-only protection where genuine E2E coverage owns the responsibility.
-2. Add Prometheus-compatible metrics and dashboard integration around the stable connected flow.
-3. Expand Admin Control Center, Settings, Approval Inbox, Reporting/Monitoring dashboards and visual UX.
+1. Add Prometheus-compatible metrics and dashboard integration around the stable connected flow.
+2. Expand Admin Control Center, Settings, Approval Inbox, Reporting/Monitoring dashboards and visual UX.
 
 The connected E2E definition remains the regression gate for future Phase 3 work: a complete relevant business loop with external boundaries represented by permitted read-only/sandbox interfaces and authoritative state returning to Q-Bet.
 
