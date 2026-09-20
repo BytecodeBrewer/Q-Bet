@@ -64,7 +64,7 @@ A focused test is not redundant merely because the connected E2E passes through 
 
 The Phase 3 consolidation intentionally retires architecture-history naming:
 
-- `tests/e2e/test_phase2_operability_gate.py` is removed. Its composition assertions are owned by the connected Phase 3 E2E; routing settings, approval behavior, revalidation, Monitoring export and access control remain covered by their focused integration suites.
+- `tests/e2e/test_phase2_operability_gate.py` is removed. Its composition assertions are owned by the connected Phase 3 E2E; routing settings remain in `tests/integration/web/test_routing_settings.py`, approval behavior in `test_execution_approval_ui.py` / workflow approval tests, revalidation in `tests/integration/workflow/test_execution_approval_boundary.py` and `test_targeted_market_revalidation.py`, while Monitoring export/access control remain in their dedicated web integration suites.
 - `tests/e2e/test_mode_settlement_isolation.py` is no longer treated as an E2E gate. Its unique queue/claim/expiry/async/result-state/isolation cases move to `tests/integration/workflow/test_mode_queue_and_isolation.py`. Duplicated single/dual-mode happy paths, immediate settlement happy paths and repeated-settlement checks are removed because current E2E/settlement tests own them.
 - `tests/integration/web/test_phase2_completion_boundaries.py` becomes `tests/integration/web/test_execution_approval_ui.py`; the surviving scenarios protect durable GUI Simulation recovery plus owner/authorization/rejection approval behavior rather than a historical phase.
 - `tests/integration/web/test_issue_112_review_regressions.py` becomes `tests/integration/web/test_durable_simulation_and_dispatch.py`; its surviving regressions protect shared Simulation ledger merging and persisted-owner dispatch behavior rather than one historical issue number.
@@ -81,3 +81,7 @@ Place a regression at the narrowest layer that can reproduce the bug without hid
 - `bunq_e2e` stays explicit and opt-in;
 - `performance` stays marker/environment gated;
 - normal tests must not initiate real-money actions or uncontrolled provider writes.
+
+## Fixture Decision
+
+The audit deliberately does not create a new catch-all provider fixture module. Existing `tests/support/workflow.py` already owns the stable workflow request/handler helpers. The connected Odds, score, and bunq fakes remain close to the tests that define their HTTP/payment contracts because combining them would hide domain intent rather than reduce meaningful duplication.

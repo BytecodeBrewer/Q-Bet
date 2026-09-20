@@ -30,6 +30,7 @@ from qbet.storage.models import (
     ExecutionRecordRow,
     ModeWorkQueueRow,
     PortfolioLedgerRow,
+    SimulationReportRow,
 )
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.workflow import WorkflowMode, WorkState
@@ -133,12 +134,14 @@ class ModeQueueAndIsolationIntegrationTests(TransactionTestCase):
         assert runner.last_report is not None
         assert runner.last_ledger is not None
         return result, runner.last_report, store, runner.last_ledger, ledger_repository
+
     def _coordinator(self, configuration: RoutingConfiguration, opportunity_id: str):
         return ModeDispatchCoordinator(
             configuration,
             queue_repository=ModeWorkQueueRepository(),
             mode_request_handlers=_handlers(opportunity_id),
         )
+
     def test_queue_recheck_and_expiry_are_persisted_without_dispatch(self) -> None:
         request = _sports_request()
         recheck = ModeDispatchCoordinator(
@@ -332,6 +335,7 @@ class ModeQueueAndIsolationIntegrationTests(TransactionTestCase):
         partial_item = queue_items[ResultStatus.PARTIAL]
         self.assertEqual(partial_item.state, WorkState.RECHECK)
         self.assertEqual(partial_item.history[-1].reason, "result_partial")
+
     def test_cancelled_execution_settlement_does_not_change_simulation_report(self) -> None:
         request = _bonus_request()
         routes = resolve_routes(
