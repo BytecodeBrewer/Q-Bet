@@ -37,9 +37,9 @@ The central success criterion is not the number of available components. The com
 | Market data | The Odds API feeds GUI-started SportsCapital Simulation through normalized snapshots and the Sports Match Builder | broaden connected data composition only when another engine/provider requires it |
 | RequestHandler | targeted pre-execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | no remaining core Phase 3 gap; post-event result collection is a separate settlement boundary |
 | Smart Polling | persisted provider/target/engine strategies, quota/cost metadata and staff configuration are implemented | multi-provider source selection can be added when another source is introduced |
-| Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback into Portfolio Ledger | compose the accepted bank boundary into the genuine connected E2E gate |
+| Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback composed from completed Simulation work into Portfolio Ledger | no remaining core Phase 3 gap; broaden only when another bank/account flow requires it |
 | Notifications | approval-gated notification domain and Django email transport exist | user preferences, internal inbox/SMS later, and composition with broader approval flows |
-| Results/settlement data | The Odds API scores are connected through the provider-neutral result boundary to post-event SettlementService composition | compose the accepted result boundary into the genuine connected E2E gate |
+| Results/settlement data | The Odds API scores are connected through the provider-neutral result boundary and the connected E2E path to post-event SettlementService composition | no remaining core Phase 3 gap; add another result source only when coverage requires it |
 | Monitoring/Reporting | persisted technical Monitoring and customer Reporting exist | richer time-window dashboards plus external/infrastructure observability |
 | Performance | repeatable Phase 3 connected baseline exists | later provider/network hot-path baselines where useful |
 | GUI controls | routing/runtime controls and basic profile/admin surfaces exist | later consolidated Settings/Admin Control Center and product-quality UX |
