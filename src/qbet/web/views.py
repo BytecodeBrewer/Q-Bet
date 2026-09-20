@@ -8,6 +8,7 @@ from io import StringIO
 from typing import cast
 from uuid import UUID
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -15,6 +16,7 @@ from django.contrib.auth.models import User
 from django.db import DatabaseError
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.utils.crypto import constant_time_compare
 from django.views.decorators.http import require_GET, require_POST
 from pydantic import ValidationError
 
@@ -23,6 +25,8 @@ from qbet.monitoring.exports import csv_header as monitoring_csv_header
 from qbet.monitoring.exports import csv_rows as monitoring_csv_rows
 from qbet.monitoring.exports import json_document as monitoring_json_document
 from qbet.notifications import notification_recipient_status
+from qbet.observability import prometheus_document
+from qbet.observability.metrics import ObservabilitySnapshot
 from qbet.reporting import (
     CustomerReportUnavailable,
     CustomerResultReport,
@@ -36,6 +40,10 @@ from qbet.storage.ledger import (
     RoutingConfigurationRepository,
 )
 from qbet.storage.monitoring import PostgresMonitoringRepository
+from qbet.storage.observability import (
+    ObservabilityPersistenceError,
+    PostgresObservabilityRepository,
+)
 from qbet.storage.postgres import PostgresSimulationReportReader
 from qbet.web.controls import (
     DashboardLayout,
@@ -80,6 +88,7 @@ MONITORING_SERVICE = _monitoring_service()
 WORKFLOW_MONITORING_REPOSITORY = PostgresMonitoringRepository()
 WORKFLOW_MONITORING_SERVICE = WorkflowMonitoringService(WORKFLOW_MONITORING_REPOSITORY)
 SIMULATION_CONTROL = SimulationControlService()
+OBSERVABILITY_REPOSITORY = PostgresObservabilityRepository()
 
 
 def _simulation_enabled() -> bool:
@@ -514,6 +523,10 @@ def monitoring(request: HttpRequest) -> HttpResponse:
         if mode == "extended"
         else WORKFLOW_MONITORING_SERVICE.compact(query)
     )
+    try:
+        observability = OBSERVABILITY_REPOSITORY.snapshot(start=query.start, end=query.end)
+    except ObservabilityPersistenceError:
+        observability = ObservabilitySnapshot.unavailable()
     routing_configuration, routing_available = _routing_configuration()
     simulation_runtime = MONITORING_SERVICE.snapshot(
         runtime_configuration=routing_configuration,
@@ -536,6 +549,15 @@ def monitoring(request: HttpRequest) -> HttpResponse:
             monitoring_start=query.start,
             monitoring_end=query.end,
             monitoring_query_parameters=_monitoring_query_parameters(request),
+            monitoring_range=request.GET.get("range")
+            or ("custom" if request.GET.get("start") or request.GET.get("end") else "24h"),
+            monitoring_summary=_monitoring_summary(records),
+            queue_total=sum(observability.queue_items.values()),
+            execution_total=sum(observability.execution_records.values()),
+            observability_available=observability.available,
+            grafana_url=settings.QBET_GRAFANA_URL,
+            vercel_dashboard_url=settings.QBET_VERCEL_DASHBOARD_URL,
+            supabase_dashboard_url=settings.QBET_SUPABASE_DASHBOARD_URL,
         ),
     )
 
@@ -583,8 +605,14 @@ def monitoring_export(request: HttpRequest, export_format: str) -> HttpResponse:
 
 
 def _monitoring_query(request: HttpRequest) -> MonitoringQuery:
-    end = _query_datetime(request.GET.get("end")) or datetime.now(UTC)
-    start = _query_datetime(request.GET.get("start")) or end - timedelta(days=1)
+    preset = request.GET.get("range")
+    durations = {"1h": timedelta(hours=1), "24h": timedelta(days=1), "7d": timedelta(days=7)}
+    if preset in durations:
+        end = datetime.now(UTC)
+        start = end - durations[preset]
+    else:
+        end = _query_datetime(request.GET.get("end")) or datetime.now(UTC)
+        start = _query_datetime(request.GET.get("start")) or end - timedelta(days=1)
     try:
         correlation = request.GET.get("correlation")
         return MonitoringQuery(
@@ -596,6 +624,40 @@ def _monitoring_query(request: HttpRequest) -> MonitoringQuery:
         raise Http404(error.errors()[0]["msg"]) from error
     except ValueError as error:
         raise Http404("Monitoring correlation identifiers must be UUID values.") from error
+
+
+def _monitoring_summary(records: object) -> dict[str, int]:
+    values = tuple(cast(tuple[object, ...], records))
+    return {
+        "total": len(values),
+        "warnings": sum(
+            getattr(record, "level", None) == "warning" or getattr(record, "warning_count", 0) > 0
+            for record in values
+        ),
+        "errors": sum(
+            getattr(record, "level", None) == "error" or getattr(record, "error_count", 0) > 0
+            for record in values
+        ),
+    }
+
+
+@require_GET
+def metrics(request: HttpRequest) -> HttpResponse:
+    """Expose only aggregate, token-protected durable observability values."""
+
+    token = settings.QBET_METRICS_TOKEN
+    supplied = request.headers.get("Authorization", "")
+    if not token or not constant_time_compare(supplied, f"Bearer {token}"):
+        raise Http404("Not found.")
+    end = datetime.now(UTC)
+    try:
+        snapshot = OBSERVABILITY_REPOSITORY.snapshot(start=end - timedelta(days=1), end=end)
+    except ObservabilityPersistenceError:
+        snapshot = ObservabilitySnapshot.unavailable()
+    return HttpResponse(
+        prometheus_document(snapshot),
+        content_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 def _query_datetime(value: str | None) -> datetime | None:
@@ -618,7 +680,17 @@ def _monitoring_query_parameters(request: HttpRequest) -> str:
 
 @user_passes_test(_is_staff, login_url="login")
 def admin_area(request: HttpRequest) -> HttpResponse:
-    return render(request, "qbet_web/admin_area.html", _context(request))
+    return render(
+        request,
+        "qbet_web/admin_area.html",
+        _context(
+            request,
+            metrics_enabled=bool(settings.QBET_METRICS_TOKEN),
+            grafana_url=settings.QBET_GRAFANA_URL,
+            vercel_dashboard_url=settings.QBET_VERCEL_DASHBOARD_URL,
+            supabase_dashboard_url=settings.QBET_SUPABASE_DASHBOARD_URL,
+        ),
+    )
 
 
 @user_passes_test(_is_staff, login_url="login")

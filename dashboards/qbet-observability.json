@@ -1,0 +1,15 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {"title": "Monitoring events by severity", "type": "timeseries", "targets": [{"expr": "sum by (level) (rate(qbet_monitoring_events_total[5m]))", "refId": "A"}]},
+    {"title": "Workflow queue by state", "type": "timeseries", "targets": [{"expr": "sum by (state) (qbet_queue_items)", "refId": "B"}]},
+    {"title": "Execution records by state", "type": "timeseries", "targets": [{"expr": "sum by (state) (qbet_execution_records)", "refId": "C"}]}
+  ],
+  "schemaVersion": 39,
+  "tags": ["qbet", "observability"],
+  "templating": {"list": []},
+  "title": "Q-Bet Observability",
+  "uid": "qbet-observability",
+  "version": 1
+}

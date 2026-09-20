@@ -10,11 +10,24 @@
   <div class="filter-bar">
     <form method="get" aria-label="Monitoring filters">
       <input type="hidden" name="view" value="{{ monitoring_view }}">
+      <input type="hidden" name="range" value="custom">
       <label>Start (ISO-8601)<input type="text" name="start" value="{% if request.GET.start %}{{ request.GET.start }}{% else %}{{ monitoring_start|date:'c' }}{% endif %}" required></label>
       <label>End (ISO-8601)<input type="text" name="end" value="{% if request.GET.end %}{{ request.GET.end }}{% else %}{{ monitoring_end|date:'c' }}{% endif %}" required></label>
       <label>Correlation (optional)<input type="text" name="correlation" value="{{ request.GET.correlation }}" placeholder="UUID"></label>
       <button type="submit">Apply filters</button>
     </form>
+    <nav class="monitoring-presets" aria-label="Monitoring time range">
+      <a href="?range=1h&amp;view={{ monitoring_view }}"{% if monitoring_range == '1h' %} aria-current="page"{% endif %}>1h</a>
+      <a href="?range=24h&amp;view={{ monitoring_view }}"{% if monitoring_range == '24h' %} aria-current="page"{% endif %}>24h</a>
+      <a href="?range=7d&amp;view={{ monitoring_view }}"{% if monitoring_range == '7d' %} aria-current="page"{% endif %}>7d</a>
+    </nav>
+    {% if grafana_url or vercel_dashboard_url or supabase_dashboard_url %}
+      <nav aria-label="Infrastructure links">
+        {% if grafana_url %}<a href="{{ grafana_url }}" rel="noopener noreferrer">Grafana</a>{% endif %}
+        {% if vercel_dashboard_url %}<a href="{{ vercel_dashboard_url }}" rel="noopener noreferrer">Vercel</a>{% endif %}
+        {% if supabase_dashboard_url %}<a href="{{ supabase_dashboard_url }}" rel="noopener noreferrer">Supabase</a>{% endif %}
+      </nav>
+    {% endif %}
     <nav aria-label="Monitoring view and export actions">
       <a href="?view=compact{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}"{% if monitoring_view == 'compact' %} aria-current="page"{% endif %}>Compact</a>
       <a href="?view=extended{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}"{% if monitoring_view == 'extended' %} aria-current="page"{% endif %}>Extended</a>
@@ -24,6 +37,14 @@
   </div>
 </section>
 
+<section class="monitoring-summary" aria-label="Monitoring summary">
+  <div><span>Total processes</span><strong>{{ monitoring_summary.total }}</strong></div>
+  <div><span>Warnings</span><strong>{{ monitoring_summary.warnings }}</strong></div>
+  <div><span>Errors</span><strong>{{ monitoring_summary.errors }}</strong></div>
+  <div><span>Queue items</span><strong>{{ queue_total }}</strong></div>
+  <div><span>Execution records</span><strong>{{ execution_total }}</strong></div>
+  <div><span>History source</span><strong>{% if monitoring_records.available and observability_available %}Available{% else %}Degraded{% endif %}</strong></div>
+</section>
 {% if monitoring_records.available == False %}
   <section class="monitoring-history-state" role="status">
     <span class="status status-red" aria-hidden="true"></span>

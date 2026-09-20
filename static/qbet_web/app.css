@@ -87,7 +87,7 @@ body[data-theme="dark"] .button-link, body[data-theme="dark"] button.primary { b
 .home-pulse { padding: 22px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 12px; }
 .pulse-value { display: flex; align-items: center; gap: 4px; margin: 8px 0 10px; font-size: 24px; }
 .home-summary, .home-engines { margin-top: 38px; }
-.home-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.home-summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .home-summary-grid .summary-item { min-height: 104px; }
 .section-heading { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
 .section-heading-spacious { margin-bottom: 16px; }
@@ -113,7 +113,7 @@ body[data-theme="dark"] .button-link, body[data-theme="dark"] button.primary { b
 body[data-theme="dark"] .simulation-plane { background: #2c3038; border-color: #9a6c24; }
 .plane-heading, .admin-zone-heading { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 20px; }
 .plane-description { max-width: 620px; margin: 7px 0 0; }
-.dashboard-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dashboard-summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .summary-item { min-height: 82px; padding: 17px; display: flex; flex-direction: column; gap: 5px; }
 .summary-item span, dt, .muted { color: var(--muted); }
 .summary-item strong { font-size: 24px; line-height: 1.1; }
@@ -257,3 +257,12 @@ body[data-theme="dark"] .empty-state, body[data-theme="dark"] .message { backgro
   .hero-actions { align-items: stretch; flex-direction: column; }
   .hero-actions .button-link, .hero-actions .secondary-link { text-align: center; }
 }
+
+.monitoring-presets { display: flex; gap: 8px; align-items: center; }
+.monitoring-presets a { border: 1px solid var(--border); border-radius: 5px; padding: 5px 9px; }
+.monitoring-presets a[aria-current="page"] { background: var(--surface-muted); }
+.monitoring-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin: 0 0 20px; }
+.monitoring-summary > div { border: 1px solid var(--border); border-radius: 6px; padding: 12px; background: var(--surface); }
+.monitoring-summary span { display: block; color: var(--text-muted); font-size: .82rem; }
+.monitoring-summary strong { display: block; margin-top: 5px; font-size: 1.2rem; }
+@media (max-width: 700px) { .monitoring-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
