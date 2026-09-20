@@ -36,7 +36,7 @@ from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepositor
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.models import WorkflowMode
-from qbet.workflow.queue import WorkState
+from qbet.workflow.queue import WorkHistoryEvent, WorkState
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
 from tests.support.workflow import sandbox_mode_handlers
 from tests.unit.execution.test_service import proposal
@@ -253,7 +253,14 @@ class PostEventSettlementTests(TransactionTestCase):
         self.assertEqual(restored_ledger, ledger)
 
     def test_non_trackable_execution_is_rejected_before_provider_call(self) -> None:
-        base = ExecutionRecord(proposal=proposal())
+        unbound = proposal()
+        bound = unbound.model_copy(
+            update={
+                "result_source": SOURCE,
+                "result_provider_target": TARGET,
+            }
+        )
+        base = ExecutionRecord(proposal=bound)
         repository = ExecutionStateRepository()
         ledger = PortfolioLedger(
             balance=PortfolioBalance(
@@ -362,6 +369,24 @@ class PostEventSettlementTests(TransactionTestCase):
             "post_event_result_pending",
         )
 
+        # Simulate a worker crash after the authoritative ACK/pending write but before
+        # the queue checkpoint is durably changed from PROCESSING to RECHECK.
+        queue_repository = ModeWorkQueueRepository()
+        processing_after_crash = waiting_for_result.model_copy(
+            update={
+                "state": WorkState.PROCESSING,
+                "history": (
+                    *waiting_for_result.history[:-1],
+                    WorkHistoryEvent(
+                        state=WorkState.PROCESSING,
+                        recorded_at=NOW + timedelta(seconds=11),
+                        reason="dispatch_checkpoint_interrupted",
+                    ),
+                ),
+            }
+        )
+        queue_repository.save(processing_after_crash)
+
         repository = ExecutionStateRepository()
         persisted = repository.load(scheduled.work.id)
         self.assertIsNotNone(persisted)
@@ -399,6 +424,10 @@ class PostEventSettlementTests(TransactionTestCase):
         self.assertTrue(final.settled)
         self.assertEqual(final.record.state, Lifecycle.SETTLED)
         self.assertEqual(len(final_collector.requests), 1)
+        finalized_queue = queue_repository.load(scheduled.work.id)
+        self.assertIsNotNone(finalized_queue)
+        assert finalized_queue is not None
+        self.assertEqual(finalized_queue.state, WorkState.COMPLETED)
         self.assertEqual(
             final.ledger.positions[str(scheduled.work.id)].state,
             "settled",
