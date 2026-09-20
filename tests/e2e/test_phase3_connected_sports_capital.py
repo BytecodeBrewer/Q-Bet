@@ -367,21 +367,24 @@ class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
             max_amount=Decimal("1"),
             max_balance_age=timedelta(minutes=5),
         )
-        funding_kwargs = {
-            "amount": Decimal("0.01"),
-            "balance": balance,
-            "approver": FundingApprover(identity=OWNER, is_authenticated=True),
-            "requested_at": NOW + timedelta(minutes=1),
-            "approved_at": NOW + timedelta(minutes=2),
-            "expires_at": NOW + timedelta(minutes=20),
-        }
+        funding_approver = FundingApprover(identity=OWNER, is_authenticated=True)
         first_funding = funding.execute_for_completed_work(
             first_by_mode[WorkflowMode.SIMULATION],
-            **funding_kwargs,
+            amount=Decimal("0.01"),
+            balance=balance,
+            approver=funding_approver,
+            requested_at=NOW + timedelta(minutes=1),
+            approved_at=NOW + timedelta(minutes=2),
+            expires_at=NOW + timedelta(minutes=20),
         )
         repeated_funding = funding.execute_for_completed_work(
             first_by_mode[WorkflowMode.SIMULATION],
-            **funding_kwargs,
+            amount=Decimal("0.01"),
+            balance=balance,
+            approver=funding_approver,
+            requested_at=NOW + timedelta(minutes=1),
+            approved_at=NOW + timedelta(minutes=2),
+            expires_at=NOW + timedelta(minutes=20),
         )
         simulation_after_funding = PortfolioLedgerRepository().load(
             mode="simulation",
