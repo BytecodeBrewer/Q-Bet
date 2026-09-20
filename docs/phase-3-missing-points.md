@@ -33,13 +33,13 @@ The central success criterion is not the number of available components. The com
 
 | Area | Current state | Main Phase 3 gap |
 | --- | --- | --- |
-| Internal workflow | Calculation, risk, liquidity, Simulation/Execution boundaries, persistence, approvals, settlement, reporting and monitoring exist | compose them with the real external paths instead of deterministic local-only inputs |
+| Internal workflow | The first connected SportsCapital Phase 3 E2E gate composes real adapter boundaries, calculation/risk/liquidity, isolated modes, sandbox capital feedback, post-event settlement, persistence, Monitoring and Reporting | audit/refactor the broader test suite against this now-real connected path |
 | Market data | The Odds API feeds GUI-started SportsCapital Simulation through normalized snapshots and the Sports Match Builder | broaden connected data composition only when another engine/provider requires it |
-| RequestHandler | targeted Execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | real result retrieval remains tied to the later settlement-source integration |
+| RequestHandler | targeted pre-execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | no remaining core Phase 3 gap; post-event result collection is a separate settlement boundary |
 | Smart Polling | persisted provider/target/engine strategies, quota/cost metadata and staff configuration are implemented | multi-provider source selection can be added when another source is introduced |
-| Bank/account | bunq read-only and official sandbox modes are implemented, including guarded sandbox payments | close the Simulation/Liquidity capital loop through the sandbox and back into Portfolio Ledger |
+| Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback composed from completed Simulation work into Portfolio Ledger | no remaining core Phase 3 gap; broaden only when another bank/account flow requires it |
 | Notifications | approval-gated notification domain and Django email transport exist | user preferences, internal inbox/SMS later, and composition with broader approval flows |
-| Results/settlement data | provider-neutral result concepts exist | select/connect the first real result adapter and follow only actually executed work |
+| Results/settlement data | The Odds API scores are connected through the provider-neutral result boundary and the connected E2E path to post-event SettlementService composition | no remaining core Phase 3 gap; add another result source only when coverage requires it |
 | Monitoring/Reporting | persisted technical Monitoring and customer Reporting exist | richer time-window dashboards plus external/infrastructure observability |
 | Performance | repeatable Phase 3 connected baseline exists | later provider/network hot-path baselines where useful |
 | GUI controls | routing/runtime controls and basic profile/admin surfaces exist | later consolidated Settings/Admin Control Center and product-quality UX |
@@ -90,29 +90,16 @@ The first external-data composition slices are implemented:
 - #147 persists provider/target/engine Smart Polling strategies with quota/cost metadata and staff configuration.
 - #150 connects GUI-started SportsCapital Simulation to normalized The Odds API data through deterministic two-outcome selection and the existing Sports Match Builder.
 
-These capabilities are no longer Phase 3 missing points. The remaining Priority 1 work starts at the external capital/result loop.
+These capabilities are no longer Phase 3 missing points. The external capital/result foundations are recorded separately below.
 
-### 1. Close the Liquidity/Capital Simulation Loop
+### Completed External Capital and Result Boundaries
 
-**Problem:** internal Simulation capital state and the bunq sandbox adapter exist, but the intended closed capital loop is not yet the default connected Simulation path.
+The two remaining external-loop foundations are now implemented:
 
-**Expected behavior:** the Simulation sends the same or structurally equivalent financial requests used by the real execution path, but against sandbox/test systems. Simulated capital movement must be reflected back into Portfolio Ledger state.
+- #151 closes bunq fake-money sandbox funding feedback into the durable Simulation Portfolio Ledger with restart-safe idempotency and Simulation/Execution isolation.
+- #154 connects exact-event The Odds API score/finality reads to the provider-neutral post-event result boundary and existing SettlementService without treating sports scores as financial execution outcomes.
 
-**Definition of Done:**
-
-- starting capital is represented in the connected Simulation financial path;
-- LiquidityChecker decisions precede external sandbox movement;
-- an approved/allowed Simulation action reaches the external sandbox where supported;
-- provider success/failure is persisted and correlated;
-- Portfolio Ledger receives the resulting state transition exactly once;
-- replay/retry remains idempotent;
-- no real-money write is possible from Simulation configuration.
-
-### 2. Result/Settlement Source
-
-Select/connect the first real result source from the existing candidate set when the complete flow needs final result state.
-
-Only actions that were actually executed/simulated into a trackable external state need result polling. Rejected or ignored opportunities should be closed without unnecessary result requests.
+With the earlier #146, #147 and #150 composition work, the major external boundaries needed for the first realistic connected flow now exist independently. The next Priority 1 objective is to prove them together through a genuine connected E2E gate rather than adding another isolated adapter.
 
 ## Priority 2 — Realistic Sandbox Integration
 
@@ -123,6 +110,10 @@ The first major connected Simulation should therefore exercise as much of the fu
 Sandbox and personal/production account modes must remain explicit configuration boundaries. Credentials stay in environment/deployment secrets and never in source, logs, issues, reports, fixtures, or documentation.
 
 ## Priority 3 — Genuine End-to-End Testing and Test-Suite Consolidation
+
+### Connected E2E Gate
+
+#155 adds the first genuine connected SportsCapital Phase 3 gate. Normal CI composes the production application/domain/repository boundaries while replacing only external network and sandbox transport edges with deterministic fakes. The gate proves mode isolation, exactly-once bunq Simulation funding feedback, post-event result settlement, durable PostgreSQL restoration, and Monitoring/Reporting visibility. External bunq sandbox writes remain separately opt-in.
 
 ### End-to-End Definition
 
@@ -241,14 +232,11 @@ Phase 4 is expected to follow the same pattern: establish a stable transition ar
 
 ## Recommended Ticket Sequence
 
-1. Close the Simulation liquidity/capital loop through the bunq sandbox and feed the correlated provider outcome back into Portfolio Ledger exactly once.
-2. Connect the first real result/settlement provider when the closed lifecycle requires final result state.
-3. Add genuine data-pipeline and capital-loop E2E tests for the connected external flow.
-4. Audit/refactor the broader test suite against the now-real architecture.
-5. Add Prometheus-compatible metrics and dashboard integration.
-6. Expand Admin Control Center, Settings, Approval Inbox, Reporting/Monitoring dashboards and visual UX.
+1. Audit/refactor the broader test suite against the now-real architecture, replacing obsolete or redundant component-only protection where genuine E2E coverage owns the responsibility.
+2. Add Prometheus-compatible metrics and dashboard integration around the stable connected flow.
+3. Expand Admin Control Center, Settings, Approval Inbox, Reporting/Monitoring dashboards and visual UX.
 
-The exact order between the first three items may shift if settlement data is required to prove the selected capital-loop scenario, but the closed-loop definition must not be weakened merely to make a test easier to label E2E.
+The connected E2E definition remains the regression gate for future Phase 3 work: a complete relevant business loop with external boundaries represented by permitted read-only/sandbox interfaces and authoritative state returning to Q-Bet.
 
 ## Documentation Hygiene
 

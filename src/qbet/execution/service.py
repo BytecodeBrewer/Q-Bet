@@ -78,6 +78,18 @@ class ExecutionService:
             raise ValueError(decision.reason or "ledger_transition_rejected")
         return updated
 
+    @staticmethod
+    def _awaits_post_event_result(
+        record: ExecutionRecord,
+        collected_result: ResultCollectionOutcome | None,
+    ) -> bool:
+        proposal = record.proposal
+        return (
+            collected_result is None
+            and proposal.result_source is not None
+            and proposal.result_provider_target is not None
+        )
+
     def record_decision(
         self,
         record: ExecutionRecord,
@@ -235,6 +247,8 @@ class ExecutionService:
         if record.state is Lifecycle.ACKNOWLEDGED:
             if record.result is None:
                 raise ValueError("acknowledged_execution_missing_result")
+            if self._awaits_post_event_result(record, collected_result):
+                return self._persist(record, ledger)
             settled_record, settled_ledger = SettlementService().settle(
                 record,
                 ledger,
@@ -362,6 +376,8 @@ class ExecutionService:
         if record.state is Lifecycle.ACKNOWLEDGED:
             if record.result is None:
                 raise ValueError("acknowledged_execution_missing_result")
+            if self._awaits_post_event_result(record, collected_result):
+                return self._persist(record, ledger)
             settled_record, settled_ledger = SettlementService().settle(
                 record,
                 ledger,

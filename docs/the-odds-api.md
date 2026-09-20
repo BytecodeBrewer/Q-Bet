@@ -47,3 +47,23 @@ Set `QBET_SIMULATION_SPORTS_SOURCE=the_odds_api` to enable the connected source.
 - `QBET_SIMULATION_STAKE_PRECISION` — virtual stake precision used for both selected outcomes.
 
 The API credential remains `QBET_THE_ODDS_API_KEY` and must stay in the environment/deployment secret boundary. Connected Simulation never logs the key, a credential-bearing URL, or raw provider payload. Provider failures are mapped to stable Simulation reason codes and normal tests inject offline collectors/transports.
+
+
+## Post-Event Scores And Settlement
+
+The Odds API v4 scores endpoint is the first connected post-event result source. Result collection remains separate from pre-execution RequestHandler revalidation:
+
+    trackable ACKNOWLEDGED Execution
+      -> ResultCollectionRequest + ResultProviderTarget
+      -> TheOddsApiScoreCollector
+      -> ResultCollectionOutcome
+      -> SettlementService
+      -> authoritative ExecutionRecord / Portfolio Ledger
+
+The collector performs one read-only request for an explicit sport and provider event id using the provider's `eventIds` filter. `daysFrom` is bounded to the provider-supported 1-3 day range and ISO timestamps are required.
+
+A completed provider event contributes typed score/finality evidence only. It does not infer whether the Q-Bet execution was financially successful. Existing execution/sandbox payout state remains the financial settlement input; the score result proves post-event finality and is persisted separately on the authoritative ExecutionRecord.
+
+Live/incomplete events return partial or not-yet-available states without mutating the ledger. Missing events remain retryable/non-final rather than being fabricated as cancellations. Identity mismatches and malformed payloads fail closed.
+
+The same `QBET_THE_ODDS_API_KEY` environment/deployment secret boundary is used for scores. Normal tests inject HTTP and remain offline; credentials, credential-bearing URLs and raw provider payloads must never be stored or surfaced.

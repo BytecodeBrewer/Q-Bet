@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import re
 from uuid import UUID
 
@@ -20,6 +21,7 @@ from qbet.storage.models import PortfolioLedgerRow, SandboxFundingOutcomeRow
 
 
 _REDACTED_BUNQ_REFERENCE = re.compile(r"^bunq-payment-[0-9a-f]{12}$")
+_PROVIDER_CLAIM_REASON = "sandbox_funding_provider_claimed"
 
 
 class SandboxFundingFeedbackPersistenceError(RuntimeError):
@@ -63,6 +65,12 @@ class SandboxFundingFeedbackRecord(DomainModel):
         return self
 
 
+@dataclass(frozen=True)
+class _SandboxFundingProviderClaim:
+    record: SandboxFundingFeedbackRecord
+    acquired: bool
+
+
 class BunqSandboxSimulationFundingService:
     """Production boundary for sandbox execution plus durable Simulation feedback."""
 
@@ -81,7 +89,15 @@ class BunqSandboxSimulationFundingService:
         self._feedback_repository = feedback_repository or SandboxFundingFeedbackRepository()
 
     def execute(self, proposal: BankFundingProposal) -> SandboxFundingFeedbackRecord:
-        """Execute the fake-money sandbox action and persist its capital feedback."""
+        """Execute at most one provider write for a durable funding proposal."""
+
+        claim = self._feedback_repository.claim(proposal)
+        if not claim.acquired:
+            if _is_provider_claim(claim.record):
+                raise SandboxFundingFeedbackPersistenceError(
+                    "sandbox_funding_provider_outcome_unknown"
+                )
+            return claim.record.model_copy(update={"duplicate": True})
 
         provider_result = self._adapter.execute(proposal)
         return self._feedback_repository.apply(proposal, provider_result)
@@ -91,6 +107,60 @@ class SandboxFundingFeedbackRepository:
     """Atomically persist one bunq sandbox result and its Simulation ledger credit."""
 
     _provider_id = "bunq"
+
+    def claim(self, proposal: BankFundingProposal) -> _SandboxFundingProviderClaim:
+        """Durably reserve one proposal before the provider side effect."""
+
+        claim_result = BunqSandboxPaymentResult(
+            proposal_id=proposal.id,
+            correlation_id=proposal.correlation_id,
+            test_reference=f"qbet-sandbox-{proposal.id}",
+            sent=False,
+            reason_code=_PROVIDER_CLAIM_REASON,
+        )
+        try:
+            incoming = SandboxFundingFeedbackRecord(
+                proposal=proposal,
+                provider_result=claim_result,
+            )
+        except ValidationError as error:
+            raise SandboxFundingFeedbackConflict(
+                "sandbox_funding_feedback_invalid"
+            ) from error
+
+        try:
+            with transaction.atomic():
+                row, created = SandboxFundingOutcomeRow.objects.select_for_update().get_or_create(
+                    proposal_id=proposal.id,
+                    defaults={
+                        "correlation_id": proposal.correlation_id,
+                        "provider_id": self._provider_id,
+                        "sent": False,
+                        "provider_reference": None,
+                        "reason_code": _PROVIDER_CLAIM_REASON,
+                        "ledger_applied": False,
+                        "payload": incoming.model_dump(mode="json"),
+                    },
+                )
+                if created:
+                    return _SandboxFundingProviderClaim(
+                        record=incoming,
+                        acquired=True,
+                    )
+
+                stored = self._record_from_row(row)
+                if stored.proposal != proposal:
+                    raise SandboxFundingFeedbackConflict(
+                        "sandbox_funding_feedback_conflict"
+                    )
+                return _SandboxFundingProviderClaim(
+                    record=stored,
+                    acquired=False,
+                )
+        except (DatabaseError, ValidationError) as error:
+            raise SandboxFundingFeedbackPersistenceError(
+                "sandbox_funding_feedback_unavailable"
+            ) from error
 
     def apply(
         self,
@@ -124,15 +194,32 @@ class SandboxFundingFeedbackRepository:
                     stored = incoming
                 else:
                     stored = self._record_from_row(row)
-                    if (
-                        stored.proposal != proposal
-                        or stored.provider_result != canonical_result
-                    ):
+                    if stored.proposal != proposal:
                         raise SandboxFundingFeedbackConflict(
                             "sandbox_funding_feedback_conflict"
                         )
-                    if stored.ledger_applied or not canonical_result.sent:
-                        return stored.model_copy(update={"duplicate": True})
+                    if _is_provider_claim(stored):
+                        row.sent = canonical_result.sent
+                        row.provider_reference = canonical_result.provider_reference
+                        row.reason_code = canonical_result.reason_code
+                        row.payload = incoming.model_dump(mode="json")
+                        row.save(
+                            update_fields=(
+                                "sent",
+                                "provider_reference",
+                                "reason_code",
+                                "payload",
+                                "updated_at",
+                            )
+                        )
+                        stored = incoming
+                    else:
+                        if stored.provider_result != canonical_result:
+                            raise SandboxFundingFeedbackConflict(
+                                "sandbox_funding_feedback_conflict"
+                            )
+                        if stored.ledger_applied or not canonical_result.sent:
+                            return stored.model_copy(update={"duplicate": True})
 
                 if not canonical_result.sent:
                     return stored
@@ -199,6 +286,15 @@ class SandboxFundingFeedbackRepository:
                 "sandbox_funding_feedback_metadata_mismatch"
             )
         return record
+
+
+def _is_provider_claim(record: SandboxFundingFeedbackRecord) -> bool:
+    result = record.provider_result
+    return (
+        not result.sent
+        and result.reason_code == _PROVIDER_CLAIM_REASON
+        and not record.ledger_applied
+    )
 
 
 def _ledger_command_id(proposal_id: UUID) -> str:

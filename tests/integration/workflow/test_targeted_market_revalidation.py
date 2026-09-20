@@ -254,6 +254,12 @@ class TargetedMarketRevalidationPersistenceTests(TransactionTestCase):
         self.assertIsNotNone(persisted)
         assert persisted is not None
         self.assertEqual(persisted.market_revalidation, expected_context)
+        proposal = coordinator._execution_proposal(persisted)
+        self.assertEqual(proposal.result_source, expected_context.source)
+        self.assertIsNotNone(proposal.result_provider_target)
+        assert proposal.result_provider_target is not None
+        self.assertEqual(proposal.result_provider_target.sport, expected_context.sport)
+        self.assertEqual(proposal.result_provider_target.event_id, expected_context.event_id)
 
         dispatched = coordinator.dispatch_due(now=NOW, owner="owner")
 
