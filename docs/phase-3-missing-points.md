@@ -33,13 +33,13 @@ The central success criterion is not the number of available components. The com
 
 | Area | Current state | Main Phase 3 gap |
 | --- | --- | --- |
-| Internal workflow | Calculation, risk, liquidity, Simulation/Execution boundaries, persistence, approvals, settlement, reporting and monitoring exist | compose them with the real external paths instead of deterministic local-only inputs |
+| Internal workflow | The first connected SportsCapital Phase 3 E2E gate composes real adapter boundaries, calculation/risk/liquidity, isolated modes, sandbox capital feedback, post-event settlement, persistence, Monitoring and Reporting | audit/refactor the broader test suite against this now-real connected path |
 | Market data | The Odds API feeds GUI-started SportsCapital Simulation through normalized snapshots and the Sports Match Builder | broaden connected data composition only when another engine/provider requires it |
 | RequestHandler | targeted pre-execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | no remaining core Phase 3 gap; post-event result collection is a separate settlement boundary |
 | Smart Polling | persisted provider/target/engine strategies, quota/cost metadata and staff configuration are implemented | multi-provider source selection can be added when another source is introduced |
-| Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback into Portfolio Ledger | compose the accepted bank boundary into the genuine connected E2E gate |
+| Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback composed from completed Simulation work into Portfolio Ledger | no remaining core Phase 3 gap; broaden only when another bank/account flow requires it |
 | Notifications | approval-gated notification domain and Django email transport exist | user preferences, internal inbox/SMS later, and composition with broader approval flows |
-| Results/settlement data | The Odds API scores are connected through the provider-neutral result boundary to post-event SettlementService composition | compose the accepted result boundary into the genuine connected E2E gate |
+| Results/settlement data | The Odds API scores are connected through the provider-neutral result boundary and the connected E2E path to post-event SettlementService composition | no remaining core Phase 3 gap; add another result source only when coverage requires it |
 | Monitoring/Reporting | persisted technical Monitoring and customer Reporting exist | richer time-window dashboards plus external/infrastructure observability |
 | Performance | repeatable Phase 3 connected baseline exists | later provider/network hot-path baselines where useful |
 | GUI controls | routing/runtime controls and basic profile/admin surfaces exist | later consolidated Settings/Admin Control Center and product-quality UX |
@@ -110,6 +110,10 @@ The first major connected Simulation should therefore exercise as much of the fu
 Sandbox and personal/production account modes must remain explicit configuration boundaries. Credentials stay in environment/deployment secrets and never in source, logs, issues, reports, fixtures, or documentation.
 
 ## Priority 3 — Genuine End-to-End Testing and Test-Suite Consolidation
+
+### Connected E2E Gate
+
+#155 adds the first genuine connected SportsCapital Phase 3 gate. Normal CI composes the production application/domain/repository boundaries while replacing only external network and sandbox transport edges with deterministic fakes. The gate proves mode isolation, exactly-once bunq Simulation funding feedback, post-event result settlement, durable PostgreSQL restoration, and Monitoring/Reporting visibility. External bunq sandbox writes remain separately opt-in.
 
 ### End-to-End Definition
 
@@ -228,12 +232,11 @@ Phase 4 is expected to follow the same pattern: establish a stable transition ar
 
 ## Recommended Ticket Sequence
 
-1. Add a genuine connected E2E gate that composes the accepted real market-data path, risk/liquidity boundaries, sandbox capital feedback, post-event result collection, SettlementService and final Portfolio Ledger state.
-2. Audit/refactor the broader test suite against the now-real architecture, replacing obsolete or redundant component-only protection where genuine E2E coverage owns the responsibility.
-3. Add Prometheus-compatible metrics and dashboard integration around the stable connected flow.
-4. Expand Admin Control Center, Settings, Approval Inbox, Reporting/Monitoring dashboards and visual UX.
+1. Audit/refactor the broader test suite against the now-real architecture, replacing obsolete or redundant component-only protection where genuine E2E coverage owns the responsibility.
+2. Add Prometheus-compatible metrics and dashboard integration around the stable connected flow.
+3. Expand Admin Control Center, Settings, Approval Inbox, Reporting/Monitoring dashboards and visual UX.
 
-Do not weaken the connected E2E definition merely to make the next test easier. The first gate should demonstrate a complete relevant business loop with external boundaries represented by their permitted read-only/sandbox interfaces and authoritative state returning to Q-Bet.
+The connected E2E definition remains the regression gate for future Phase 3 work: a complete relevant business loop with external boundaries represented by permitted read-only/sandbox interfaces and authoritative state returning to Q-Bet.
 
 ## Documentation Hygiene
 

@@ -13,9 +13,12 @@ from qbet.data.results import (
 )
 from qbet.execution.models import ExecutionRecord, Lifecycle
 from qbet.ledger import PortfolioLedger
+from qbet.monitoring import MonitoringLevel, MonitoringRecord
 from qbet.settlement import SettlementService
-from qbet.storage.ledger import ExecutionStateRepository
+from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepository
+from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 from qbet.workflow.models import WorkflowMode
+from qbet.workflow.queue import WorkState
 
 
 @dataclass(frozen=True)
@@ -35,10 +38,14 @@ class PostEventSettlementService:
         *,
         state_repository: ExecutionStateRepository | None = None,
         settlement_service: SettlementService | None = None,
+        queue_repository: ModeWorkQueueRepository | None = None,
+        monitoring_writer: PostgresMonitoringRepository | None = None,
     ) -> None:
         self._collector = collector
         self._state_repository = state_repository or ExecutionStateRepository()
         self._settlement_service = settlement_service or SettlementService()
+        self._queue_repository = queue_repository or ModeWorkQueueRepository()
+        self._monitoring_writer = monitoring_writer or PostgresMonitoringRepository()
 
     def collect_and_settle(self, request: ResultCollectionRequest) -> PostEventSettlementResult:
         record_id = _execution_id(request.execution_id)
@@ -60,6 +67,7 @@ class PostEventSettlementService:
                 status=ResultCollectionStatus.AVAILABLE,
                 result=stored,
             )
+            self._finalize_tracking(record, outcome)
             return PostEventSettlementResult(
                 collection=outcome,
                 record=record,
@@ -93,6 +101,7 @@ class PostEventSettlementService:
             settled_record,
             settled_ledger,
         )
+        self._finalize_tracking(persisted_record, collection)
         return PostEventSettlementResult(
             collection=collection,
             record=persisted_record,
@@ -100,6 +109,62 @@ class PostEventSettlementService:
             settled=persisted_record.state
             in {Lifecycle.SETTLED, Lifecycle.FAILED, Lifecycle.CANCELLED},
         )
+
+    def _finalize_tracking(
+        self,
+        record: ExecutionRecord,
+        collection: ResultCollectionOutcome,
+    ) -> None:
+        final_state = {
+            Lifecycle.SETTLED: WorkState.COMPLETED,
+            Lifecycle.FAILED: WorkState.FAILED,
+            Lifecycle.CANCELLED: WorkState.CANCELLED,
+        }.get(record.state)
+        if final_state is None:
+            return
+
+        work = record.proposal.work
+        queued = self._queue_repository.load(work.id)
+        if queued is None or queued.state is final_state:
+            return
+        if queued.state not in {WorkState.RECHECK, WorkState.PROCESSING}:
+            return
+
+        result = collection.result or record.collected_result
+        occurred_at = result.observed_at if result is not None else collection.request.fresh_after
+        finalized = self._queue_repository.save(
+            queued.transition(
+                final_state,
+                now=occurred_at,
+                reason=f"post_event_{record.state.value}",
+            )
+        )
+        try:
+            self._monitoring_writer.append(
+                MonitoringRecord(
+                    correlation_id=work.correlation_id,
+                    occurred_at=occurred_at,
+                    engine=work.engine,
+                    mode=work.mode.value,
+                    stage="settlement",
+                    event_type="post_event_result",
+                    status=record.state.value,
+                    reason_code=f"post_event_{record.state.value}",
+                    level=(
+                        MonitoringLevel.INFO
+                        if record.state is Lifecycle.SETTLED
+                        else MonitoringLevel.WARNING
+                    ),
+                    references={
+                        "work_id": str(work.id),
+                        "opportunity_id": work.opportunity_id,
+                        "queue_state": finalized.state.value,
+                    },
+                )
+            )
+        except MonitoringPersistenceError:
+            # Monitoring is observational and must never roll back authoritative state.
+            pass
 
     @staticmethod
     def _validate_identity(record: ExecutionRecord, request: ResultCollectionRequest) -> None:

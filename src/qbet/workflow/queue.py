@@ -87,7 +87,13 @@ class QueuedWorkItem(DomainModel):
                 WorkState.FAILED,
                 WorkState.EXPIRED,
             },
-            WorkState.RECHECK: {WorkState.PENDING, WorkState.CANCELLED, WorkState.EXPIRED},
+            WorkState.RECHECK: {
+                WorkState.PENDING,
+                WorkState.COMPLETED,
+                WorkState.CANCELLED,
+                WorkState.FAILED,
+                WorkState.EXPIRED,
+            },
         }
         if state not in permitted.get(self.state, set()):
             raise ValueError(f"invalid work transition: {self.state} -> {state}")
