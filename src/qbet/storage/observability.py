@@ -24,11 +24,27 @@ class PostgresObservabilityRepository:
     """Read-only aggregate projection over existing durable control-plane state."""
 
     def snapshot(self, *, start: datetime, end: datetime) -> ObservabilitySnapshot:
+        """Project a bounded Monitoring window plus current queue/execution state."""
+
+        return self._snapshot(start=start, end=end)
+
+    def cumulative_snapshot(self, *, end: datetime) -> ObservabilitySnapshot:
+        """Project append-only Monitoring history for monotone Prometheus series."""
+
+        return self._snapshot(start=None, end=end)
+
+    def _snapshot(
+        self,
+        *,
+        start: datetime | None,
+        end: datetime,
+    ) -> ObservabilitySnapshot:
         try:
+            monitoring_query = MonitoringRecordRow.objects.filter(occurred_at__lte=end)
+            if start is not None:
+                monitoring_query = monitoring_query.filter(occurred_at__gte=start)
             monitoring_rows = tuple(
-                MonitoringRecordRow.objects.filter(
-                    occurred_at__gte=start, occurred_at__lte=end
-                ).values_list(
+                monitoring_query.values_list(
                     "payload__engine",
                     "payload__mode",
                     "payload__level",

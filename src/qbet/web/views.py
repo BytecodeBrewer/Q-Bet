@@ -651,7 +651,7 @@ def metrics(request: HttpRequest) -> HttpResponse:
         return HttpResponse("Not found.", status=404, content_type="text/plain; charset=utf-8")
     end = datetime.now(UTC)
     try:
-        snapshot = OBSERVABILITY_REPOSITORY.snapshot(start=end - timedelta(days=1), end=end)
+        snapshot = OBSERVABILITY_REPOSITORY.cumulative_snapshot(end=end)
     except ObservabilityPersistenceError:
         snapshot = ObservabilitySnapshot.unavailable()
     return HttpResponse(

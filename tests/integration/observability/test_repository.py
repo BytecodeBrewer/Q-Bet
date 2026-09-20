@@ -81,6 +81,64 @@ class ObservabilityRepositoryTests(TestCase):
             int((NOW + timedelta(minutes=2)).timestamp()),
         )
 
+    def test_cumulative_projection_does_not_decay_when_rows_age_out_of_ui_window(self) -> None:
+        MonitoringRecordRow.objects.create(
+            correlation_id=CORRELATION_ID,
+            occurred_at=NOW - timedelta(days=2),
+            payload={
+                "engine": "bonus",
+                "mode": "simulation",
+                "level": "info",
+                "duration_ms": 10,
+                "status": "allow",
+            },
+        )
+        MonitoringRecordRow.objects.create(
+            correlation_id=CORRELATION_ID,
+            occurred_at=NOW,
+            payload={
+                "engine": "sports_capital",
+                "mode": "execution",
+                "level": "error",
+                "duration_ms": 30,
+                "status": "failed",
+            },
+        )
+
+        first_scrape = PostgresObservabilityRepository().cumulative_snapshot(end=NOW)
+        later_scrape = PostgresObservabilityRepository().cumulative_snapshot(
+            end=NOW + timedelta(days=2)
+        )
+        later_ui_window = PostgresObservabilityRepository().snapshot(
+            start=NOW + timedelta(days=1),
+            end=NOW + timedelta(days=2),
+        )
+
+        self.assertEqual(first_scrape.monitoring_events, later_scrape.monitoring_events)
+        self.assertEqual(first_scrape.monitoring_durations, later_scrape.monitoring_durations)
+        self.assertEqual(first_scrape.monitoring_failures, later_scrape.monitoring_failures)
+        self.assertEqual(
+            later_scrape.monitoring_events,
+            {
+                ("bonus", "simulation", "info"): 1,
+                ("sports_capital", "execution", "error"): 1,
+            },
+        )
+        self.assertEqual(
+            later_scrape.monitoring_durations,
+            {
+                ("bonus", "simulation"): (1, 10),
+                ("sports_capital", "execution"): (1, 30),
+            },
+        )
+        self.assertEqual(
+            later_scrape.monitoring_failures,
+            {("sports_capital", "execution", "failure"): 1},
+        )
+        self.assertEqual(later_ui_window.monitoring_events, {})
+        self.assertEqual(later_ui_window.monitoring_durations, {})
+        self.assertEqual(later_ui_window.monitoring_failures, {})
+
     def test_empty_monitoring_window_remains_available_without_fabricated_activity(self) -> None:
         snapshot = PostgresObservabilityRepository().snapshot(
             start=NOW,

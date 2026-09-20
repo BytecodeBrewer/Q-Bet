@@ -11,8 +11,8 @@ from qbet.web.views import _monitoring_query
 
 
 class _AvailableRepository:
-    def snapshot(self, *, start, end) -> ObservabilitySnapshot:
-        del start, end
+    def cumulative_snapshot(self, *, end) -> ObservabilitySnapshot:
+        del end
         return ObservabilitySnapshot(
             available=True,
             monitoring_events={("bonus", "simulation", "info"): 1},
@@ -21,10 +21,14 @@ class _AvailableRepository:
             execution_records={},
         )
 
-
-class _UnavailableRepository:
     def snapshot(self, *, start, end) -> ObservabilitySnapshot:
         del start, end
+        raise AssertionError("metrics endpoint must use cumulative observability")
+
+
+class _UnavailableRepository:
+    def cumulative_snapshot(self, *, end) -> ObservabilitySnapshot:
+        del end
         raise ObservabilityPersistenceError("database unavailable")
 
 
