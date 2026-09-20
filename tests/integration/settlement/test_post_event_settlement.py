@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from uuid import UUID
 
 from django.test import TransactionTestCase
 
+from qbet.calculations import ArbitrageOffer, TwoWayArbitrageInput
 from qbet.data import (
     DataSourceMetadata,
+    DataTarget,
     NormalizedMatchResult,
     ResultAvailability,
     ResultCollectionOutcome,
@@ -17,6 +20,8 @@ from qbet.data import (
     SourceTransport,
 )
 from qbet.domain.ledger import LedgerOperation, PortfolioBalance
+from qbet.domain.models import OfferSide
+from qbet.engines import SportsCapitalEngineRequest
 from qbet.execution.models import (
     ApprovedExecutionRequest,
     ExecutionRecord,
@@ -24,10 +29,16 @@ from qbet.execution.models import (
     SandboxResult,
 )
 from qbet.ledger import PortfolioLedger
+from qbet.request_handler import ExpectedMarketOffer, TargetedMarketRevalidationContext
 from qbet.settlement import ledger_command, transition
 from qbet.settlement.post_event import PostEventSettlementService
-from qbet.storage.ledger import ExecutionStateRepository
+from qbet.storage.ledger import ExecutionStateRepository, ModeWorkQueueRepository
+from qbet.workflow.approval import ExecutionApprovalService
+from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.models import WorkflowMode
+from qbet.workflow.queue import WorkState
+from qbet.workflow.routing import EngineModes, RoutingConfiguration
+from tests.support.workflow import sandbox_mode_handlers
 from tests.unit.execution.test_service import proposal
 
 NOW = datetime(2026, 9, 19, 18, 0, tzinfo=UTC)
@@ -38,6 +49,50 @@ SOURCE = DataSourceMetadata(
     transport=SourceTransport.API,
 )
 TARGET = ResultProviderTarget(sport="soccer_epl", event_id="event-123")
+FLOW_CORRELATION_ID = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+FLOW_OPPORTUNITY_ID = "post-event-flow"
+
+
+def sports_request() -> SportsCapitalEngineRequest:
+    def offer(outcome: str) -> ArbitrageOffer:
+        return ArbitrageOffer(
+            outcome=outcome,
+            odds=Decimal("2.20"),
+            available_liquidity=Decimal("100"),
+            stake_precision=Decimal("0.01"),
+            currency="EUR",
+        )
+
+    return SportsCapitalEngineRequest(
+        opportunity_id=FLOW_OPPORTUNITY_ID,
+        inputs=TwoWayArbitrageInput(
+            first_offer=offer("home"),
+            second_offer=offer("away"),
+            requested_total_stake=Decimal("20"),
+        ),
+        currency="EUR",
+        execution_offer_ids=("home", "away"),
+        generated_at=NOW,
+    )
+
+
+def market_context() -> TargetedMarketRevalidationContext:
+    return TargetedMarketRevalidationContext(
+        source=SOURCE,
+        target=DataTarget.SPORTS_CAPITAL,
+        sport=TARGET.sport,
+        event_id=TARGET.event_id,
+        market="h2h",
+        expected_offers=(
+            ExpectedMarketOffer(
+                provider="book-one",
+                selection="Home",
+                side=OfferSide.BACK,
+                odds=Decimal("2.20"),
+            ),
+        ),
+        expires_at=NOW + timedelta(minutes=15),
+    )
 
 
 class RecordingCollector:
@@ -259,6 +314,104 @@ class PostEventSettlementTests(TransactionTestCase):
             ).collect_and_settle(wrong)
 
         self.assertEqual(collector.requests, [])
+
+
+
+    def test_coordinator_dispatch_waits_for_post_event_result_then_settles_once(self) -> None:
+        coordinator = ModeDispatchCoordinator(
+            RoutingConfiguration(
+                sports_capital=EngineModes(execution=True),
+            ),
+            queue_repository=ModeWorkQueueRepository(),
+            mode_request_handlers=sandbox_mode_handlers(
+                FLOW_OPPORTUNITY_ID,
+                observed_at=NOW,
+            ),
+        )
+        (scheduled,) = coordinator.schedule(
+            sports_request(),
+            owner="owner",
+            correlation_id=FLOW_CORRELATION_ID,
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+            market_revalidation=market_context(),
+        )
+
+        (waiting_for_approval,) = coordinator.dispatch_due(now=NOW, owner="owner")
+        self.assertEqual(waiting_for_approval.state, WorkState.RECHECK)
+        self.assertEqual(
+            waiting_for_approval.history[-1].reason,
+            "execution_approval_required",
+        )
+
+        approved = ExecutionApprovalService().decide(
+            scheduled.work.id,
+            actor="owner",
+            approve=True,
+            now=NOW + timedelta(seconds=10),
+        )
+        self.assertEqual(approved.state, Lifecycle.APPROVED)
+
+        (waiting_for_result,) = coordinator.dispatch_due(
+            now=NOW + timedelta(seconds=11),
+            owner="owner",
+        )
+        self.assertEqual(waiting_for_result.state, WorkState.RECHECK)
+        self.assertEqual(
+            waiting_for_result.history[-1].reason,
+            "post_event_result_pending",
+        )
+
+        repository = ExecutionStateRepository()
+        persisted = repository.load(scheduled.work.id)
+        self.assertIsNotNone(persisted)
+        assert persisted is not None
+        acknowledged, pending_ledger = persisted
+        self.assertEqual(acknowledged.state, Lifecycle.ACKNOWLEDGED)
+        self.assertEqual(
+            acknowledged.proposal.result_provider_target,
+            TARGET,
+        )
+        self.assertEqual(acknowledged.proposal.result_source, SOURCE)
+        self.assertEqual(
+            pending_ledger.positions[str(scheduled.work.id)].state,
+            "pending",
+        )
+        self.assertEqual(len(pending_ledger.commands), 3)
+
+        request = request_for(acknowledged)
+        partial = PostEventSettlementService(
+            RecordingCollector(ResultCollectionStatus.PARTIAL),
+            state_repository=repository,
+        ).collect_and_settle(request)
+        self.assertFalse(partial.settled)
+        after_partial = repository.load(scheduled.work.id)
+        self.assertIsNotNone(after_partial)
+        assert after_partial is not None
+        self.assertEqual(after_partial[0], acknowledged)
+        self.assertEqual(after_partial[1], pending_ledger)
+
+        final_collector = RecordingCollector()
+        final = PostEventSettlementService(
+            final_collector,
+            state_repository=repository,
+        ).collect_and_settle(request)
+        self.assertTrue(final.settled)
+        self.assertEqual(final.record.state, Lifecycle.SETTLED)
+        self.assertEqual(len(final_collector.requests), 1)
+        self.assertEqual(
+            final.ledger.positions[str(scheduled.work.id)].state,
+            "settled",
+        )
+        self.assertEqual(len(final.ledger.commands), 4)
+
+        replay = PostEventSettlementService(
+            ExplodingCollector(),
+            state_repository=ExecutionStateRepository(),
+        ).collect_and_settle(request)
+        self.assertTrue(replay.settled)
+        self.assertEqual(replay.record, final.record)
+        self.assertEqual(replay.ledger, final.ledger)
 
     def test_simulation_execution_record_cannot_use_post_event_settlement_service(self) -> None:
         record, ledger = acknowledged_execution(mode=WorkflowMode.SIMULATION)

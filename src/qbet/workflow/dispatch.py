@@ -375,6 +375,14 @@ class ModeDispatchCoordinator:
             )
             if persisted_record.state is Lifecycle.SETTLED:
                 return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
+            if persisted_record.state is Lifecycle.ACKNOWLEDGED:
+                return self._save_queue(
+                    item.transition(
+                        WorkState.RECHECK,
+                        now=now,
+                        reason="post_event_result_pending",
+                    )
+                )
             if persisted_record.state in {Lifecycle.REJECTED, Lifecycle.CANCELLED}:
                 return self._save_queue(
                     item.transition(
