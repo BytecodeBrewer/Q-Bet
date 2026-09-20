@@ -66,7 +66,7 @@ The Phase 3 consolidation intentionally retires architecture-history naming:
 
 - `tests/e2e/test_phase2_operability_gate.py` is removed. Its composition assertions are owned by the connected Phase 3 E2E; routing settings remain in `tests/integration/web/test_routing_settings.py`, approval behavior in `test_execution_approval_ui.py` / workflow approval tests, revalidation in `tests/integration/workflow/test_execution_approval_boundary.py` and `test_targeted_market_revalidation.py`, while Monitoring export/access control remain in their dedicated web integration suites.
 - `tests/e2e/test_mode_settlement_isolation.py` is no longer treated as an E2E gate. Its unique queue/claim/expiry/async/result-state/isolation cases move to `tests/integration/workflow/test_mode_queue_and_isolation.py`. Duplicated single/dual-mode happy paths, immediate settlement happy paths and repeated-settlement checks are removed because current E2E/settlement tests own them.
-- `tests/integration/web/test_phase2_completion_boundaries.py` becomes `tests/integration/web/test_execution_approval_ui.py`; the surviving scenarios protect durable GUI Simulation recovery plus owner/authorization/rejection approval behavior rather than a historical phase.
+- `tests/integration/web/test_phase2_completion_boundaries.py` is split by responsibility: owner/authorization/rejection approval scenarios move to `test_execution_approval_ui.py`, while GUI Simulation ledger recovery moves to `test_durable_simulation_and_dispatch.py`.
 - `tests/integration/web/test_issue_112_review_regressions.py` becomes `tests/integration/web/test_durable_simulation_and_dispatch.py`; its surviving regressions protect shared Simulation ledger merging and persisted-owner dispatch behavior rather than one historical issue number.
 
 Git history retains the original issue/phase context.
@@ -95,7 +95,7 @@ The following decisions cover every scenario from the four named legacy files in
 | mode isolation: repeated settlement delivery | remove duplicate | focused post-event/result settlement tests own replay/idempotency |
 | mode isolation: cancelled Execution leaves Simulation report unchanged | keep and move | `test_mode_queue_and_isolation.py` as explicit cross-mode isolation regression |
 | mode isolation: revalidation rejection before Execution state | remove duplicate | approval/revalidation integration suites |
-| Phase 2 completion: GUI Simulation ledger recovery | keep and rename | `test_execution_approval_ui.py` currently retains the GUI persistence/recovery regression |
+| Phase 2 completion: GUI Simulation ledger recovery | keep and move | `test_durable_simulation_and_dispatch.py` |
 | Phase 2 completion: owner-only business approval UI | keep and rename | `test_execution_approval_ui.py` |
 | Phase 2 completion: rejected/unauthorized decision safety | keep and rename | `test_execution_approval_ui.py` |
 | Issue 112: GUI Simulation preserves shared ledger history | keep and rename | `test_durable_simulation_and_dispatch.py` |

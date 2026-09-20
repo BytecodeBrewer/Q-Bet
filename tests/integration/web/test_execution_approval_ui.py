@@ -8,16 +8,10 @@ from django.test import TestCase
 from qbet.calculations import QualifyingBetInput
 from qbet.engines import BonusEngineRequest
 from qbet.execution.models import ExecutionRecord, Lifecycle
-from qbet.simulation import SimulationEngine
 from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
-    PortfolioLedgerRepository,
-    RoutingConfigurationRepository,
 )
-from qbet.storage.models import ExecutionRecordRow, PortfolioLedgerRow
-from qbet.web.models import SimulationAvailability, SimulationRunState
-from qbet.web.simulation_control import SimulationControlService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.queue import WorkState
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
@@ -47,11 +41,6 @@ class ExecutionApprovalWebTests(TestCase):
     def setUp(self) -> None:
         self.user = User.objects.create_user("approval-owner", password="Strong-pass-123")
         self.other = User.objects.create_user("approval-other", password="Strong-pass-123")
-        self.staff = User.objects.create_user(
-            "approval-staff",
-            password="Strong-pass-123",
-            is_staff=True,
-        )
 
     def _stage_execution(self) -> UUID:
         coordinator = ModeDispatchCoordinator(
@@ -73,39 +62,6 @@ class ExecutionApprovalWebTests(TestCase):
         )
         self.assertEqual(waiting.state, WorkState.RECHECK)
         return scheduled.work.id
-
-    def test_gui_started_simulation_persists_and_recovers_simulation_ledger(self) -> None:
-        SimulationAvailability.objects.create(pk=1, enabled=True)
-        RoutingConfigurationRepository().save(
-            RoutingConfiguration(bonus=EngineModes(simulation=True))
-        )
-        self.client.force_login(self.staff)
-
-        response = self.client.post(
-            "/simulation/start/",
-            {
-                "engine": SimulationEngine.BONUS.value,
-                "starting_capital": "125.00",
-                "max_duration_minutes": "60",
-            },
-        )
-
-        self.assertEqual(response.status_code, 302)
-        run = SimulationRunState.objects.get()
-        persisted = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
-        self.assertIsNotNone(persisted)
-        assert persisted is not None
-        self.assertTrue(persisted.commands)
-        self.assertEqual(run.current_capital, persisted.balance.available)
-        self.assertEqual(PortfolioLedgerRow.objects.filter(mode="execution").count(), 0)
-        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
-
-        recreated = SimulationControlService().snapshot()
-        recovered_run = next(item for item in recreated.runs if item.run_id == run.run_id)
-        recovered_ledger = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
-        self.assertEqual(recovered_run.current_capital, run.current_capital)
-        self.assertEqual(recovered_ledger, persisted)
-
     def test_owner_sees_only_business_level_pending_approval(self) -> None:
         execution_id = self._stage_execution()
         self.client.force_login(self.user)
