@@ -253,7 +253,14 @@ class PostEventSettlementTests(TransactionTestCase):
         self.assertEqual(restored_ledger, ledger)
 
     def test_non_trackable_execution_is_rejected_before_provider_call(self) -> None:
-        base = ExecutionRecord(proposal=proposal())
+        unbound = proposal()
+        bound = unbound.model_copy(
+            update={
+                "result_source": SOURCE,
+                "result_provider_target": TARGET,
+            }
+        )
+        base = ExecutionRecord(proposal=bound)
         repository = ExecutionStateRepository()
         ledger = PortfolioLedger(
             balance=PortfolioBalance(

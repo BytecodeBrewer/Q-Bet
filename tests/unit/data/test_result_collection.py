@@ -168,7 +168,7 @@ def test_fixture_replay_is_deterministic() -> None:
 
 
 def test_result_models_reject_invalid_contracts() -> None:
-    with pytest.raises(ValueError, match="require an outcome"):
+    with pytest.raises(ValueError, match="require completed final score evidence"):
         result(provider_outcome=None)
     with pytest.raises(ValueError, match="require match_id"):
         DeterministicResultFixture()
