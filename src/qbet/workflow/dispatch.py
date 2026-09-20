@@ -836,14 +836,32 @@ class ModeDispatchCoordinator:
         """Project newly applied ledger commands with reconstructable capital state."""
 
         cursor = before
-        for command_id, command in after.commands.items():
-            if command_id in before.commands:
-                continue
-            if dispatch_id is not None and command.dispatch_id != dispatch_id:
-                continue
-            if dispatch_prefix is not None and not command.dispatch_id.startswith(dispatch_prefix):
-                continue
-
+        operation_order = {
+            "reserve": 0,
+            "lock": 1,
+            "pending": 2,
+            "settle": 3,
+            "fail": 3,
+            "release": 4,
+            "cost": 5,
+        }
+        commands = [
+            (command_id, command)
+            for command_id, command in after.commands.items()
+            if command_id not in before.commands
+            and (dispatch_id is None or command.dispatch_id == dispatch_id)
+            and (
+                dispatch_prefix is None
+                or command.dispatch_id.startswith(dispatch_prefix)
+            )
+        ]
+        commands.sort(
+            key=lambda entry: (
+                operation_order.get(entry[1].operation.value, 99),
+                entry[0],
+            )
+        )
+        for command_id, command in commands:
             updated, decision = cursor.apply(command)
             if not decision.accepted:
                 raise ValueError("monitoring_ledger_replay_failed")
