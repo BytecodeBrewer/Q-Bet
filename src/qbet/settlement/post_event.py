@@ -127,7 +127,7 @@ class PostEventSettlementService:
         queued = self._queue_repository.load(work.id)
         if queued is None or queued.state is final_state:
             return
-        if queued.state is not WorkState.RECHECK:
+        if queued.state not in {WorkState.RECHECK, WorkState.PROCESSING}:
             return
 
         result = collection.result or record.collected_result
