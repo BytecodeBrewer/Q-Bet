@@ -199,6 +199,13 @@ def request_for(record: ExecutionRecord) -> ResultCollectionRequest:
     )
 
 
+
+
+class DebugDispatchCoordinator(ModeDispatchCoordinator):
+    def _fail_after_error(self, item, *, now, error):
+        raise error
+
+
 class PostEventSettlementTests(TransactionTestCase):
     def test_final_score_settles_acknowledged_execution_once_without_treating_winner_as_financial_status(self) -> None:
         record, ledger = acknowledged_execution()
@@ -325,7 +332,7 @@ class PostEventSettlementTests(TransactionTestCase):
 
 
     def test_coordinator_dispatch_waits_for_post_event_result_then_settles_once(self) -> None:
-        coordinator = ModeDispatchCoordinator(
+        coordinator = DebugDispatchCoordinator(
             RoutingConfiguration(
                 sports_capital=EngineModes(execution=True),
             ),
