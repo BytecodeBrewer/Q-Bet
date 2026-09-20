@@ -27,6 +27,7 @@
           <div><dt>Opportunity</dt><dd>{{ approval.opportunity_id }}</dd></div>
           <div><dt>Capital required</dt><dd>{{ approval.capital_required }} {{ approval.currency }}</dd></div>
           <div><dt>Valid until</dt><dd>{{ approval.expires_at }}</dd></div>
+          <div><dt>Remaining</dt><dd>{{ approval.remaining_validity }} remaining</dd></div>
         </dl>
         <div class="hero-actions">
           <form method="post" action="{% url 'execution-approval-decision' approval.execution_id %}">

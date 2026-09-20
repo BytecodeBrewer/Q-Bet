@@ -18,7 +18,7 @@ from qbet.storage.ledger import (
     ModeWorkQueueRepository,
 )
 from qbet.storage.monitoring import PostgresMonitoringRepository
-from qbet.workflow.queue import WorkState
+from qbet.workflow.queue import QueuedWorkItem, WorkState
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,7 @@ class PendingExecutionApproval:
     capital_required: Decimal
     currency: str
     expires_at: datetime
+    remaining_validity: str
 
 
 class ExecutionApprovalService:
@@ -49,9 +50,32 @@ class ExecutionApprovalService:
         self._queue_repository = queue_repository or ModeWorkQueueRepository()
         self._monitoring_writer = monitoring_writer or PostgresMonitoringRepository()
 
-    def pending_for(self, owner: str) -> tuple[PendingExecutionApproval, ...]:
+    def pending_for(
+        self,
+        owner: str,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[PendingExecutionApproval, ...]:
+        observed_at = now or datetime.now(UTC)
         records = self._record_repository.list_awaiting_approval(owner=owner)
-        return tuple(self._summary(record) for record in records)
+        approvals: list[PendingExecutionApproval] = []
+        for record in records:
+            if observed_at >= record.proposal.expires_at:
+                self._reconcile_expired(
+                    record.proposal.work.id,
+                    owner=owner,
+                    now=observed_at,
+                )
+                continue
+            approvals.append(self._summary(record, now=observed_at))
+        return tuple(approvals)
+
+    def active_count_for(self, owner: str, *, now: datetime | None = None) -> int:
+        """Return an owner-scoped count without causing write side effects."""
+
+        observed_at = now or datetime.now(UTC)
+        records = self._record_repository.list_awaiting_approval(owner=owner)
+        return sum(record.proposal.expires_at > observed_at for record in records)
 
     def decide(
         self,
@@ -76,6 +100,17 @@ class ExecutionApprovalService:
             queue_item = self._queue_repository.load(execution_id)
             if queue_item is None:
                 raise ValueError("execution_queue_item_missing")
+
+            if (
+                record.state is Lifecycle.AWAITING_APPROVAL
+                and decision_time >= record.proposal.expires_at
+            ):
+                return self._expire_locked(
+                    record,
+                    ledger,
+                    queue_item,
+                    now=decision_time,
+                )
 
             previous_state = record.state
             decided, _ = ExecutionService(
@@ -134,8 +169,70 @@ class ExecutionApprovalService:
                 )
             return decided
 
+    def _reconcile_expired(
+        self,
+        execution_id: UUID,
+        *,
+        owner: str,
+        now: datetime,
+    ) -> ExecutionRecord:
+        with transaction.atomic():
+            loaded = self._state_repository.load(execution_id)
+            if loaded is None:
+                raise ValueError("execution_state_missing")
+            record, ledger = loaded
+            if record.proposal.work.owner != owner:
+                raise PermissionError("proposal_owner_required")
+            if (
+                record.state is not Lifecycle.AWAITING_APPROVAL
+                or now < record.proposal.expires_at
+            ):
+                return record
+
+            queue_item = self._queue_repository.load(execution_id)
+            if queue_item is None:
+                raise ValueError("execution_queue_item_missing")
+            return self._expire_locked(record, ledger, queue_item, now=now)
+
+    def _expire_locked(
+        self,
+        record: ExecutionRecord,
+        ledger,
+        queue_item: QueuedWorkItem,
+        *,
+        now: datetime,
+    ) -> ExecutionRecord:
+        """Fail closed through existing execution and queue terminal states."""
+
+        if record.state is not Lifecycle.AWAITING_APPROVAL:
+            return record
+        if now < record.proposal.expires_at:
+            return record
+        if queue_item.state not in {
+            WorkState.PENDING,
+            WorkState.RECHECK,
+            WorkState.CANCELLED,
+            WorkState.EXPIRED,
+        }:
+            raise ValueError("approval_expiry_queue_not_terminalizable")
+
+        cancelled, _ = ExecutionService(
+            state_writer=self._state_repository
+        ).cancel_before_dispatch(
+            record,
+            ledger,
+            reason="approval_expired",
+        )
+        if queue_item.state in {WorkState.PENDING, WorkState.RECHECK}:
+            self._queue_repository.cancel(
+                record.proposal.work.id,
+                now=now,
+                reason="approval_expired",
+            )
+        return cancelled
+
     @staticmethod
-    def _summary(record: ExecutionRecord) -> PendingExecutionApproval:
+    def _summary(record: ExecutionRecord, *, now: datetime) -> PendingExecutionApproval:
         proposal = record.proposal
         return PendingExecutionApproval(
             execution_id=proposal.work.id,
@@ -148,4 +245,19 @@ class ExecutionApprovalService:
             capital_required=proposal.capital_required,
             currency=proposal.currency,
             expires_at=proposal.expires_at,
+            remaining_validity=ExecutionApprovalService._remaining_validity(
+                proposal.expires_at,
+                now,
+            ),
         )
+
+    @staticmethod
+    def _remaining_validity(expires_at: datetime, now: datetime) -> str:
+        remaining = max(0, int((expires_at - now).total_seconds()))
+        hours, remainder = divmod(remaining, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours:
+            return f"{hours}h {minutes}m"
+        if minutes:
+            return f"{minutes}m {seconds}s"
+        return f"{seconds}s"
