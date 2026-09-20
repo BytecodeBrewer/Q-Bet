@@ -36,7 +36,7 @@ def _notification_recipient(request: HttpRequest) -> tuple[str, str]:
 def execution_approvals(request: HttpRequest) -> HttpResponse:
     try:
         approvals = _EXECUTION_APPROVALS.pending_for(request.user.get_username())
-    except (AuthoritativePersistenceError, DatabaseError):
+    except (AuthoritativePersistenceError, DatabaseError, ValueError):
         return render(
             request,
             "qbet_web/execution_approvals.html",
@@ -94,6 +94,8 @@ def execution_approval_decision(
         )
     elif record.state is Lifecycle.REJECTED:
         messages.success(request, "Execution rejected. No order was dispatched.")
+    elif record.state is Lifecycle.CANCELLED and record.error == "approval_expired":
+        messages.error(request, "This approval expired. No order was dispatched.")
     else:
         messages.info(request, "This execution decision was already finalized.")
     return redirect("execution-approvals")
