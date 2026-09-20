@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from django.db import transaction
+from django.db import DatabaseError, transaction
 
 from qbet.execution.models import ExecutionRecord, Lifecycle
 from qbet.execution.service import ExecutionService
@@ -17,7 +17,7 @@ from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
 )
-from qbet.storage.monitoring import PostgresMonitoringRepository
+from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 from qbet.workflow.queue import QueuedWorkItem, WorkState
 
 
@@ -229,7 +229,40 @@ class ExecutionApprovalService:
                 now=now,
                 reason="approval_expired",
             )
+        self._schedule_expiry_monitoring(cancelled, now=now)
         return cancelled
+
+    def _schedule_expiry_monitoring(
+        self,
+        record: ExecutionRecord,
+        *,
+        now: datetime,
+    ) -> None:
+        """Emit expiry observability only after authoritative state commits."""
+
+        def append_after_commit() -> None:
+            try:
+                self._monitoring_writer.append(
+                    MonitoringRecord(
+                        correlation_id=record.proposal.work.correlation_id,
+                        occurred_at=now,
+                        engine=record.proposal.work.engine,
+                        mode="execution",
+                        stage="execution",
+                        event_type="lifecycle_transition",
+                        status=Lifecycle.CANCELLED.value,
+                        reason_code="approval_expired",
+                        level=MonitoringLevel.WARNING,
+                        references={
+                            "work_id": str(record.proposal.work.id),
+                            "opportunity_id": record.proposal.work.opportunity_id,
+                        },
+                    )
+                )
+            except (DatabaseError, MonitoringPersistenceError):
+                return
+
+        transaction.on_commit(append_after_commit)
 
     @staticmethod
     def _summary(record: ExecutionRecord, *, now: datetime) -> PendingExecutionApproval:

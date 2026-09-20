@@ -184,6 +184,7 @@ class ExecutionApprovalBoundaryTests(TransactionTestCase):
         with (
             patch("qbet.execution.service.BonusSandboxAdapter.dispatch") as dispatch,
             patch("qbet.notifications.service.ExecutionNotificationService.notify") as notify,
+            patch.object(approvals._monitoring_writer, "append") as monitoring,
         ):
             first = approvals.pending_for(
                 "owner",
@@ -217,6 +218,10 @@ class ExecutionApprovalBoundaryTests(TransactionTestCase):
         self.assertEqual(ledger.commands, before_ledger.commands)
         dispatch.assert_not_called()
         notify.assert_not_called()
+        monitoring.assert_called_once()
+        monitoring_record = monitoring.call_args.args[0]
+        self.assertEqual(monitoring_record.status, Lifecycle.CANCELLED.value)
+        self.assertEqual(monitoring_record.reason_code, "approval_expired")
 
     def test_approval_at_deadline_fails_closed_as_expired(self) -> None:
         scheduled, _ = self._stage()
