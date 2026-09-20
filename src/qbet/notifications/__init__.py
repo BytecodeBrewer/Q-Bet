@@ -8,6 +8,13 @@ from .models import (
     NotificationRecipient,
     NotificationStatus,
 )
+from .preferences import (
+    NOTIFICATION_CATEGORIES,
+    InboxItem,
+    NotificationPreferences,
+    PostgresNotificationInbox,
+    PostgresNotificationPreferenceRepository,
+)
 from .recipients import (
     ActiveUserNotificationRecipientResolver,
     NotificationRecipientResolver,
@@ -32,6 +39,11 @@ __all__ = [
     "ExecutionNotificationTask",
     "InMemoryNotificationRepository",
     "NotificationDeliveryError",
+    "NOTIFICATION_CATEGORIES",
+    "InboxItem",
+    "NotificationPreferences",
+    "PostgresNotificationInbox",
+    "PostgresNotificationPreferenceRepository",
     "NotificationOutcome",
     "NotificationRecipient",
     "NotificationRecipientResolver",

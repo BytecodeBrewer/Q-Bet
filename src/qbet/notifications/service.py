@@ -18,6 +18,7 @@ from .models import (
     NotificationRecipient,
     NotificationStatus,
 )
+from .preferences import NotificationPreferenceRepository, NotificationPreferences
 from .recipients import NotificationRecipientStatus, notification_recipient_status
 
 
@@ -73,10 +74,12 @@ class ExecutionNotificationService:
         repository: NotificationRepository,
         transport: NotificationTransport,
         monitoring_writer: MonitoringWriter | None = None,
+        preference_repository: NotificationPreferenceRepository | None = None,
     ) -> None:
         self._repository = repository
         self._transport = transport
         self._monitoring_writer = monitoring_writer
+        self._preference_repository = preference_repository
 
     def notify(
         self,
@@ -130,6 +133,19 @@ class ExecutionNotificationService:
         queued_task = _transition(persisted, NotificationStatus.QUEUED, now=now)
         queued_task = self._repository.save(queued_task)
         self._emit(queued_task)
+
+        preferences = (
+            self._preference_repository.load(recipient.user_id)
+            if self._preference_repository is not None
+            else NotificationPreferences()
+        )
+        if not preferences.email_enabled:
+            if preferences.inbox_enabled and preferences.accepts("execution_action_required"):
+                sent = _transition(queued_task, NotificationStatus.SENT, now=now)
+                sent = self._repository.save(sent)
+                self._emit(sent)
+                return NotificationOutcome(task=sent, accepted=True)
+            return NotificationOutcome(task=queued_task, accepted=True)
 
         try:
             self._transport.send(queued_task)

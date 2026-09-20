@@ -14,6 +14,12 @@ urlpatterns = [
     path("metrics/", views.metrics, name="metrics"),
     path("register/", views.register, name="register"),
     path("profile/", views.profile, name="profile"),
+    path("notifications/", views.notification_inbox, name="notification-inbox"),
+    path(
+        "notifications/<uuid:task_id>/read/",
+        views.notification_inbox_read,
+        name="notification-inbox-read",
+    ),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
     path("execution/approvals/", execution_approvals, name="execution-approvals"),

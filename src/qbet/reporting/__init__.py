@@ -1,3 +1,4 @@
+from .dashboard import CustomerReportingDashboard, CustomerReportingQuery, CustomerReportingService
 from .customer import CustomerReportUnavailable, CustomerResultReport
 from .models import (
     CompletedStepSummary,
@@ -11,6 +12,9 @@ from .models import (
 __all__ = [
     "CompletedStepSummary",
     "CustomerReportAmount",
+    "CustomerReportingDashboard",
+    "CustomerReportingQuery",
+    "CustomerReportingService",
     "CustomerReportInput",
     "CustomerReportUnavailable",
     "CustomerResultReport",

@@ -24,11 +24,18 @@ from qbet.monitoring import MonitoringQuery, MonitoringService as WorkflowMonito
 from qbet.monitoring.exports import csv_header as monitoring_csv_header
 from qbet.monitoring.exports import csv_rows as monitoring_csv_rows
 from qbet.monitoring.exports import json_document as monitoring_json_document
-from qbet.notifications import notification_recipient_status
+from qbet.notifications import (
+    NotificationPreferences,
+    PostgresNotificationInbox,
+    PostgresNotificationPreferenceRepository,
+    notification_recipient_status,
+)
 from qbet.observability import prometheus_document
 from qbet.observability.metrics import ObservabilitySnapshot
 from qbet.reporting import (
     CustomerReportUnavailable,
+    CustomerReportingQuery,
+    CustomerReportingService,
     CustomerResultReport,
     ReportDetailSelection,
     SimulationReport,
@@ -54,6 +61,7 @@ from qbet.web.controls import (
     save_presentation_preferences,
 )
 from qbet.web.forms import (
+    NotificationPreferencesForm,
     NotificationProfileForm,
     PresentationSettingsForm,
     RegistrationForm,
@@ -85,6 +93,9 @@ def _monitoring_service() -> MonitoringService:
 
 
 MONITORING_SERVICE = _monitoring_service()
+CUSTOMER_REPORTING_SERVICE = CustomerReportingService(PostgresSimulationReportReader())
+NOTIFICATION_PREFERENCES = PostgresNotificationPreferenceRepository()
+NOTIFICATION_INBOX = PostgresNotificationInbox()
 WORKFLOW_MONITORING_REPOSITORY = PostgresMonitoringRepository()
 WORKFLOW_MONITORING_SERVICE = WorkflowMonitoringService(WORKFLOW_MONITORING_REPOSITORY)
 SIMULATION_CONTROL = SimulationControlService()
@@ -208,8 +219,25 @@ def register(request: HttpRequest) -> HttpResponse:
 def profile(request: HttpRequest) -> HttpResponse:
     user = cast(User, request.user)
     form = NotificationProfileForm(request.POST or None, instance=user)
-    if request.method == "POST" and form.is_valid():
+    preferences = NOTIFICATION_PREFERENCES.load(user.get_username())
+    preferences_form = NotificationPreferencesForm(
+        request.POST or None,
+        initial={
+            "email_enabled": preferences.email_enabled,
+            "inbox_enabled": preferences.inbox_enabled,
+            "categories": preferences.categories,
+        },
+    )
+    if request.method == "POST" and form.is_valid() and preferences_form.is_valid():
         form.save()
+        NOTIFICATION_PREFERENCES.save(
+            user.get_username(),
+            NotificationPreferences(
+                email_enabled=bool(preferences_form.cleaned_data["email_enabled"]),
+                inbox_enabled=bool(preferences_form.cleaned_data["inbox_enabled"]),
+                categories=tuple(preferences_form.cleaned_data["categories"]),
+            ),
+        )
         messages.success(request, "Profile updated.")
         return redirect("profile")
     status = notification_recipient_status(
@@ -218,7 +246,11 @@ def profile(request: HttpRequest) -> HttpResponse:
         last_name=user.last_name,
         email=user.email,
     )
-    return render(request, "qbet_web/profile.html", _context(request, form=form, status=status))
+    return render(
+        request,
+        "qbet_web/profile.html",
+        _context(request, form=form, preferences_form=preferences_form, status=status),
+    )
 
 
 @login_required
@@ -386,31 +418,72 @@ def presentation_settings(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def report_history(request: HttpRequest) -> HttpResponse:
-    snapshot = MONITORING_SERVICE.snapshot()
-    engine_id = request.GET.get("engine")
-    visible_report_ids = _visible_customer_report_ids(request)
-    reports = tuple(
-        customer_report
-        for summary in snapshot.reports
-        if engine_id in (None, "") or summary.engine == engine_id
-        if visible_report_ids is None or summary.run_id in visible_report_ids
-        if (
-            customer_report := _customer_report(
-                MONITORING_SERVICE.load_report(summary.run_id, ReportDetailSelection()).report
+    now = datetime.now(UTC)
+    preset = request.GET.get("range", "7d")
+    start = now - timedelta(hours={"24h": 24, "7d": 168, "30d": 720}.get(preset, 168))
+    if preset == "custom":
+        try:
+            start = datetime.fromisoformat(request.GET["start"]).astimezone(UTC)
+            now = datetime.fromisoformat(request.GET["end"]).astimezone(UTC)
+        except (KeyError, ValueError):
+            preset = "7d"
+            start = now - timedelta(days=7)
+    try:
+        dashboard = CUSTOMER_REPORTING_SERVICE.dashboard(
+            CustomerReportingQuery(
+                start=start,
+                end=now,
+                engine=request.GET.get("engine") or None,
+                mode=request.GET.get("mode") or None,
             )
         )
-        is not None
+    except ValueError:
+        dashboard = CUSTOMER_REPORTING_SERVICE.dashboard(
+            CustomerReportingQuery(start=now - timedelta(days=7), end=now)
+        )
+        preset = "7d"
+    visible_report_ids = _visible_customer_report_ids(request)
+    reports = tuple(
+        report
+        for report in dashboard.reports
+        if visible_report_ids is None or report.report_id in visible_report_ids
     )
     return render(
         request,
         "qbet_web/report_history.html",
         _context(
             request,
-            monitoring=snapshot,
+            dashboard=dashboard,
             reports=reports,
-            selected_engine=engine_id or "",
+            selected_engine=request.GET.get("engine", ""),
+            selected_mode=request.GET.get("mode", ""),
+            selected_range=preset,
+            report_start=start,
+            report_end=now,
         ),
     )
+
+
+@login_required
+def notification_inbox(request: HttpRequest) -> HttpResponse:
+    user_id = request.user.get_username()
+    preferences = NOTIFICATION_PREFERENCES.load(user_id)
+    inbox = (
+        tuple(
+            item for item in NOTIFICATION_INBOX.list(user_id) if preferences.accepts(item.category)
+        )
+        if preferences.inbox_enabled
+        else ()
+    )
+    return render(request, "qbet_web/inbox.html", _context(request, inbox=inbox))
+
+
+@login_required
+@require_POST
+def notification_inbox_read(request: HttpRequest, task_id: UUID) -> HttpResponse:
+    if NOTIFICATION_INBOX.mark_read(request.user.get_username(), task_id):
+        messages.success(request, "Notification marked as read.")
+    return redirect("notification-inbox")
 
 
 @login_required

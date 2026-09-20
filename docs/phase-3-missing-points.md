@@ -38,7 +38,7 @@ The central success criterion is not the number of available components. The com
 | RequestHandler | targeted pre-execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | no remaining core Phase 3 gap; post-event result collection is a separate settlement boundary |
 | Smart Polling | persisted provider/target/engine strategies, quota/cost metadata and staff configuration are implemented | multi-provider source selection can be added when another source is introduced |
 | Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback composed from completed Simulation work into Portfolio Ledger | no remaining core Phase 3 gap; broaden only when another bank/account flow requires it |
-| Notifications | approval-gated notification domain and Django email transport exist | user preferences, internal inbox/SMS later, and composition with broader approval flows |
+| Notifications | approval-gated notification domain, email-first delivery, durable per-user preferences, and a customer-safe internal inbox exist | SMS and broader approval-flow categories remain later work |
 | Results/settlement data | The Odds API scores are connected through the provider-neutral result boundary and the connected E2E path to post-event SettlementService composition | no remaining core Phase 3 gap; add another result source only when coverage requires it |
 | Monitoring/Reporting | technical Monitoring now includes bounded operational windows, summaries, durable Prometheus-compatible metrics, an importable Grafana dashboard, degraded-source visibility and configured infrastructure links; customer Reporting remains separate | customer/business Reporting UX improvements only |
 | Performance | repeatable Phase 3 connected baseline exists | later provider/network hot-path baselines where useful |
@@ -174,7 +174,7 @@ Approvals should also appear inside the application with an unread/open count, e
 
 Customer/business Reporting remains separate from technical Monitoring.
 
-Technical Monitoring time windows, operational summaries, infrastructure links, durable Prometheus-compatible metrics and the Grafana dashboard contract are implemented. Remaining Phase 3 work here is business-facing Reporting UX: useful time windows and financial/customer dashboards without exposing internal implementation details.
+Technical Monitoring time windows, operational summaries, infrastructure links, durable Prometheus-compatible metrics and the Grafana dashboard contract are implemented. Business-facing Reporting now provides bounded time windows, engine/mode filters, and business-only financial summaries without exposing internal implementation details.
 
 ### Navigation and Visual Design
 

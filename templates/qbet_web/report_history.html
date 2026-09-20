@@ -1,9 +1,16 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
 <section class="page-heading"><h1>Report history</h1><p>Completed business result reports, newest first.</p></section>
-<section class="filter-bar"><a href="{% url 'report-history' %}" {% if not selected_engine %}aria-current="page"{% endif %}>All engines</a><a href="{% url 'report-history' %}?engine=bonus" {% if selected_engine == 'bonus' %}aria-current="page"{% endif %}>BonusEngine</a><a href="{% url 'report-history' %}?engine=sports_capital" {% if selected_engine == 'sports_capital' %}aria-current="page"{% endif %}>SportsCapitalEngine</a></section>
+<form class="filter-bar" method="get">
+  <label>Range <select name="range"><option value="24h" {% if selected_range == "24h" %}selected{% endif %}>Last 24 hours</option><option value="7d" {% if selected_range == "7d" %}selected{% endif %}>Last 7 days</option><option value="30d" {% if selected_range == "30d" %}selected{% endif %}>Last 30 days</option><option value="custom" {% if selected_range == "custom" %}selected{% endif %}>Custom range</option></select></label>
+  <label>From <input type="datetime-local" name="start" value="{{ report_start|date:'Y-m-d\\TH:i' }}"></label><label>To <input type="datetime-local" name="end" value="{{ report_end|date:'Y-m-d\\TH:i' }}"></label><label>Engine <select name="engine"><option value="">All engines</option><option value="bonus" {% if selected_engine == "bonus" %}selected{% endif %}>BonusEngine</option><option value="sports_capital" {% if selected_engine == "sports_capital" %}selected{% endif %}>SportsCapitalEngine</option></select></label>
+  <label>Mode <select name="mode"><option value="">All modes</option><option value="simulation" {% if selected_mode == "simulation" %}selected{% endif %}>Simulation</option></select></label>
+  <button type="submit">Apply</button>
+</form>
+{% if dashboard.available %}
+<section class="content-section"><h2>Business summary</h2><dl><dt>Completed results</dt><dd>{{ reports|length }}</dd><dt>Invested capital</dt><dd>{{ dashboard.invested_capital }}</dd><dt>Profit/loss</dt><dd>{{ dashboard.profit_loss }}</dd><dt>ROI</dt><dd>{% if dashboard.roi is not None %}{{ dashboard.roi }}%{% else %}Unavailable{% endif %}</dd></dl></section>
 {% if reports %}
 <table><thead><tr><th>Match</th><th>Providers</th><th>Engine</th><th>Strategy</th><th>Profit/loss</th><th>Completed</th></tr></thead><tbody>{% for report in reports %}<tr><td><a href="{% url 'report-detail' report.report_id %}">{{ report.match }}</a></td><td>{{ report.provider }} / {{ report.counterparty_provider }}</td><td>{{ report.engine }}</td><td>{{ report.strategy }}</td><td>{{ report.profit_loss }} {{ report.currency }}</td><td>{{ report.completed_at }}</td></tr>{% endfor %}</tbody></table>
-{% elif monitoring.history_available %}<p class="empty-state">No completed customer reports are available for this selection.</p>
+{% else %}<p class="empty-state">No completed customer reports are available for this selection.</p>{% endif %}
 {% else %}<p class="empty-state">Report history is unavailable.</p>{% endif %}
 {% endblock %}

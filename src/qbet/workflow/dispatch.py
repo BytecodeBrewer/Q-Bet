@@ -42,6 +42,7 @@ from qbet.storage.notifications import (
     NotificationPersistenceError,
     PostgresNotificationRepository,
 )
+from qbet.notifications.preferences import PostgresNotificationPreferenceRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
 from qbet.workflow.models import (
@@ -89,6 +90,7 @@ class ModeDispatchCoordinator:
             repository=PostgresNotificationRepository(),
             transport=DjangoEmailTransport(),
             monitoring_writer=self._monitoring_writer,
+            preference_repository=PostgresNotificationPreferenceRepository(),
         )
         self._notification_recipient_resolver = (
             notification_recipient_resolver or ActiveUserNotificationRecipientResolver()
@@ -840,10 +842,7 @@ class ModeDispatchCoordinator:
             for command_id, command in after.commands.items()
             if command_id not in before.commands
             and (dispatch_id is None or command.dispatch_id == dispatch_id)
-            and (
-                dispatch_prefix is None
-                or command.dispatch_id.startswith(dispatch_prefix)
-            )
+            and (dispatch_prefix is None or command.dispatch_id.startswith(dispatch_prefix))
         ]
         cursor = before
         while pending_commands:
@@ -869,9 +868,7 @@ class ModeDispatchCoordinator:
                 self._record_event(
                     item,
                     stage=(
-                        "settlement"
-                        if command.operation.value in {"settle", "fail"}
-                        else "ledger"
+                        "settlement" if command.operation.value in {"settle", "fail"} else "ledger"
                     ),
                     event_type="capital_transition",
                     status=status,
