@@ -43,12 +43,12 @@ def _request(opportunity_id: str = "web-approval-opportunity") -> BonusEngineReq
     )
 
 
-class Phase2CompletionWebTests(TestCase):
+class ExecutionApprovalWebTests(TestCase):
     def setUp(self) -> None:
         self.user = User.objects.create_user("approval-owner", password="Strong-pass-123")
         self.other = User.objects.create_user("approval-other", password="Strong-pass-123")
         self.staff = User.objects.create_user(
-            "phase2-staff",
+            "approval-staff",
             password="Strong-pass-123",
             is_staff=True,
         )

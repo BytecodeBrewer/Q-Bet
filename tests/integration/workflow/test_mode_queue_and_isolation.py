@@ -1,4 +1,4 @@
-"""PostgreSQL-backed verification of mode routing and sandbox settlement isolation."""
+"""PostgreSQL integration coverage for queue control and mode isolation."""
 
 import asyncio
 from datetime import UTC, datetime, timedelta
@@ -13,7 +13,6 @@ from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.execution.models import ExecutionProposal, ExecutionRecord, Lifecycle, SandboxResult
 from qbet.execution.sandbox import valuation
-from qbet.execution.service import ExecutionService
 from qbet.ledger import PortfolioLedger
 from qbet.request_handler import ResultStatus, RevalidationOutcome
 from qbet.settlement import SettlementService, ledger_command, transition
@@ -24,7 +23,6 @@ from qbet.simulation import (
     WorkflowSimulationRunner,
 )
 from qbet.storage.ledger import (
-    ExecutionRecordRepository,
     ModeWorkQueueRepository,
     PortfolioLedgerRepository,
 )
@@ -32,17 +30,9 @@ from qbet.storage.models import (
     ExecutionRecordRow,
     ModeWorkQueueRow,
     PortfolioLedgerRow,
-    SimulationReportRow,
 )
 from qbet.storage.postgres import PostgresSimulationReportStore
-from qbet.workflow import (
-    WorkflowDecision,
-    WorkflowMode,
-    WorkflowOrchestrator,
-    WorkflowRequest,
-    WorkflowStage,
-    WorkState,
-)
+from qbet.workflow import WorkflowMode, WorkState
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration, resolve_routes
@@ -115,8 +105,8 @@ def _execution_ledger() -> PortfolioLedger:
     )
 
 
-class ModeSettlementIsolationE2ETests(TransactionTestCase):
-    """Exercise public routing, workflow, persistence, execution, and settlement boundaries."""
+class ModeQueueAndIsolationIntegrationTests(TransactionTestCase):
+    """Own queue timing, claiming, result-state, and cross-mode isolation regressions."""
 
     def _run_simulation(
         self,
@@ -143,115 +133,12 @@ class ModeSettlementIsolationE2ETests(TransactionTestCase):
         assert runner.last_report is not None
         assert runner.last_ledger is not None
         return result, runner.last_report, store, runner.last_ledger, ledger_repository
-
-    def _settle_execution(self, request: BonusEngineRequest | SportsCapitalEngineRequest, work):
-        ledger_repository = PortfolioLedgerRepository()
-        record_repository = ExecutionRecordRepository()
-        record, ledger = ExecutionService(
-            ledger_writer=ledger_repository,
-            execution_writer=record_repository,
-        ).decide(
-            ExecutionRecord(proposal=_execution_proposal(request, work)),
-            _execution_ledger(),
-            actor="owner",
-            owner="owner",
-            approve=True,
-            now=NOW,
-        )
-        return record, ledger, ledger_repository, record_repository
-
     def _coordinator(self, configuration: RoutingConfiguration, opportunity_id: str):
         return ModeDispatchCoordinator(
             configuration,
             queue_repository=ModeWorkQueueRepository(),
             mode_request_handlers=_handlers(opportunity_id),
         )
-
-    def test_single_mode_is_scheduled_and_dispatched_once_from_one_opportunity(self) -> None:
-        request = _bonus_request()
-        coordinator = self._coordinator(
-            RoutingConfiguration(bonus=EngineModes(simulation=True)), request.opportunity_id
-        )
-
-        scheduled = coordinator.schedule(
-            request,
-            owner="owner",
-            correlation_id=CORRELATION_ID,
-            scheduled_for=NOW,
-            expires_at=NOW + timedelta(minutes=5),
-        )
-        repeated = coordinator.schedule(
-            request,
-            owner="owner",
-            correlation_id=CORRELATION_ID,
-            scheduled_for=NOW,
-            expires_at=NOW + timedelta(minutes=5),
-        )
-        dispatched = coordinator.dispatch_due(now=NOW, owner="owner")
-
-        self.assertEqual(len(scheduled), 1)
-        self.assertEqual(repeated, scheduled)
-        self.assertEqual(tuple(item.state for item in dispatched), (WorkState.COMPLETED,))
-        self.assertEqual(ModeWorkQueueRow.objects.count(), 1)
-        persisted = ModeWorkQueueRepository().load(scheduled[0].work.id)
-        self.assertIsNotNone(persisted)
-        assert persisted is not None
-        self.assertEqual(
-            tuple(event.state for event in persisted.history),
-            (WorkState.PENDING, WorkState.PROCESSING, WorkState.COMPLETED),
-        )
-        self.assertEqual(SimulationReportRow.objects.count(), 1)
-        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
-
-    def test_dual_mode_fanout_uses_persisted_isolated_queues_and_histories(self) -> None:
-        request = _sports_request()
-        coordinator = self._coordinator(
-            RoutingConfiguration(sports_capital=EngineModes(simulation=True, execution=True)),
-            request.opportunity_id,
-        )
-
-        scheduled = coordinator.schedule(
-            request,
-            owner="owner",
-            correlation_id=CORRELATION_ID,
-            scheduled_for=NOW,
-            expires_at=NOW + timedelta(minutes=5),
-        )
-        first_dispatch = coordinator.dispatch_due(now=NOW, owner="owner")
-
-        self.assertEqual(len(scheduled), 2)
-        self.assertEqual(
-            {item.work.mode for item in scheduled},
-            {WorkflowMode.SIMULATION, WorkflowMode.EXECUTION},
-        )
-        self.assertEqual(
-            {item.state for item in first_dispatch},
-            {WorkState.COMPLETED, WorkState.RECHECK},
-        )
-        execution_item = next(
-            item for item in scheduled if item.work.mode is WorkflowMode.EXECUTION
-        )
-        ExecutionApprovalService().decide(
-            execution_item.work.id,
-            actor="owner",
-            approve=True,
-            now=NOW + timedelta(seconds=1),
-        )
-        second_dispatch = coordinator.dispatch_due(
-            now=NOW + timedelta(seconds=2), owner="owner"
-        )
-        self.assertEqual(tuple(item.state for item in second_dispatch), (WorkState.COMPLETED,))
-
-        persisted = tuple(ModeWorkQueueRepository().load(item.work.id) for item in scheduled)
-        self.assertTrue(all(item is not None for item in persisted))
-        histories = [item.history for item in persisted if item is not None]
-        self.assertEqual(len(histories), 2)
-        self.assertTrue(all(history[-1].state is WorkState.COMPLETED for history in histories))
-        self.assertEqual(ModeWorkQueueRow.objects.count(), 2)
-        self.assertEqual(PortfolioLedgerRow.objects.count(), 2)
-        self.assertEqual(SimulationReportRow.objects.count(), 1)
-        self.assertEqual(ExecutionRecordRow.objects.count(), 1)
-
     def test_queue_recheck_and_expiry_are_persisted_without_dispatch(self) -> None:
         request = _sports_request()
         recheck = ModeDispatchCoordinator(
@@ -290,28 +177,6 @@ class ModeSettlementIsolationE2ETests(TransactionTestCase):
         self.assertEqual(expired_item.work.id, expired_result.work.id)
         self.assertEqual(expired_result.state, WorkState.EXPIRED)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 2)
-
-    def test_revalidation_rejection_cancels_the_routed_execution_before_settlement(self) -> None:
-        request = _sports_request()
-        coordinator = ModeDispatchCoordinator(
-            RoutingConfiguration(sports_capital=EngineModes(execution=True)),
-            queue_repository=ModeWorkQueueRepository(),
-            mode_request_handlers=_handlers(request.opportunity_id, RevalidationOutcome.REJECTED),
-        )
-        coordinator.schedule(
-            request,
-            owner="owner",
-            correlation_id=CORRELATION_ID,
-            scheduled_for=NOW,
-            expires_at=NOW + timedelta(minutes=5),
-        )
-
-        (result,) = coordinator.dispatch_due(now=NOW, owner="owner")
-
-        self.assertEqual(result.state, WorkState.CANCELLED)
-        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
-        self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
-
     def test_atomic_claim_prevents_a_second_worker_from_dispatching_the_same_item(self) -> None:
         request = _sports_request()
         configuration = RoutingConfiguration(sports_capital=EngineModes(execution=True))
@@ -467,109 +332,6 @@ class ModeSettlementIsolationE2ETests(TransactionTestCase):
         partial_item = queue_items[ResultStatus.PARTIAL]
         self.assertEqual(partial_item.state, WorkState.RECHECK)
         self.assertEqual(partial_item.history[-1].reason, "result_partial")
-
-    def test_simulation_only_bonus_persists_a_report_without_execution_state(self) -> None:
-        request = _bonus_request()
-        routes = resolve_routes(
-            RoutingConfiguration(bonus=EngineModes(simulation=True)),
-            "bonus",
-            request.opportunity_id,
-            CORRELATION_ID,
-            "owner",
-        )
-
-        result, report, store, ledger, ledger_repository = self._run_simulation(
-            request, SimulationEngine.BONUS
-        )
-
-        self.assertEqual(tuple(route.mode for route in routes), (WorkflowMode.SIMULATION,))
-        evaluation = result.simulation_result.completed_steps[0].evaluation
-        assert evaluation is not None
-        self.assertEqual(evaluation.strategy_result.opportunity_id, request.opportunity_id)
-        self.assertEqual(store.load_report(report.run_id), report)
-        self.assertTrue(store.load_records(report.run_id))
-        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
-        self.assertEqual(ledger_repository.load(mode="simulation", currency="EUR"), ledger)
-        self.assertEqual(ledger.balance.pending, Decimal(0))
-        self.assertEqual(ledger.balance.reserved, Decimal(0))
-
-    def test_execution_only_sports_settles_and_retrieves_its_own_persisted_state(self) -> None:
-        request = _sports_request()
-        (work,) = resolve_routes(
-            RoutingConfiguration(sports_capital=EngineModes(execution=True)),
-            "sports_capital",
-            request.opportunity_id,
-            CORRELATION_ID,
-            "owner",
-        )
-
-        record, ledger, ledger_repository, record_repository = self._settle_execution(request, work)
-
-        self.assertEqual(work.mode, WorkflowMode.EXECUTION)
-        self.assertEqual(record.state, Lifecycle.SETTLED)
-        self.assertIsNotNone(record.result)
-        self.assertEqual(record_repository.load(work.id), record)
-        self.assertEqual(ledger_repository.load(mode="execution", currency="EUR"), ledger)
-        self.assertEqual(ledger.balance.reserved, Decimal(0))
-        self.assertEqual(ledger.balance.locked, Decimal(0))
-        self.assertEqual(ledger.balance.pending, Decimal(0))
-        self.assertEqual(SimulationReportRow.objects.count(), 0)
-
-    def test_dual_mode_creates_distinct_work_and_persisted_results(self) -> None:
-        request = _sports_request()
-        routes = resolve_routes(
-            RoutingConfiguration(sports_capital=EngineModes(simulation=True, execution=True)),
-            "sports_capital",
-            request.opportunity_id,
-            CORRELATION_ID,
-            "owner",
-        )
-        simulation_work, execution_work = routes
-
-        simulation, report, report_store, simulation_ledger, simulation_ledger_repository = (
-            self._run_simulation(
-                request,
-                SimulationEngine.SPORTS_CAPITAL,
-            )
-        )
-        execution, ledger, ledger_repository, record_repository = self._settle_execution(
-            request,
-            execution_work,
-        )
-
-        self.assertEqual(simulation_work.mode, WorkflowMode.SIMULATION)
-        self.assertEqual(execution_work.mode, WorkflowMode.EXECUTION)
-        self.assertNotEqual(simulation_work.id, execution_work.id)
-        self.assertNotEqual(simulation_work.capital_context, execution_work.capital_context)
-        self.assertEqual(simulation.correlation_id, execution.proposal.work.correlation_id)
-        self.assertEqual(report_store.load_report(report.run_id), report)
-        self.assertEqual(record_repository.load(execution_work.id), execution)
-        self.assertEqual(ledger_repository.load(mode="execution", currency="EUR"), ledger)
-        self.assertEqual(
-            simulation_ledger_repository.load(mode="simulation", currency="EUR"), simulation_ledger
-        )
-        self.assertEqual(ExecutionRecordRow.objects.count(), 1)
-        self.assertEqual(PortfolioLedgerRow.objects.count(), 2)
-        self.assertEqual(SimulationReportRow.objects.count(), 1)
-
-    def test_repeated_settlement_delivery_is_idempotent(self) -> None:
-        request = _sports_request()
-        (work,) = resolve_routes(
-            RoutingConfiguration(sports_capital=EngineModes(execution=True)),
-            "sports_capital",
-            request.opportunity_id,
-            CORRELATION_ID,
-            "owner",
-        )
-        record, ledger, _, _ = self._settle_execution(request, work)
-        assert record.result is not None
-
-        repeated_record, repeated_ledger = SettlementService().settle(record, ledger, record.result)
-
-        self.assertEqual(repeated_record, record)
-        self.assertEqual(repeated_ledger, ledger)
-        self.assertEqual(ExecutionRecordRow.objects.count(), 1)
-
     def test_cancelled_execution_settlement_does_not_change_simulation_report(self) -> None:
         request = _bonus_request()
         routes = resolve_routes(
@@ -611,29 +373,3 @@ class ModeSettlementIsolationE2ETests(TransactionTestCase):
         self.assertEqual(cancelled_ledger.balance.available, Decimal("1000"))
         self.assertEqual(report_store.load_report(report.run_id), report)
         self.assertTrue(simulation.simulation_result.completed_steps)
-
-    def test_mode_revalidation_rejection_stops_dispatch_before_execution_state_exists(self) -> None:
-        request = _sports_request()
-        (work,) = resolve_routes(
-            RoutingConfiguration(sports_capital=EngineModes(execution=True)),
-            "sports_capital",
-            request.opportunity_id,
-            CORRELATION_ID,
-            "owner",
-        )
-        result = WorkflowOrchestrator(
-            mode_request_handlers=_handlers(request.opportunity_id, RevalidationOutcome.REJECTED)
-        ).process(
-            WorkflowRequest(
-                id=str(work.id),
-                opportunity_id=request.opportunity_id,
-                mode=WorkflowMode.EXECUTION,
-                correlation_id=CORRELATION_ID,
-                stages=(WorkflowStage.LIQUIDITY_CHECK, WorkflowStage.DISPATCH),
-            )
-        )
-
-        self.assertEqual(result.final_decision, WorkflowDecision.REJECT)
-        self.assertIsNone(result.request_handler_result)
-        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
-        self.assertEqual(PortfolioLedgerRow.objects.count(), 0)

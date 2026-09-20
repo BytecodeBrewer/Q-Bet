@@ -34,7 +34,7 @@ def _handlers(opportunity_id: str):
     return sandbox_mode_handlers(opportunity_id, observed_at=NOW)
 
 
-class Issue112ReviewRegressionTests(TestCase):
+class DurableSimulationAndDispatchTests(TestCase):
     def test_gui_simulation_preserves_existing_shared_ledger_history(self) -> None:
         repository = SimulationPortfolioLedgerRepository()
         initial = PortfolioLedger(
