@@ -16,13 +16,7 @@ from qbet.bank.bunq import (
     BunqBalanceProvider,
     BunqOperatingMode,
 )
-from qbet.bank.funding import (
-    BankFundingProposal,
-    BankFundingProposalService,
-    FundingAccountRole,
-    FundingApprover,
-    FundingDirection,
-)
+from qbet.bank.funding import FundingApprover
 from qbet.data.models import DataSourceMetadata, DataTarget, SourceTransport
 from qbet.data.results import ResultCollectionRequest, ResultProviderTarget
 from qbet.data.the_odds_api import THE_ODDS_API_PROVIDER_ID, TheOddsApiAdapter
@@ -48,7 +42,6 @@ from qbet.simulation.opportunity_source import (
     TheOddsApiSportsSimulationConfig,
     TheOddsApiSportsSimulationOpportunitySource,
 )
-from qbet.storage.funding import BunqSandboxSimulationFundingService
 from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
@@ -58,13 +51,13 @@ from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportReader
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
+from qbet.workflow.funding import SimulationSandboxFundingCoordinator
 from qbet.workflow.models import WorkflowMode
 from qbet.workflow.queue import WorkState
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
 NOW = datetime.now(UTC).replace(microsecond=0)
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
-FUNDING_ID = UUID("87654321-4321-8765-4321-876543218765")
 SPORT = "soccer_epl"
 EVENT_ID = "phase3-event-123"
 MARKET = "h2h"
@@ -368,45 +361,28 @@ class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
                 fresh_after=NOW,
             )
         ).require_fresh_balance()
-        proposal = BankFundingProposal(
-            id=FUNDING_ID,
-            direction=FundingDirection.FUNDING,
-            source_role=FundingAccountRole.BANK_ACCOUNT,
-            destination_role=FundingAccountRole.PORTFOLIO_LEDGER,
-            amount=Decimal("0.01"),
-            currency="EUR",
-            reason="phase3_connected_simulation_funding",
-            target_mode="simulation",
-            target_context=f"{OWNER}:simulation",
-            correlation_id=CORRELATION_ID,
-            created_at=NOW,
-            expires_at=NOW + timedelta(minutes=20),
-            lifecycle_at=NOW,
-        )
-        funding_policy = BankFundingProposalService(
+        funding = SimulationSandboxFundingCoordinator(
+            transport=bunq,
+            recipient_email="sandbox@example.invalid",
             max_amount=Decimal("1"),
             max_balance_age=timedelta(minutes=5),
         )
-        awaiting = funding_policy.request_approval(
-            proposal,
-            requested_at=NOW + timedelta(minutes=1),
+        funding_kwargs = {
+            "amount": Decimal("0.01"),
+            "balance": balance,
+            "approver": FundingApprover(identity=OWNER, is_authenticated=True),
+            "requested_at": NOW + timedelta(minutes=1),
+            "approved_at": NOW + timedelta(minutes=2),
+            "expires_at": NOW + timedelta(minutes=20),
+        }
+        first_funding = funding.execute_for_completed_work(
+            first_by_mode[WorkflowMode.SIMULATION],
+            **funding_kwargs,
         )
-        self.assertTrue(awaiting.accepted)
-        approved = funding_policy.approve(
-            awaiting.proposal,
-            approver=FundingApprover(identity=OWNER, is_authenticated=True),
-            approved_at=NOW + timedelta(minutes=2),
-            balance=balance,
-            ledger=simulation_before_funding,
-            capital_context=f"{OWNER}:simulation",
+        repeated_funding = funding.execute_for_completed_work(
+            first_by_mode[WorkflowMode.SIMULATION],
+            **funding_kwargs,
         )
-        self.assertTrue(approved.accepted)
-        funding_service = BunqSandboxSimulationFundingService(
-            transport=bunq,
-            recipient_email="sandbox@example.invalid",
-        )
-        first_funding = funding_service.execute(approved.proposal)
-        repeated_funding = funding_service.execute(approved.proposal)
         simulation_after_funding = PortfolioLedgerRepository().load(
             mode="simulation",
             currency="EUR",
@@ -564,6 +540,38 @@ class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
         self.assertEqual(dispatched[0].state, WorkState.RECHECK)
         self.assertEqual(dispatched[0].history[-1].reason, "revalidation_recheck")
         self.assertIsNone(ExecutionStateRepository().load(scheduled[0].work.id))
+
+        rejected_balance = ReadOnlyBankBalanceService(
+            BunqBalanceProvider(
+                source=BANK_SOURCE,
+                account_reference="bunq-***1234",
+                transport=bunq,
+            )
+        ).read_balance(
+            BankBalanceRequest(
+                source=BANK_SOURCE,
+                account_reference="bunq-***1234",
+                currency="EUR",
+                correlation_id=CORRELATION_ID,
+                fresh_after=NOW,
+            )
+        ).require_fresh_balance()
+        rejected_funding = SimulationSandboxFundingCoordinator(
+            transport=bunq,
+            recipient_email="sandbox@example.invalid",
+            max_amount=Decimal("1"),
+            max_balance_age=timedelta(minutes=5),
+        )
+        with self.assertRaisesMessage(ValueError, "simulation_funding_work_not_completed"):
+            rejected_funding.execute_for_completed_work(
+                dispatched[0],
+                amount=Decimal("0.01"),
+                balance=rejected_balance,
+                approver=FundingApprover(identity=OWNER, is_authenticated=True),
+                requested_at=NOW + timedelta(minutes=1),
+                approved_at=NOW + timedelta(minutes=2),
+                expires_at=NOW + timedelta(minutes=20),
+            )
 
         result_request = ResultCollectionRequest(
             match_id=request.opportunity_id,
