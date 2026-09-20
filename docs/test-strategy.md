@@ -71,6 +71,40 @@ The Phase 3 consolidation intentionally retires architecture-history naming:
 
 Git history retains the original issue/phase context.
 
+
+## Legacy Scenario Audit
+
+The following decisions cover every scenario from the four named legacy files in #160.
+
+| Former scenario | Decision | Current owner |
+| --- | --- | --- |
+| Phase 2 operability: GUI routing modes remain deterministic | remove duplicate composition check | `test_routing_settings.py` owns persisted staff routing; connected Phase 3 E2E owns actual dual-mode composition |
+| Phase 2 operability: connected success path | remove duplicate E2E | connected Phase 3 SportsCapital E2E plus focused approval/Monitoring suites |
+| Phase 2 operability: rejected final revalidation | remove duplicate E2E | `test_execution_approval_boundary.py` and `test_targeted_market_revalidation.py` |
+| mode isolation: single-mode schedule/dispatch | remove duplicate happy path | routing/workflow focused tests plus connected E2E |
+| mode isolation: dual-mode fanout/history | remove duplicate happy path | connected Phase 3 E2E |
+| mode isolation: recheck and expiry persistence | keep and move | `test_mode_queue_and_isolation.py` |
+| mode isolation: atomic claim | keep and move | `test_mode_queue_and_isolation.py` |
+| mode isolation: async wait/reschedule | keep and move | `test_mode_queue_and_isolation.py` |
+| mode isolation: delayed wake expiry | keep and move | `test_mode_queue_and_isolation.py` |
+| mode isolation: recheck cannot pass expiry | keep and move | `test_mode_queue_and_isolation.py` |
+| mode isolation: non-success result states | keep and move | `test_mode_queue_and_isolation.py` |
+| mode isolation: Simulation-only report happy path | remove duplicate happy path | Simulation integration suite and connected Phase 3 E2E |
+| mode isolation: Execution-only settle/retrieve happy path | remove duplicate happy path | post-event settlement integration plus connected Phase 3 E2E |
+| mode isolation: dual-mode persisted results | remove duplicate happy path | connected Phase 3 E2E |
+| mode isolation: repeated settlement delivery | remove duplicate | focused post-event/result settlement tests own replay/idempotency |
+| mode isolation: cancelled Execution leaves Simulation report unchanged | keep and move | `test_mode_queue_and_isolation.py` as explicit cross-mode isolation regression |
+| mode isolation: revalidation rejection before Execution state | remove duplicate | approval/revalidation integration suites |
+| Phase 2 completion: GUI Simulation ledger recovery | keep and rename | `test_execution_approval_ui.py` currently retains the GUI persistence/recovery regression |
+| Phase 2 completion: owner-only business approval UI | keep and rename | `test_execution_approval_ui.py` |
+| Phase 2 completion: rejected/unauthorized decision safety | keep and rename | `test_execution_approval_ui.py` |
+| Issue 112: GUI Simulation preserves shared ledger history | keep and rename | `test_durable_simulation_and_dispatch.py` |
+| Issue 112: stale Simulation snapshots merge safely | keep and rename | `test_durable_simulation_and_dispatch.py` |
+| Issue 112: persisted owner used by global due claim | keep and rename | `test_durable_simulation_and_dispatch.py` |
+| Issue 112: routed Simulation durable merge | keep and rename | `test_durable_simulation_and_dispatch.py` |
+
+The remaining `tests/integration/web/test_phase2_visuals.py` name is intentionally not changed in this ticket while #159 owns overlapping Monitoring/operability UI surfaces. That avoids a parallel rename/edit conflict; it is not part of the four legacy gates audited above.
+
 ## Adding Future Regressions
 
 Place a regression at the narrowest layer that can reproduce the bug without hiding the cause. Add or extend the connected E2E only when the defect is specifically about cross-boundary composition. Do not add production abstractions solely to shorten tests, and do not move unique safety/recovery behavior into one large E2E scenario.
