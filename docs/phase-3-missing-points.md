@@ -33,14 +33,14 @@ The central success criterion is not the number of available components. The com
 
 | Area | Current state | Main Phase 3 gap |
 | --- | --- | --- |
-| Internal workflow | The first connected SportsCapital Phase 3 E2E gate composes real adapter boundaries, calculation/risk/liquidity, isolated modes, sandbox capital feedback, post-event settlement, persistence, Monitoring and Reporting | audit/refactor the broader test suite against this now-real connected path |
+| Internal workflow | The first connected SportsCapital Phase 3 E2E gate composes real adapter boundaries, calculation/risk/liquidity, isolated modes, sandbox capital feedback, post-event settlement, persistence, Monitoring and Reporting; regression ownership is documented in `docs/test-strategy.md` | no remaining core Phase 3 test-ownership gap; extend focused coverage only when new connected behavior is added |
 | Market data | The Odds API feeds GUI-started SportsCapital Simulation through normalized snapshots and the Sports Match Builder | broaden connected data composition only when another engine/provider requires it |
 | RequestHandler | targeted pre-execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | no remaining core Phase 3 gap; post-event result collection is a separate settlement boundary |
 | Smart Polling | persisted provider/target/engine strategies, quota/cost metadata and staff configuration are implemented | multi-provider source selection can be added when another source is introduced |
 | Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback composed from completed Simulation work into Portfolio Ledger | no remaining core Phase 3 gap; broaden only when another bank/account flow requires it |
 | Notifications | approval-gated notification domain and Django email transport exist | user preferences, internal inbox/SMS later, and composition with broader approval flows |
 | Results/settlement data | The Odds API scores are connected through the provider-neutral result boundary and the connected E2E path to post-event SettlementService composition | no remaining core Phase 3 gap; add another result source only when coverage requires it |
-| Monitoring/Reporting | persisted technical Monitoring and customer Reporting exist | richer time-window dashboards plus external/infrastructure observability |
+| Monitoring/Reporting | technical Monitoring now includes bounded operational windows, summaries, durable Prometheus-compatible metrics, an importable Grafana dashboard, degraded-source visibility and configured infrastructure links; customer Reporting remains separate | customer/business Reporting UX improvements only |
 | Performance | repeatable Phase 3 connected baseline exists | later provider/network hot-path baselines where useful |
 | GUI controls | routing/runtime controls and basic profile/admin surfaces exist | later consolidated Settings/Admin Control Center and product-quality UX |
 
@@ -136,21 +136,6 @@ The loop is complete only when the post-action capital/result state returns to t
 
 Regression ownership, legacy-gate consolidation, and the durable test-layer strategy are now documented in `docs/test-strategy.md`. The connected Phase 3 SportsCapital gate remains the canonical composition regression while focused tests retain recovery, idempotency, authorization, calculation, and fail-closed responsibilities.
 
-## Priority 4 — Operative Infrastructure
-
-Smart Polling configuration and its staff-editable persistence are implemented by #147. The remaining operative-infrastructure focus is external observability and later multi-provider source balancing when another provider is actually introduced.
-
-### Observability
-
-Keep domain/business Monitoring separate from infrastructure observability.
-
-- Q-Bet Monitoring: engines, matches/opportunities, pipeline stages, approvals, errors/warnings, capital/workflow state.
-- Prometheus-compatible metrics: technical counters/gauges/histograms and provider/runtime metrics.
-- Grafana or equivalent: dashboards, time windows and technical visualization rather than rebuilding a monitoring product inside Q-Bet.
-- Hosted platform links/health (for example Vercel/Supabase/Grafana) can later be surfaced from the Admin Control Center.
-
-Prometheus-compatible instrumentation and the selected dashboard integration belong to Phase 3 after the central connected loops are stable.
-
 ## Priority 5 — GUI and Operational Control
 
 Large UX work belongs to the later part of Phase 3, after pipeline composition, sandbox realism, E2E coverage and operational stability.
@@ -185,11 +170,11 @@ Users should eventually choose channels per notification type. Initial channels 
 
 Approvals should also appear inside the application with an unread/open count, expiration handling and a visible remaining validity period. Expired approvals should disappear from the active queue automatically rather than requiring manual cleanup.
 
-### Reporting and Monitoring UX
+### Reporting UX
 
-Customer/business Reporting should remain separate from technical Monitoring.
+Customer/business Reporting remains separate from technical Monitoring.
 
-Reporting should support useful time windows and business-focused dashboards without exposing internal performance/implementation details. Monitoring should support operational time windows and dashboards for engine/pipeline health, warnings/errors and links to infrastructure observability.
+Technical Monitoring time windows, operational summaries, infrastructure links, durable Prometheus-compatible metrics and the Grafana dashboard contract are implemented. Remaining Phase 3 work here is business-facing Reporting UX: useful time windows and financial/customer dashboards without exposing internal implementation details.
 
 ### Navigation and Visual Design
 
@@ -219,8 +204,7 @@ Phase 4 is expected to follow the same pattern: establish a stable transition ar
 
 ## Recommended Ticket Sequence
 
-1. Add Prometheus-compatible metrics and dashboard integration around the stable connected flow.
-2. Expand Admin Control Center, Settings, Approval Inbox, Reporting/Monitoring dashboards and visual UX.
+1. Expand the remaining Admin Control Center and Settings surfaces, notification preferences, customer Reporting, localization and product-quality visual UX.
 
 The connected E2E definition remains the regression gate for future Phase 3 work: a complete relevant business loop with external boundaries represented by permitted read-only/sandbox interfaces and authoritative state returning to Q-Bet.
 

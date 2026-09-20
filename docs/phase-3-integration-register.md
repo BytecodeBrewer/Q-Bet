@@ -24,7 +24,7 @@ This file is the companion register for concrete Phase 3 external integrations. 
 | Result data / settlement | Resolve final match/result state independently from normal quotation ingestion where practical. | The Odds API v4 scores endpoint is the first connected result source; the other user-provided providers remain future candidates. | exact-event score/finality collection is connected to the post-event SettlementService boundary |
 | Bank / account data | Connect balances, transactions, sandbox execution, and later account-backed flows through the bank adapter boundary. | bunq is the first concrete bank integration. | bunq read-only + official sandbox adapter + durable idempotent Simulation funding feedback implemented |
 | Notifications | Notify the user when an opportunity, approval, or capital action requires attention instead of automatically navigating a provider website. | Email first. | notification domain + Django email transport implemented; richer preferences/inbox later |
-| Pipeline observability | Add established pipeline monitoring/metrics tooling around the existing structured Monitoring plane. | Prometheus-compatible metrics; dashboard tooling to be selected. | structured Monitoring exists; Prometheus/Grafana-style infrastructure observability pending |
+| Pipeline observability | Add established infrastructure metrics around the existing structured Monitoring plane without creating a second business-monitoring authority. | Durable PostgreSQL-backed Prometheus-compatible metrics plus the repository-owned Grafana dashboard in `dashboards/qbet-observability.json`. | implemented: protected metrics endpoint, bounded operational metrics, Grafana contract, Monitoring presets/summaries, degraded-source state and optional staff infrastructure links |
 | Execution adapters | Prefer official APIs where supported; otherwise keep the Phase 3 flow notification/manual-action-first. | Provider-specific execution choices still pending. | sandbox bank execution boundary exists; provider execution integrations pending |
 | Performance validation | Add repeatable performance/load measurements and operator-driven test runs against the connected system, not only unit/integration test execution. | Dedicated internal connected baseline first; provider/network hot paths later. | Phase 3 internal performance baseline implemented |
 | GUI/product experience | Continue incremental visual refinement, animations, interaction polish, and clearer product surfaces while integrations are added. | Existing Django GUI remains the product surface. | functional controls exist; larger Settings/Admin/UX expansion later in Phase 3 |
@@ -141,8 +141,11 @@ A ticket agent should use the candidates above directly. Do not open broad provi
 
 ### Monitoring / Metrics Stack
 
-- Prometheus-compatible metrics are in scope.
-- Grafana or equivalent dashboard tooling can be selected for infrastructure visualization rather than reimplementing that concern in the Q-Bet GUI.
+- The selected Phase 3 stack is Q-Bet's existing PostgreSQL Monitoring plane plus a durable read-only Prometheus-compatible projection and Grafana for infrastructure visualization.
+- `/metrics/` is disabled unless `QBET_METRICS_TOKEN` is configured. A scraper supplies that deployment secret as a Bearer token; the value is never committed or rendered in the application.
+- Import `dashboards/qbet-observability.json` into Grafana and select the Prometheus datasource through the dashboard's `${datasource}` variable. The dashboard contains no environment-specific datasource ID or secret.
+- Optional staff-only links are configured with `QBET_GRAFANA_URL`, `QBET_VERCEL_DASHBOARD_URL` and `QBET_SUPABASE_DASHBOARD_URL`; invalid or credential-bearing URLs are omitted.
+- The metrics projection remains observational and derives activity, duration, queue and Execution lifecycle state from durable PostgreSQL records. It is never a workflow, execution or capital authority.
 
 ### Notification Delivery
 
