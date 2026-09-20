@@ -835,18 +835,8 @@ class ModeDispatchCoordinator:
     ) -> None:
         """Project newly applied ledger commands with reconstructable capital state."""
 
-        cursor = before
-        operation_order = {
-            "reserve": 0,
-            "lock": 1,
-            "pending": 2,
-            "settle": 3,
-            "fail": 3,
-            "release": 4,
-            "cost": 5,
-        }
-        commands = [
-            (command_id, command)
+        pending_commands = [
+            command
             for command_id, command in after.commands.items()
             if command_id not in before.commands
             and (dispatch_id is None or command.dispatch_id == dispatch_id)
@@ -855,46 +845,53 @@ class ModeDispatchCoordinator:
                 or command.dispatch_id.startswith(dispatch_prefix)
             )
         ]
-        commands.sort(
-            key=lambda entry: (
-                operation_order.get(entry[1].operation.value, 99),
-                entry[0],
-            )
-        )
-        for command_id, command in commands:
-            updated, decision = cursor.apply(command)
-            if not decision.accepted:
-                raise ValueError("monitoring_ledger_replay_failed")
-            cursor = updated
-            position = cursor.positions.get(command.dispatch_id)
-            balance = cursor.balance
-            status = {
-                "reserve": "reserved",
-                "release": "released",
-                "lock": "locked",
-                "pending": "pending",
-                "settle": "settled",
-                "fail": "failed",
-                "cost": "cost",
-            }.get(command.operation.value, command.operation.value)
+        cursor = before
+        while pending_commands:
+            for index, command in enumerate(pending_commands):
+                updated, decision = cursor.apply(command)
+                if not decision.accepted:
+                    continue
 
-            self._record_event(
-                item,
-                stage=("settlement" if command.operation.value in {"settle", "fail"} else "ledger"),
-                event_type="capital_transition",
-                status=status,
-                reason_code=command.operation.value,
-                occurred_at=occurred_at,
-                references={
-                    "ledger_command_id": command.id,
-                    "dispatch_id": command.dispatch_id,
-                    "capital_amount": str(command.amount),
-                    "ledger_position_state": (position.state if position is not None else status),
-                    "available": str(balance.available),
-                    "reserved": str(balance.reserved),
-                    "locked": str(balance.locked),
-                    "pending": str(balance.pending),
-                    "settled": str(balance.settled),
-                    "cost": str(balance.cost),
-                },
-            )
+                pending_commands.pop(index)
+                cursor = updated
+                position = cursor.positions.get(command.dispatch_id)
+                balance = cursor.balance
+                status = {
+                    "reserve": "reserved",
+                    "release": "released",
+                    "lock": "locked",
+                    "pending": "pending",
+                    "settle": "settled",
+                    "fail": "failed",
+                    "cost": "cost",
+                }.get(command.operation.value, command.operation.value)
+
+                self._record_event(
+                    item,
+                    stage=(
+                        "settlement"
+                        if command.operation.value in {"settle", "fail"}
+                        else "ledger"
+                    ),
+                    event_type="capital_transition",
+                    status=status,
+                    reason_code=command.operation.value,
+                    occurred_at=occurred_at,
+                    references={
+                        "ledger_command_id": command.id,
+                        "dispatch_id": command.dispatch_id,
+                        "capital_amount": str(command.amount),
+                        "ledger_position_state": (
+                            position.state if position is not None else status
+                        ),
+                        "available": str(balance.available),
+                        "reserved": str(balance.reserved),
+                        "locked": str(balance.locked),
+                        "pending": str(balance.pending),
+                        "settled": str(balance.settled),
+                        "cost": str(balance.cost),
+                    },
+                )
+                break
+            else:
+                raise ValueError("monitoring_ledger_replay_failed")
