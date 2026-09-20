@@ -17,13 +17,19 @@ from qbet.bank.funding import (
     BankFundingProposal,
     BankFundingProposalService,
     FundingAccountRole,
+    FundingApproval,
     FundingApprover,
     FundingDirection,
+    FundingProposalState,
 )
 from qbet.data.models import DataSourceMetadata, SourceTransport
 from qbet.domain.ledger import PortfolioBalance
 from qbet.ledger import PortfolioLedger
-from qbet.storage.funding import BunqSandboxSimulationFundingService
+from qbet.storage.funding import (
+    BunqSandboxSimulationFundingService,
+    SandboxFundingFeedbackPersistenceError,
+    SandboxFundingFeedbackRepository,
+)
 from qbet.storage.ledger import PortfolioLedgerRepository
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
 
@@ -204,7 +210,11 @@ class BunqSandboxSimulationFundingBoundaryTests(TestCase):
             recipient_email="sandbox@example.invalid",
         )
         first = funding_service.execute(approved.proposal)
-        replay = funding_service.execute(approved.proposal)
+        restarted_service = BunqSandboxSimulationFundingService(
+            transport=transport,
+            recipient_email="sandbox@example.invalid",
+        )
+        replay = restarted_service.execute(approved.proposal)
         persisted = PortfolioLedgerRepository().load(
             mode="simulation",
             currency="EUR",
@@ -216,3 +226,49 @@ class BunqSandboxSimulationFundingBoundaryTests(TestCase):
         assert transport.payment_calls == 1
         assert persisted is not None
         assert persisted.balance.available == Decimal("10.01")
+
+    def test_durable_claim_blocks_provider_retry_when_outcome_is_unknown(self) -> None:
+        transport = SandboxTransport()
+        SimulationPortfolioLedgerRepository().load_or_create(
+            PortfolioLedger(
+                balance=PortfolioBalance(
+                    mode="simulation",
+                    currency="EUR",
+                    available=Decimal("10"),
+                )
+            )
+        )
+        proposal = BankFundingProposal(
+            id=PROPOSAL_ID,
+            direction=FundingDirection.FUNDING,
+            source_role=FundingAccountRole.BANK_ACCOUNT,
+            destination_role=FundingAccountRole.PORTFOLIO_LEDGER,
+            amount=Decimal("0.01"),
+            currency="EUR",
+            reason="bunq_sandbox_simulation_funding",
+            target_mode="simulation",
+            target_context="owner:simulation",
+            correlation_id=CORRELATION_ID,
+            created_at=NOW - timedelta(minutes=2),
+            expires_at=NOW + timedelta(minutes=3),
+            lifecycle_at=NOW,
+            state=FundingProposalState.APPROVED,
+            approval=FundingApproval(
+                approver=FundingApprover(identity="staff-1", is_authenticated=True),
+                approved_at=NOW,
+            ),
+        )
+        claim = SandboxFundingFeedbackRepository().claim(proposal)
+        assert claim.acquired
+
+        restarted_service = BunqSandboxSimulationFundingService(
+            transport=transport,
+            recipient_email="sandbox@example.invalid",
+        )
+        with self.assertRaisesMessage(
+            SandboxFundingFeedbackPersistenceError,
+            "sandbox_funding_provider_outcome_unknown",
+        ):
+            restarted_service.execute(proposal)
+
+        assert transport.payment_calls == 0

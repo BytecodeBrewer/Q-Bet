@@ -377,7 +377,13 @@ class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
             approved_at=NOW + timedelta(minutes=2),
             expires_at=NOW + timedelta(minutes=20),
         )
-        repeated_funding = funding.execute_for_completed_work(
+        restarted_funding = SimulationSandboxFundingCoordinator(
+            transport=bunq,
+            recipient_email="sandbox@example.invalid",
+            max_amount=Decimal("1"),
+            max_balance_age=timedelta(minutes=5),
+        )
+        repeated_funding = restarted_funding.execute_for_completed_work(
             first_by_mode[WorkflowMode.SIMULATION],
             amount=Decimal("0.01"),
             balance=balance,
