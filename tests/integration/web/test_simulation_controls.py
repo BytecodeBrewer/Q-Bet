@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
@@ -13,14 +14,20 @@ import django
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 
+from qbet.data import TheOddsApiAdapter
 from qbet.layers import SimulationLogRecordType
 from qbet.simulation import SimulationEngine
-from qbet.storage.ledger import RoutingConfigurationRepository
+from qbet.simulation.opportunity_source import (
+    TheOddsApiSportsSimulationConfig,
+    TheOddsApiSportsSimulationOpportunitySource,
+)
+from qbet.storage.ledger import PortfolioLedgerRepository, RoutingConfigurationRepository
 from qbet.storage.postgres import PostgresSimulationReportReader
 from qbet.web.models import SimulationAvailability, SimulationRunState
 from qbet.web.monitoring import MonitoringService
 from qbet.web.simulation_control import (
     SimulationAlreadyRunningError,
+    SimulationControlError,
     SimulationControlService,
 )
 from qbet.workflow import WorkflowStage
@@ -274,3 +281,124 @@ class SimulationGuiControlTests(TestCase):
                 SimulationEngine.SPORTS_CAPITAL.value,
             },
         )
+
+    def test_connected_sports_simulation_reads_one_market_and_persists_run_correlation(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        requested_urls: list[str] = []
+        now = datetime(2026, 9, 19, 1, 0, tzinfo=UTC)
+        provider_payload = {
+            "id": "event-123",
+            "sport_key": "tennis_atp",
+            "bookmakers": [
+                {
+                    "key": "book-a",
+                    "markets": [
+                        {
+                            "key": "h2h",
+                            "outcomes": [
+                                {"name": "Home", "price": 2.4},
+                                {"name": "Away", "price": 2.2},
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "key": "book-b",
+                    "markets": [
+                        {
+                            "key": "h2h",
+                            "outcomes": [
+                                {"name": "Home", "price": 2.3},
+                                {"name": "Away", "price": 2.5},
+                            ],
+                        }
+                    ],
+                },
+            ],
+        }
+        adapter = TheOddsApiAdapter(
+            api_key="configured-for-test",
+            available_stake=Decimal("100"),
+            clock=lambda: now,
+            http_get=lambda url: (
+                requested_urls.append(url) or 200,
+                {},
+                json.dumps(provider_payload).encode(),
+            ),
+        )
+        source = TheOddsApiSportsSimulationOpportunitySource(
+            TheOddsApiSportsSimulationConfig(
+                sport="tennis_atp",
+                event_id="event-123",
+                market="h2h",
+                assumed_liquidity=Decimal("100"),
+                requested_total_stake=Decimal("20"),
+                stake_precision=Decimal("0.01"),
+            ),
+            collector=adapter,
+        )
+        service = SimulationControlService(opportunity_source=source)
+
+        run = service.start(
+            engine=SimulationEngine.SPORTS_CAPITAL,
+            starting_capital=Decimal("100"),
+            max_duration=timedelta(minutes=60),
+        )
+
+        self.assertEqual(run.status, SimulationRunState.Status.COMPLETED)
+        self.assertEqual(len(requested_urls), 1)
+        self.assertIn("/sports/tennis_atp/events/event-123/odds?", requested_urls[0])
+        self.assertIsNotNone(run.report_id)
+        assert run.report_id is not None
+        report = PostgresSimulationReportReader().load_report(run.report_id)
+        self.assertEqual(report.run_id, run.run_id)
+        self.assertIsNotNone(report.customer_report_input)
+        assert report.customer_report_input is not None
+        self.assertEqual(report.customer_report_input.transaction_id, str(run.run_id))
+        self.assertEqual(
+            {
+                report.customer_report_input.provider,
+                report.customer_report_input.counterparty_provider,
+            },
+            {"book-a", "book-b"},
+        )
+        ledger = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        self.assertIsNotNone(ledger)
+        assert ledger is not None
+        self.assertTrue(ledger.commands)
+        self.assertEqual(
+            {command.correlation_id for command in ledger.commands.values()},
+            {str(run.run_id)},
+        )
+
+    @override_settings(
+        QBET_SIMULATION_SPORTS_SOURCE="the_odds_api",
+        QBET_SIMULATION_ODDS_SPORT="",
+        QBET_SIMULATION_ODDS_EVENT_ID="",
+        QBET_SIMULATION_ODDS_MARKET="",
+        QBET_SIMULATION_ASSUMED_LIQUIDITY="",
+        QBET_SIMULATION_REQUESTED_TOTAL_STAKE="",
+        QBET_SIMULATION_STAKE_PRECISION="",
+    )
+    def test_connected_sports_configuration_failure_is_safe_and_persisted(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        service = SimulationControlService()
+
+        with self.assertRaises(SimulationControlError) as raised:
+            service.start(
+                engine=SimulationEngine.SPORTS_CAPITAL,
+                starting_capital=Decimal("100"),
+                max_duration=timedelta(minutes=60),
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "simulation_market_configuration_missing",
+        )
+        run = SimulationRunState.objects.get()
+        self.assertEqual(run.status, SimulationRunState.Status.FAILED)
+        self.assertEqual(
+            run.error_message,
+            "simulation_market_configuration_missing",
+        )
+

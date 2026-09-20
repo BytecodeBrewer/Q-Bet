@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -9,19 +9,23 @@ from django.conf import settings
 from django.db import transaction
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone
+from pydantic import ValidationError
 
-from qbet.calculations import ArbitrageOffer, QualifyingBetInput, TwoWayArbitrageInput
 from qbet.domain.ledger import PortfolioBalance
-from qbet.domain.verification import ProviderState
-from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.ledger import PortfolioLedger
-from qbet.reporting import CustomerReportAmount, CustomerReportInput
 from qbet.simulation import (
     SimulationContext,
     SimulationEngine,
     SimulationRunConfig,
     WorkflowSimulationRequest,
     WorkflowSimulationRunner,
+)
+from qbet.simulation.opportunity_source import (
+    DeterministicSimulationOpportunitySource,
+    SimulationOpportunitySource,
+    SimulationOpportunitySourceError,
+    TheOddsApiSportsSimulationConfig,
+    TheOddsApiSportsSimulationOpportunitySource,
 )
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
@@ -39,6 +43,10 @@ _SUPPORTED_ENGINES = (
 
 class SimulationControlError(RuntimeError):
     """Safe application-layer error that can be shown in the GUI."""
+
+    def __init__(self, message: str, *, reason_code: str | None = None) -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
 
 
 class SimulationDisabledError(SimulationControlError):
@@ -89,6 +97,9 @@ class SimulationControlSnapshot:
 
 class SimulationControlService:
     """Typed application boundary between Django and simulation workflow execution."""
+
+    def __init__(self, *, opportunity_source: SimulationOpportunitySource | None = None) -> None:
+        self._opportunity_source = opportunity_source
 
     def availability(self) -> SimulationAvailabilitySnapshot:
         try:
@@ -213,19 +224,45 @@ class SimulationControlService:
         )
 
         try:
-            request = self._request_for(config=effective_config, run_id=run_id)
+            source = self._opportunity_source or self._configured_opportunity_source(engine)
+            bundle = source.build(effective_config, run_id)
+            request = WorkflowSimulationRequest(
+                config=effective_config,
+                opportunities=bundle.opportunities,
+                provider_state=bundle.provider_state,
+                correlation_id=run_id,
+                customer_report_input=bundle.customer_report_input,
+            )
             result = runner.run(
                 request,
                 on_step_completed=lambda context: self._record_progress(run_id, context),
             )
+        except SimulationOpportunitySourceError as error:
+            self._update_run(
+                run_id,
+                status=SimulationRunState.Status.FAILED,
+                error_message=error.reason_code,
+            )
+            raise SimulationControlError(
+                error.user_message,
+                reason_code=error.reason_code,
+            ) from None
+        except SimulationControlError as error:
+            self._update_run(
+                run_id,
+                status=SimulationRunState.Status.FAILED,
+                error_message=error.reason_code or "simulation_configuration_invalid",
+            )
+            raise
         except Exception as error:
             self._update_run(
                 run_id,
                 status=SimulationRunState.Status.FAILED,
-                error_message="Simulation failed safely; inspect structured logs for details.",
+                error_message="simulation_failed",
             )
             raise SimulationControlError(
-                "Simulation failed safely; no live execution was attempted."
+                "Simulation failed safely; no live execution was attempted.",
+                reason_code="simulation_failed",
             ) from error
 
         simulation_result = result.simulation_result
@@ -308,102 +345,47 @@ class SimulationControlService:
         SimulationRunState.objects.filter(pk=run_id).update(**changes)
 
     @staticmethod
-    def _request_for(
-        *,
-        config: SimulationRunConfig,
-        run_id: UUID,
-    ) -> WorkflowSimulationRequest:
-        generated_at = datetime.now(UTC)
-        opportunities: tuple[BonusEngineRequest | SportsCapitalEngineRequest, ...]
-        if config.engine is SimulationEngine.BONUS:
-            opportunities = tuple(
-                BonusEngineRequest(
-                    opportunity_id=f"gui-{run_id}-bonus-{index}",
-                    inputs=QualifyingBetInput(
-                        back_odds=Decimal("2.50"),
-                        lay_odds=Decimal("2.60"),
-                        back_stake=Decimal("10"),
-                        exchange_commission=Decimal("0.02"),
-                        stake_precision=Decimal("0.01"),
-                        max_lay_liability=Decimal("1000"),
-                    ),
-                    currency="EUR",
-                    execution_offer_ids=(
-                        f"gui-book-{index}",
-                        f"gui-exchange-{index}",
-                    ),
-                    generated_at=generated_at,
-                )
-                for index in range(1, 3)
+    def _configured_opportunity_source(
+        engine: SimulationEngine,
+    ) -> SimulationOpportunitySource:
+        if engine is SimulationEngine.BONUS:
+            return DeterministicSimulationOpportunitySource()
+
+        source_mode = str(
+            getattr(settings, "QBET_SIMULATION_SPORTS_SOURCE", "fixture")
+        ).strip().lower()
+        if source_mode in {"", "fixture"}:
+            return DeterministicSimulationOpportunitySource()
+        if source_mode != "the_odds_api":
+            raise SimulationControlError(
+                "Configured SportsCapital Simulation source is invalid.",
+                reason_code="simulation_source_invalid",
             )
-        elif config.engine is SimulationEngine.SPORTS_CAPITAL:
 
-            def offer(outcome: str) -> ArbitrageOffer:
-                return ArbitrageOffer(
-                    outcome=outcome,
-                    odds=Decimal("2.20"),
-                    available_liquidity=Decimal("1000"),
-                    stake_precision=Decimal("0.01"),
-                    currency="EUR",
-                )
-
-            opportunities = tuple(
-                SportsCapitalEngineRequest(
-                    opportunity_id=f"gui-{run_id}-sports-{index}",
-                    inputs=TwoWayArbitrageInput(
-                        first_offer=offer(f"home-{index}"),
-                        second_offer=offer(f"away-{index}"),
-                        requested_total_stake=Decimal("20"),
-                    ),
-                    currency="EUR",
-                    execution_offer_ids=(
-                        f"gui-home-{index}",
-                        f"gui-away-{index}",
-                    ),
-                    generated_at=generated_at,
-                )
-                for index in range(1, 3)
-            )
-        else:
-            raise SimulationControlError("Unsupported simulation engine.")
-
-        return WorkflowSimulationRequest(
-            config=config,
-            opportunities=opportunities,
-            provider_state=ProviderState(
-                provider_id="gui-sandbox-provider",
-                active_bets_count=0,
+        values = {
+            "sport": getattr(settings, "QBET_SIMULATION_ODDS_SPORT", ""),
+            "event_id": getattr(settings, "QBET_SIMULATION_ODDS_EVENT_ID", ""),
+            "market": getattr(settings, "QBET_SIMULATION_ODDS_MARKET", ""),
+            "assumed_liquidity": getattr(
+                settings, "QBET_SIMULATION_ASSUMED_LIQUIDITY", ""
             ),
-            correlation_id=run_id,
-            customer_report_input=SimulationControlService._customer_report_input_for(config),
-        )
-
-    @staticmethod
-    def _customer_report_input_for(config: SimulationRunConfig) -> CustomerReportInput:
-        if config.engine is SimulationEngine.BONUS:
-            return CustomerReportInput(
-                match="Deterministic bonus fixture",
-                provider="Fixture sportsbook",
-                counterparty_provider="Fixture exchange",
-                strategy="Qualifying bet",
-                assigned_amounts=(
-                    CustomerReportAmount(label="Back stake", amount=Decimal("10")),
-                    CustomerReportAmount(label="Lay stake", amount=Decimal("9.62")),
-                ),
-                invested_capital=Decimal("10"),
-                currency="EUR",
+            "requested_total_stake": getattr(
+                settings, "QBET_SIMULATION_REQUESTED_TOTAL_STAKE", ""
+            ),
+            "stake_precision": getattr(
+                settings, "QBET_SIMULATION_STAKE_PRECISION", ""
+            ),
+        }
+        if any(not str(value).strip() for value in values.values()):
+            raise SimulationControlError(
+                "Connected SportsCapital Simulation is not fully configured.",
+                reason_code="simulation_market_configuration_missing",
             )
-        if config.engine is SimulationEngine.SPORTS_CAPITAL:
-            return CustomerReportInput(
-                match="Deterministic arbitrage fixture",
-                provider="Fixture sportsbook A",
-                counterparty_provider="Fixture sportsbook B",
-                strategy="Two-way arbitrage",
-                assigned_amounts=(
-                    CustomerReportAmount(label="Home allocation", amount=Decimal("10")),
-                    CustomerReportAmount(label="Away allocation", amount=Decimal("10")),
-                ),
-                invested_capital=Decimal("20"),
-                currency="EUR",
-            )
-        raise SimulationControlError("Unsupported simulation engine.")
+        try:
+            connected = TheOddsApiSportsSimulationConfig.model_validate(values)
+        except ValidationError:
+            raise SimulationControlError(
+                "Connected SportsCapital Simulation configuration is invalid.",
+                reason_code="simulation_market_configuration_invalid",
+            ) from None
+        return TheOddsApiSportsSimulationOpportunitySource(connected)

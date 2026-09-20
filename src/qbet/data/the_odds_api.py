@@ -40,6 +40,18 @@ class TheOddsApiConfigurationError(TheOddsApiError):
     """Raised when required application-bound configuration is missing."""
 
 
+class TheOddsApiAuthenticationError(TheOddsApiError):
+    """Raised when The Odds API rejects configured credentials."""
+
+
+class TheOddsApiRateLimitError(TheOddsApiError):
+    """Raised when The Odds API rejects a request because quota is exhausted."""
+
+
+class TheOddsApiTransportError(TheOddsApiError):
+    """Raised when the provider cannot be reached or returns a temporary failure."""
+
+
 class TheOddsApiPayloadError(TheOddsApiError):
     """Raised when provider data cannot safely become a normalized snapshot."""
 
@@ -115,11 +127,12 @@ class TheOddsApiAdapter:
         url = f"{_BASE_URL}/sports/{sport}/events/{event_id}/odds?{query}"
         try:
             status, _, response = self._http_get(url)
-        except (HTTPError, URLError, OSError):
-            # urllib exceptions may retain the complete request URL, including apiKey.
-            raise TheOddsApiError("The Odds API request failed") from None
+        except HTTPError as error:
+            raise _http_status_error(error.code) from None
+        except (URLError, OSError):
+            raise TheOddsApiTransportError("The Odds API request failed") from None
         if status != 200:
-            raise TheOddsApiError(f"The Odds API returned HTTP {status}")
+            raise _http_status_error(status)
         try:
             payload = json.loads(response)
         except (TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -168,6 +181,15 @@ class TheOddsApiAdapter:
             )
         except ValidationError as error:
             raise TheOddsApiPayloadError("The Odds API payload validation failed") from error
+
+
+def _http_status_error(status: int) -> TheOddsApiError:
+    message = f"The Odds API request failed with HTTP {status}"
+    if status in {401, 403}:
+        return TheOddsApiAuthenticationError(message)
+    if status == 429:
+        return TheOddsApiRateLimitError(message)
+    return TheOddsApiTransportError(message)
 
 
 def _offers_for_market(

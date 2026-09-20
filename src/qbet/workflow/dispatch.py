@@ -11,6 +11,7 @@ from uuid import UUID
 from asgiref.sync import sync_to_async
 from django.db import DatabaseError, transaction
 
+from qbet.data.results import ResultProviderTarget
 from qbet.domain.ledger import PortfolioBalance
 from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
@@ -26,7 +27,7 @@ from qbet.notifications import (
     NotificationRecipientResolver,
 )
 from qbet.request_handler import ModeRequestHandlers
-from qbet.request_handler.models import ResultStatus
+from qbet.request_handler.models import ResultStatus, TargetedMarketRevalidationContext
 from qbet.simulation.models import SimulationEngine, SimulationRunConfig
 from qbet.simulation.workflow import WorkflowSimulationRequest, WorkflowSimulationRunner
 from qbet.storage.ledger import (
@@ -101,6 +102,7 @@ class ModeDispatchCoordinator:
         correlation_id: UUID,
         scheduled_for: datetime,
         expires_at: datetime,
+        market_revalidation: TargetedMarketRevalidationContext | None = None,
     ) -> tuple[QueuedWorkItem, ...]:
         engine: V1Engine = "bonus" if isinstance(request, BonusEngineRequest) else "sports_capital"
         routes = self._routing_orchestrator.route(
@@ -116,6 +118,7 @@ class ModeDispatchCoordinator:
                     request,
                     scheduled_for=scheduled_for,
                     expires_at=expires_at,
+                    market_revalidation=market_revalidation,
                 )
             )
             for route in routes
@@ -186,6 +189,7 @@ class ModeDispatchCoordinator:
                 opportunity_id=processing.work.opportunity_id,
                 mode=processing.work.mode,
                 correlation_id=processing.work.correlation_id,
+                market_revalidation=processing.market_revalidation,
                 stages=(
                     WorkflowStage.DATA_AGGREGATION,
                     WorkflowStage.ENGINE_PREPARATION,
@@ -371,6 +375,14 @@ class ModeDispatchCoordinator:
             )
             if persisted_record.state is Lifecycle.SETTLED:
                 return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
+            if persisted_record.state is Lifecycle.ACKNOWLEDGED:
+                return self._save_queue(
+                    item.transition(
+                        WorkState.RECHECK,
+                        now=now,
+                        reason="post_event_result_pending",
+                    )
+                )
             if persisted_record.state in {Lifecycle.REJECTED, Lifecycle.CANCELLED}:
                 return self._save_queue(
                     item.transition(
@@ -718,6 +730,16 @@ class ModeDispatchCoordinator:
     @staticmethod
     def _execution_proposal(item: QueuedWorkItem) -> ExecutionProposal:
         capital, payout = valuation(item.request)
+        revalidation = item.market_revalidation
+        result_source = revalidation.source if revalidation is not None else None
+        result_provider_target = (
+            ResultProviderTarget(
+                sport=revalidation.sport,
+                event_id=revalidation.event_id,
+            )
+            if revalidation is not None
+            else None
+        )
         return ExecutionProposal(
             work=item.work,
             request=item.request,
@@ -725,6 +747,8 @@ class ModeDispatchCoordinator:
             currency=item.request.currency,
             capital_required=capital,
             payout=payout,
+            result_source=result_source,
+            result_provider_target=result_provider_target,
         )
 
     def _execution_state(
@@ -811,48 +835,63 @@ class ModeDispatchCoordinator:
     ) -> None:
         """Project newly applied ledger commands with reconstructable capital state."""
 
-        cursor = before
-        for command_id, command in after.commands.items():
-            if command_id in before.commands:
-                continue
-            if dispatch_id is not None and command.dispatch_id != dispatch_id:
-                continue
-            if dispatch_prefix is not None and not command.dispatch_id.startswith(dispatch_prefix):
-                continue
-
-            updated, decision = cursor.apply(command)
-            if not decision.accepted:
-                raise ValueError("monitoring_ledger_replay_failed")
-            cursor = updated
-            position = cursor.positions.get(command.dispatch_id)
-            balance = cursor.balance
-            status = {
-                "reserve": "reserved",
-                "release": "released",
-                "lock": "locked",
-                "pending": "pending",
-                "settle": "settled",
-                "fail": "failed",
-                "cost": "cost",
-            }.get(command.operation.value, command.operation.value)
-
-            self._record_event(
-                item,
-                stage=("settlement" if command.operation.value in {"settle", "fail"} else "ledger"),
-                event_type="capital_transition",
-                status=status,
-                reason_code=command.operation.value,
-                occurred_at=occurred_at,
-                references={
-                    "ledger_command_id": command.id,
-                    "dispatch_id": command.dispatch_id,
-                    "capital_amount": str(command.amount),
-                    "ledger_position_state": (position.state if position is not None else status),
-                    "available": str(balance.available),
-                    "reserved": str(balance.reserved),
-                    "locked": str(balance.locked),
-                    "pending": str(balance.pending),
-                    "settled": str(balance.settled),
-                    "cost": str(balance.cost),
-                },
+        pending_commands = [
+            command
+            for command_id, command in after.commands.items()
+            if command_id not in before.commands
+            and (dispatch_id is None or command.dispatch_id == dispatch_id)
+            and (
+                dispatch_prefix is None
+                or command.dispatch_id.startswith(dispatch_prefix)
             )
+        ]
+        cursor = before
+        while pending_commands:
+            for index, command in enumerate(pending_commands):
+                updated, decision = cursor.apply(command)
+                if not decision.accepted:
+                    continue
+
+                pending_commands.pop(index)
+                cursor = updated
+                position = cursor.positions.get(command.dispatch_id)
+                balance = cursor.balance
+                status = {
+                    "reserve": "reserved",
+                    "release": "released",
+                    "lock": "locked",
+                    "pending": "pending",
+                    "settle": "settled",
+                    "fail": "failed",
+                    "cost": "cost",
+                }.get(command.operation.value, command.operation.value)
+
+                self._record_event(
+                    item,
+                    stage=(
+                        "settlement"
+                        if command.operation.value in {"settle", "fail"}
+                        else "ledger"
+                    ),
+                    event_type="capital_transition",
+                    status=status,
+                    reason_code=command.operation.value,
+                    occurred_at=occurred_at,
+                    references={
+                        "ledger_command_id": command.id,
+                        "dispatch_id": command.dispatch_id,
+                        "capital_amount": str(command.amount),
+                        "ledger_position_state": (
+                            position.state if position is not None else status
+                        ),
+                        "available": str(balance.available),
+                        "reserved": str(balance.reserved),
+                        "locked": str(balance.locked),
+                        "pending": str(balance.pending),
+                        "settled": str(balance.settled),
+                        "cost": str(balance.cost),
+                    },
+                )
+                break
+            else:
+                raise ValueError("monitoring_ledger_replay_failed")

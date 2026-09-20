@@ -1,7 +1,7 @@
 """Validated settlement is the only dispatch-result capital writer."""
 
-from qbet.domain.ledger import LedgerCommand, LedgerOperation
 from qbet.data.results import NormalizedMatchResult, ResultCollectionOutcome
+from qbet.domain.ledger import LedgerCommand, LedgerOperation
 from qbet.execution.models import ExecutionRecord, Lifecycle, SandboxResult
 from qbet.execution.sandbox import SandboxRequestHandler
 from qbet.ledger import PortfolioLedger
@@ -64,6 +64,7 @@ class SettlementService:
             or result.execution_id != outcome.request.execution_id
             or result.correlation_id != outcome.request.correlation_id
             or result.source != outcome.request.source
+            or result.provider_target != outcome.request.provider_target
         ):
             raise ValueError("collected_result_identity_mismatch")
         if (
@@ -72,6 +73,12 @@ class SettlementService:
             or result.correlation_id != work.correlation_id
         ):
             raise ValueError("collected_result_identity_mismatch")
+        proposal = record.proposal
+        if proposal.result_source is not None and (
+            outcome.request.source != proposal.result_source
+            or outcome.request.provider_target != proposal.result_provider_target
+        ):
+            raise ValueError("collected_result_provider_identity_mismatch")
         return result
 
     @classmethod
@@ -83,10 +90,14 @@ class SettlementService:
         if collected_result is None:
             return result
         normalized = cls.collected_result_for_settlement(collected_result)
-        status = cls._PROVIDER_TO_SANDBOX_STATUS.get(normalized.provider_outcome or "")
-        if status is None:
+        if normalized.provider_outcome is None:
+            # Event finality/score evidence is post-event data and must not rewrite
+            # the dispatch acknowledgement timestamp or financial result status.
+            return result
+        mapped = cls._PROVIDER_TO_SANDBOX_STATUS.get(normalized.provider_outcome)
+        if mapped is None:
             raise ValueError("collected_result_outcome_unmapped")
-        return result.model_copy(update={"status": status, "observed_at": normalized.observed_at})
+        return result.model_copy(update={"status": mapped, "observed_at": normalized.observed_at})
 
     def settle(
         self,
@@ -96,15 +107,19 @@ class SettlementService:
         *,
         collected_result: ResultCollectionOutcome | None = None,
     ) -> tuple[ExecutionRecord, PortfolioLedger]:
-        settlement_result = self._result_for_settlement(result, collected_result)
-        if collected_result is not None:
+        normalized = (
             self.validates_collected_result(record, collected_result)
+            if collected_result is not None
+            else None
+        )
+        settlement_result = self._result_for_settlement(result, collected_result)
         if record.state in {
             Lifecycle.SETTLED,
             Lifecycle.FAILED,
             Lifecycle.CANCELLED,
         }:
-            if record.result == settlement_result:
+            same_collected_result = normalized is None or record.collected_result == normalized
+            if record.result == settlement_result and same_collected_result:
                 return record, ledger
             return record.model_copy(update={"error": "settlement_result_conflict"}), ledger
         if record.state is not Lifecycle.ACKNOWLEDGED:
@@ -130,4 +145,10 @@ class SettlementService:
             "failed": Lifecycle.FAILED,
             "cancelled": Lifecycle.CANCELLED,
         }[settlement_result.status]
-        return transition(record, state, result=settlement_result, error=None), updated
+        return transition(
+            record,
+            state,
+            result=settlement_result,
+            collected_result=normalized,
+            error=None,
+        ), updated

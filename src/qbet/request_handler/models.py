@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from qbet.domain.models import DomainModel, Identifier
+from qbet.data.models import DataSourceMetadata, DataTarget
+from qbet.domain.models import DomainModel, Identifier, OfferSide
 
 
 class RequestHandlerMode(StrEnum):
@@ -32,6 +34,34 @@ class ResultStatus(StrEnum):
     NOT_YET_AVAILABLE = "not_yet_available"
 
 
+class ExpectedMarketOffer(DomainModel):
+    """Small provider-neutral quote fingerprint used for last-mile revalidation."""
+
+    provider: Identifier
+    selection: Identifier
+    side: OfferSide
+    odds: Decimal = Field(gt=Decimal(1), allow_inf_nan=False)
+
+
+class TargetedMarketRevalidationContext(DomainModel):
+    """Exact market identity and quote state required for one targeted refresh."""
+
+    source: DataSourceMetadata
+    target: DataTarget
+    sport: Identifier
+    event_id: Identifier
+    market: Identifier
+    expected_offers: tuple[ExpectedMarketOffer, ...] = Field(min_length=1)
+    expires_at: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def expected_offers_are_distinct(self) -> "TargetedMarketRevalidationContext":
+        keys = {(offer.provider, offer.selection, offer.side) for offer in self.expected_offers}
+        if len(keys) != len(self.expected_offers):
+            raise ValueError("expected market offers must use distinct provider/selection/side keys")
+        return self
+
+
 class ModeRequest(DomainModel):
     """A targeted refresh request, independent from aggregation and capital state."""
 
@@ -39,6 +69,7 @@ class ModeRequest(DomainModel):
     mode: RequestHandlerMode
     correlation_id: UUID
     lifecycle_id: Identifier
+    market_revalidation: TargetedMarketRevalidationContext | None = None
 
 
 class RevalidationResult(ModeRequest):

@@ -394,3 +394,37 @@ def test_sandbox_payment_requires_explicit_recipient_configuration() -> None:
     assert not result.sent
     assert result.reason_code == "bunq_sandbox_recipient_missing"
     assert transport.payment_calls == 0
+
+
+def test_sandbox_payment_can_be_explicitly_scoped_to_simulation() -> None:
+    transport = FakeBunqTransport()
+    adapter = BunqSandboxFundingAdapter(
+        transport=transport,
+        recipient_email="sandbox@example.invalid",
+        target_mode="simulation",
+    )
+    proposal = approved_proposal(
+        target_mode="simulation",
+        target_context="owner:simulation",
+    )
+
+    result = adapter.execute(proposal)
+
+    assert result.sent
+    assert result.correlation_id == CORRELATION_ID
+    assert transport.payment_calls == 1
+
+
+def test_simulation_scoped_sandbox_adapter_rejects_execution_proposal() -> None:
+    transport = FakeBunqTransport()
+    adapter = BunqSandboxFundingAdapter(
+        transport=transport,
+        recipient_email="sandbox@example.invalid",
+        target_mode="simulation",
+    )
+
+    result = adapter.execute(approved_proposal())
+
+    assert not result.sent
+    assert result.reason_code == "bunq_sandbox_payment_requires_simulation_context"
+    assert transport.payment_calls == 0

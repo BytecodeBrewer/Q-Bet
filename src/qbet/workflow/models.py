@@ -8,7 +8,7 @@ from pydantic import Field, model_validator
 
 from qbet.domain.models import DomainModel, Identifier
 from qbet.layers.logging import SimulationLogRecord
-from qbet.request_handler.models import RequestHandlerResult
+from qbet.request_handler.models import RequestHandlerResult, TargetedMarketRevalidationContext
 
 
 class WorkflowStage(StrEnum):
@@ -53,6 +53,7 @@ class WorkflowRequest(DomainModel):
     mode: WorkflowMode
     stages: tuple[WorkflowStage, ...] = Field(min_length=1)
     correlation_id: UUID | None = None
+    market_revalidation: TargetedMarketRevalidationContext | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
 
     @property

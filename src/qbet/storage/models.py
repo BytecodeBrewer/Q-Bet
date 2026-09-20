@@ -139,3 +139,44 @@ class NotificationTaskRow(models.Model):
             )
         ]
         ordering = ("-updated_at",)
+
+
+class PollingStrategyRow(models.Model):
+    """Durable provider/target Smart Polling strategy configuration."""
+
+    id = models.BigAutoField(primary_key=True)
+    provider_id = models.CharField(max_length=255)
+    source_id = models.CharField(max_length=255)
+    target = models.CharField(max_length=16)
+    engine = models.CharField(max_length=64, blank=True, default="")
+    enabled = models.BooleanField(default=True)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_polling_strategies"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("provider_id", "source_id", "target", "engine"),
+                name="qbet_polling_strategy_identity_unique",
+            )
+        ]
+        ordering = ("provider_id", "source_id", "target", "engine")
+
+
+class SandboxFundingOutcomeRow(models.Model):
+    """Durable bunq sandbox provider outcome and Simulation ledger feedback state."""
+
+    proposal_id = models.UUIDField(primary_key=True, editable=False)
+    correlation_id = models.UUIDField(db_index=True)
+    provider_id = models.CharField(max_length=64)
+    sent = models.BooleanField()
+    provider_reference = models.CharField(max_length=255, null=True, blank=True)
+    reason_code = models.CharField(max_length=255, null=True, blank=True)
+    ledger_applied = models.BooleanField(default=False)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_sandbox_funding_outcomes"
+        ordering = ("-updated_at",)

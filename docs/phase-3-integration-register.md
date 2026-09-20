@@ -19,10 +19,10 @@ This file is the companion register for concrete Phase 3 external integrations. 
 
 | Area | Phase 3 intent | Concrete choice | Status |
 | --- | --- | --- | --- |
-| Data Aggregation / odds | Feed normalized candidate markets and quotations into the sports pipeline through typed adapters. | The Odds API is the selected first read-only quotation adapter; Odds-API.io, OddsPapi, BetBurger, and OddsJam remain future candidates. | The Odds API adapter connected; full connected engine composition still pending |
-| RequestHandler revalidation | Perform targeted event-specific refreshes close to action time using current quotation/provider state rather than repeating broad ingestion. | Reuse selected quotation adapters with source-aware targeted pulls and optional cross-checking. | contracts/router/sandbox handlers exist; real adapter-backed targeted revalidation pending |
-| Result data / settlement | Resolve final match/result state independently from normal quotation ingestion where practical. | football-data.org, OpenLigaDB, API-Football, and a score endpoint from The Odds API are user-provided candidates. | candidates supplied; first adapter selection pending |
-| Bank / account data | Connect balances, transactions, sandbox execution, and later account-backed flows through the bank adapter boundary. | bunq is the first concrete bank integration. | bunq read-only + official sandbox adapter implemented; closed Simulation capital loop still pending |
+| Data Aggregation / odds | Feed normalized candidate markets and quotations into the sports pipeline through typed adapters. | The Odds API is the selected first read-only quotation adapter; Odds-API.io, OddsPapi, BetBurger, and OddsJam remain future candidates. | The Odds API adapter is connected to GUI-started SportsCapital Simulation through normalized snapshots and the Sports Match Builder |
+| RequestHandler revalidation | Perform targeted event-specific refreshes close to action time using current quotation/provider state rather than repeating broad ingestion. | Reuse selected quotation adapters with source-aware targeted pulls and optional cross-checking. | real The Odds API-backed targeted Execution revalidation implemented through the durable dispatch path |
+| Result data / settlement | Resolve final match/result state independently from normal quotation ingestion where practical. | The Odds API v4 scores endpoint is the first connected result source; the other user-provided providers remain future candidates. | exact-event score/finality collection is connected to the post-event SettlementService boundary |
+| Bank / account data | Connect balances, transactions, sandbox execution, and later account-backed flows through the bank adapter boundary. | bunq is the first concrete bank integration. | bunq read-only + official sandbox adapter + durable idempotent Simulation funding feedback implemented |
 | Notifications | Notify the user when an opportunity, approval, or capital action requires attention instead of automatically navigating a provider website. | Email first. | notification domain + Django email transport implemented; richer preferences/inbox later |
 | Pipeline observability | Add established pipeline monitoring/metrics tooling around the existing structured Monitoring plane. | Prometheus-compatible metrics; dashboard tooling to be selected. | structured Monitoring exists; Prometheus/Grafana-style infrastructure observability pending |
 | Execution adapters | Prefer official APIs where supported; otherwise keep the Phase 3 flow notification/manual-action-first. | Provider-specific execution choices still pending. | sandbox bank execution boundary exists; provider execution integrations pending |
@@ -38,7 +38,7 @@ The same external provider does not have to serve every pipeline responsibility.
 
 Data Aggregation performs the broader read-only discovery/import work that produces normalized market candidates for the engines.
 
-- **The Odds API** — selected and connected first read-only adapter for structured pre-match/live quotation ingestion.
+- **The Odds API** — selected and connected first read-only adapter for structured pre-match/live quotation ingestion; GUI-started SportsCapital Simulation consumes one configured two-outcome event/market through normalized snapshots and the Sports Match Builder.
 - **Odds-API.io** — cost-conscious candidate for structured German/international bookmaker coverage.
 - **OddsPapi** — lightweight candidate for development and ingestion testing.
 - **BetBurger** — professional scanner/data candidate for higher-frequency arbitrage-oriented inputs where suitable API/data access exists.
@@ -54,7 +54,7 @@ Source selection should prefer useful free tiers, free test quotas, sandbox/test
 - Prefer the freshest suitable source that still has quota/capacity available.
 - A second source may be used as a cross-check when the opportunity value, data confidence, or configured policy justifies it.
 - Revalidation remains event-specific and should not trigger an unnecessary full-market refresh.
-- Current code has the typed mode router/contracts and deterministic sandbox handlers; the remaining Phase 3 step is a real adapter-backed targeted implementation.
+- The targeted Execution path uses a real The Odds API-backed RequestHandler implementation and preserves request context through the durable queue/dispatch boundary.
 
 ### Result / Settlement Sources
 
@@ -63,21 +63,21 @@ Result adapters determine match completion/finality and validated settlement inp
 - **football-data.org** — candidate for football fixtures/results.
 - **OpenLigaDB** — candidate especially for German league result settlement.
 - **API-Football** — candidate for richer match status/result information.
-- **The Odds API score endpoint** — candidate for same-provider score/result retrieval where useful.
+- **The Odds API v4 scores endpoint** — selected first result adapter. It performs exact-event read-only score/finality collection through explicit sport/event identity and feeds only validated provider-neutral evidence into the post-event settlement boundary.
 
 Result ingestion remains a separate role even when the selected quotation provider also exposes scores. This lets Q-Bet choose an independent settlement source or cross-check when useful without coupling ledger settlement to the quotation polling budget. Result polling should only continue for actions that actually need settlement tracking.
 
 ## Source Balancing And Smart Polling
 
-A deterministic provider-neutral `SmartPollingPolicy` already exists for market/result freshness, retry limits, terminal state and scheduling. It is the foundation, not the final Phase 3 scheduler.
+The provider-neutral `SmartPollingPolicy` resolves persisted provider/target/engine strategies with configurable refresh points, freshness, bounded attempts, quota/capacity metadata, cost class and staff-managed enablement. Final Execution revalidation remains a separate RequestHandler concern.
 
-Phase 3 must extend this into configurable source balancing rather than treating every configured API equally on every cycle.
+Automatic balancing across multiple quotation providers remains a later slice to introduce when another real source is connected; the current persisted strategy boundary already allows plan/capacity changes without editing Python constants.
 
 - Prefer free/test quota and lower-cost sources when their freshness/coverage is sufficient; escalate to another source only when the opportunity or required confidence justifies it.
 - Polling becomes more targeted as an event approaches and as an opportunity becomes more relevant. A representative configurable cadence may include T-24h, T-12h, T-1h or other administrator-defined points rather than continuously requesting the same market.
 - Final pre-action revalidation remains separate from ordinary aggregation.
 - Provider/engine strategy must account for current rate limits, quota/subscription capacity, cost and required freshness.
-- Exact timings belong to persisted/configurable strategy so changing an API plan does not require Python code changes.
+- Exact timings are persisted/configurable, so changing an API plan or configured capacity does not require Python code changes.
 
 ## User-Provided Historical Candidate Notes
 
@@ -102,9 +102,9 @@ No claim in this register about current WebSocket availability, exact free-tier 
 
 ### Bank / Account Integration
 
-- **bunq** is the first concrete bank/account integration and a read-only plus official-sandbox adapter is implemented.
+- **bunq** is the first concrete bank/account integration; read-only access, the official sandbox adapter, and restart-safe idempotent Simulation funding feedback into Portfolio Ledger are implemented.
 - The user has already checked bunq documentation/SDK and confirmed that automated transactions are supported and that bunq provides an official sandbox suitable for repeated development/test setups. Phase 3 tickets should use the official documentation/SDK for concrete authentication, endpoint, and sandbox mechanics instead of reopening the capability question.
-- The adapter supports account/balance reads and guarded fake-money sandbox payment execution. The remaining architecture task is to compose this boundary into the complete Liquidity/Simulation capital round-trip and Portfolio Ledger feedback path.
+- The adapter supports account/balance reads and guarded fake-money sandbox payment execution, and successful correlated sandbox funding feedback is persisted into the Simulation Portfolio Ledger exactly once. The next architecture task is to exercise this accepted boundary inside the genuine connected E2E flow.
 - The existing personal account can be connected separately when a Phase 3 ticket needs real account data or a user-approved account-backed flow; sandbox and personal-account modes must remain explicit configuration boundaries.
 - The expected repository/deployment secret name for the existing credential is `API_KEY_BUNQ`. Only the secret reference/name may appear in code or documentation; the value must never be printed, committed, logged, copied into issues, or embedded in test data.
 - The personal payment/share link is intentionally not stored in the repository because it is not required for the technical adapter contract.
@@ -129,15 +129,15 @@ A ticket agent should use the candidates above directly. Do not open broad provi
 
 ### Result Source Priority
 
-- Preferred first settlement adapter: not selected yet from football-data.org, OpenLigaDB, API-Football, and The Odds API score endpoint.
-- After selection, check competition coverage, result finality/status semantics, update timing, authentication, rate limits, and settlement suitability.
+- First settlement adapter: The Odds API v4 scores endpoint, connected through exact sport/event identity to the provider-neutral result boundary and post-event SettlementService.
+- football-data.org, OpenLigaDB and API-Football remain later candidates when coverage, independent cross-checking or richer status semantics justify another adapter.
 
 ### Bank / Account Integration
 
 - First adapter: bunq, implemented in read-only and official sandbox modes.
 - First test environment: official bunq sandbox.
 - Credential reference: `API_KEY_BUNQ` through secret/environment handling only.
-- Next integration objective: use the adapter inside a complete sandbox capital-flow E2E scenario rather than testing it only as an isolated external boundary.
+- Next integration objective: compose the accepted bunq sandbox funding feedback with the connected market-data and post-event result boundaries in the genuine Phase 3 E2E gate.
 
 ### Monitoring / Metrics Stack
 

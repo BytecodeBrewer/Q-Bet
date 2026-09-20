@@ -31,14 +31,20 @@ from .results import (
     ResultCollectionRequest,
     ResultCollectionStatus,
     ResultCollector,
+    ResultProviderTarget,
+    ResultScore,
 )
 from .the_odds_api import (
     THE_ODDS_API_PROVIDER_ID,
     TheOddsApiAdapter,
+    TheOddsApiAuthenticationError,
     TheOddsApiConfigurationError,
     TheOddsApiError,
     TheOddsApiPayloadError,
+    TheOddsApiRateLimitError,
+    TheOddsApiTransportError,
 )
+from .the_odds_api_scores import TheOddsApiScoreCollector
 
 __all__ = [
     "ApiAdapter",
@@ -68,9 +74,15 @@ __all__ = [
     "ResultCollectionRequest",
     "ResultCollectionStatus",
     "ResultCollector",
+    "ResultProviderTarget",
+    "ResultScore",
     "THE_ODDS_API_PROVIDER_ID",
     "TheOddsApiAdapter",
+    "TheOddsApiAuthenticationError",
     "TheOddsApiConfigurationError",
     "TheOddsApiError",
     "TheOddsApiPayloadError",
+    "TheOddsApiRateLimitError",
+    "TheOddsApiScoreCollector",
+    "TheOddsApiTransportError",
 ]

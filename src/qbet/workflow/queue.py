@@ -9,6 +9,7 @@ from pydantic import AwareDatetime, Field, model_validator
 
 from qbet.domain.models import DomainModel, Identifier
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
+from qbet.request_handler.models import TargetedMarketRevalidationContext
 from qbet.workflow.routing import RoutedWorkItem
 
 
@@ -33,6 +34,7 @@ class QueuedWorkItem(DomainModel):
 
     work: RoutedWorkItem
     request: BonusEngineRequest | SportsCapitalEngineRequest
+    market_revalidation: TargetedMarketRevalidationContext | None = None
     scheduled_for: AwareDatetime
     expires_at: AwareDatetime
     state: WorkState = WorkState.PENDING
@@ -62,10 +64,12 @@ class QueuedWorkItem(DomainModel):
         *,
         scheduled_for: datetime,
         expires_at: datetime,
+        market_revalidation: TargetedMarketRevalidationContext | None = None,
     ) -> "QueuedWorkItem":
         return cls(
             work=work,
             request=request,
+            market_revalidation=market_revalidation,
             scheduled_for=scheduled_for,
             expires_at=expires_at,
             history=(WorkHistoryEvent(state=WorkState.PENDING, recorded_at=scheduled_for),),
@@ -83,7 +87,13 @@ class QueuedWorkItem(DomainModel):
                 WorkState.FAILED,
                 WorkState.EXPIRED,
             },
-            WorkState.RECHECK: {WorkState.PENDING, WorkState.CANCELLED, WorkState.EXPIRED},
+            WorkState.RECHECK: {
+                WorkState.PENDING,
+                WorkState.COMPLETED,
+                WorkState.CANCELLED,
+                WorkState.FAILED,
+                WorkState.EXPIRED,
+            },
         }
         if state not in permitted.get(self.state, set()):
             raise ValueError(f"invalid work transition: {self.state} -> {state}")
