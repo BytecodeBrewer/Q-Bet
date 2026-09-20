@@ -16,10 +16,16 @@
       <label>Correlation (optional)<input type="text" name="correlation" value="{{ request.GET.correlation }}" placeholder="UUID"></label>
       <button type="submit">Apply filters</button>
     </form>
+    <nav aria-label="Monitoring view and export actions">
+      <a href="?view=compact{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}"{% if monitoring_view == 'compact' %} aria-current="page"{% endif %}>Compact</a>
+      <a href="?view=extended{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}"{% if monitoring_view == 'extended' %} aria-current="page"{% endif %}>Extended</a>
+      <a href="{% url 'monitoring-export' 'csv' %}?view={{ monitoring_view }}{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}">CSV export</a>
+      <a href="{% url 'monitoring-export' 'json' %}?view={{ monitoring_view }}{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}">JSON export</a>
+    </nav>
     <nav class="monitoring-presets" aria-label="Monitoring time range">
-      <a href="?range=1h&amp;view={{ monitoring_view }}"{% if monitoring_range == '1h' %} aria-current="page"{% endif %}>1h</a>
-      <a href="?range=24h&amp;view={{ monitoring_view }}"{% if monitoring_range == '24h' %} aria-current="page"{% endif %}>24h</a>
-      <a href="?range=7d&amp;view={{ monitoring_view }}"{% if monitoring_range == '7d' %} aria-current="page"{% endif %}>7d</a>
+      <a href="?range=1h&amp;view={{ monitoring_view }}{% if request.GET.correlation %}&amp;correlation={{ request.GET.correlation|urlencode }}{% endif %}"{% if monitoring_range == '1h' %} aria-current="page"{% endif %}>1h</a>
+      <a href="?range=24h&amp;view={{ monitoring_view }}{% if request.GET.correlation %}&amp;correlation={{ request.GET.correlation|urlencode }}{% endif %}"{% if monitoring_range == '24h' %} aria-current="page"{% endif %}>24h</a>
+      <a href="?range=7d&amp;view={{ monitoring_view }}{% if request.GET.correlation %}&amp;correlation={{ request.GET.correlation|urlencode }}{% endif %}"{% if monitoring_range == '7d' %} aria-current="page"{% endif %}>7d</a>
     </nav>
     {% if grafana_url or vercel_dashboard_url or supabase_dashboard_url %}
       <nav aria-label="Infrastructure links">
@@ -28,12 +34,6 @@
         {% if supabase_dashboard_url %}<a href="{{ supabase_dashboard_url }}" rel="noopener noreferrer">Supabase</a>{% endif %}
       </nav>
     {% endif %}
-    <nav aria-label="Monitoring view and export actions">
-      <a href="?view=compact{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}"{% if monitoring_view == 'compact' %} aria-current="page"{% endif %}>Compact</a>
-      <a href="?view=extended{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}"{% if monitoring_view == 'extended' %} aria-current="page"{% endif %}>Extended</a>
-      <a href="{% url 'monitoring-export' 'csv' %}?view={{ monitoring_view }}{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}">CSV export</a>
-      <a href="{% url 'monitoring-export' 'json' %}?view={{ monitoring_view }}{% if monitoring_query_parameters %}&amp;{{ monitoring_query_parameters }}{% endif %}">JSON export</a>
-    </nav>
   </div>
 </section>
 

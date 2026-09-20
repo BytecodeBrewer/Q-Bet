@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from qbet.observability.metrics import (
     ObservabilitySnapshot,
     aggregate_monitoring,
@@ -39,3 +42,37 @@ def test_prometheus_document_contains_only_aggregate_labels() -> None:
     assert "correlation" not in document
     assert "opportunity" not in document
     assert "token" not in document
+
+
+def test_grafana_dashboard_covers_the_exported_metric_contract() -> None:
+    dashboard = json.loads(
+        Path("dashboards/qbet-observability.json").read_text(encoding="utf-8")
+    )
+    expressions = " ".join(
+        target["expr"]
+        for panel in dashboard["panels"]
+        for target in panel.get("targets", ())
+    )
+
+    for metric in (
+        "qbet_monitoring_events_total",
+        "qbet_queue_items",
+        "qbet_execution_records",
+        "qbet_monitoring_duration_milliseconds_sum",
+        "qbet_monitoring_duration_milliseconds_count",
+        "qbet_monitoring_latest_event_timestamp_seconds",
+        "qbet_observability_source_available",
+    ):
+        assert metric in expressions
+
+    datasource_variables = [
+        item
+        for item in dashboard["templating"]["list"]
+        if item.get("type") == "datasource"
+    ]
+    assert datasource_variables
+    assert datasource_variables[0]["query"] == "prometheus"
+    assert all(
+        panel.get("datasource", {}).get("uid") == "${datasource}"
+        for panel in dashboard["panels"]
+    )

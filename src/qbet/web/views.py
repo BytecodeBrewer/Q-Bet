@@ -648,7 +648,7 @@ def metrics(request: HttpRequest) -> HttpResponse:
     token = settings.QBET_METRICS_TOKEN
     supplied = request.headers.get("Authorization", "")
     if not token or not constant_time_compare(supplied, f"Bearer {token}"):
-        raise Http404("Not found.")
+        return HttpResponse("Not found.", status=404, content_type="text/plain; charset=utf-8")
     end = datetime.now(UTC)
     try:
         snapshot = OBSERVABILITY_REPOSITORY.snapshot(start=end - timedelta(days=1), end=end)

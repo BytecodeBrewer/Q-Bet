@@ -2,14 +2,71 @@
   "annotations": {"list": []},
   "editable": true,
   "panels": [
-    {"title": "Monitoring events by severity", "type": "timeseries", "targets": [{"expr": "sum by (level) (rate(qbet_monitoring_events_total[5m]))", "refId": "A"}]},
-    {"title": "Workflow queue by state", "type": "timeseries", "targets": [{"expr": "sum by (state) (qbet_queue_items)", "refId": "B"}]},
-    {"title": "Execution records by state", "type": "timeseries", "targets": [{"expr": "sum by (state) (qbet_execution_records)", "refId": "C"}]}
+    {
+      "id": 1,
+      "title": "Workflow throughput",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"expr": "sum(rate(qbet_monitoring_events_total[5m]))", "refId": "A"}]
+    },
+    {
+      "id": 2,
+      "title": "Warning and error rate",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"expr": "sum by (level) (rate(qbet_monitoring_events_total{level=~\"warning|error\"}[5m]))", "refId": "A"}]
+    },
+    {
+      "id": 3,
+      "title": "Workflow queue by state",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"expr": "sum by (state) (qbet_queue_items)", "refId": "A"}]
+    },
+    {
+      "id": 4,
+      "title": "Execution records by state",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"expr": "sum by (state) (qbet_execution_records)", "refId": "A"}]
+    },
+    {
+      "id": 5,
+      "title": "Average workflow duration (ms)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"expr": "sum by (engine, mode) (rate(qbet_monitoring_duration_milliseconds_sum[5m])) / clamp_min(sum by (engine, mode) (rate(qbet_monitoring_duration_milliseconds_count[5m])), 0.000001)", "refId": "A"}]
+    },
+    {
+      "id": 6,
+      "title": "Latest durable activity age (s)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"expr": "time() - qbet_monitoring_latest_event_timestamp_seconds", "refId": "A"}]
+    },
+    {
+      "id": 7,
+      "title": "Monitoring source health",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"expr": "qbet_observability_source_available", "refId": "A"}]
+    }
   ],
+  "refresh": "30s",
   "schemaVersion": 39,
   "tags": ["qbet", "observability"],
-  "templating": {"list": []},
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus"
+      }
+    ]
+  },
+  "time": {"from": "now-24h", "to": "now"},
   "title": "Q-Bet Observability",
   "uid": "qbet-observability",
-  "version": 1
+  "version": 2
 }
