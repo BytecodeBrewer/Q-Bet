@@ -264,7 +264,7 @@ class GuiControlPlaneTests(TestCase):
         self.assertEqual(bonus.status, "green")
         self.assertEqual(bonus.detail, "Running.")
         self.assertEqual(risk.status, "green")
-        self.assertEqual(risk.detail, "Ready.")
+        self.assertEqual(risk.detail, "Ready")
 
     def test_current_running_error_remains_a_current_failure(self) -> None:
         snapshot = self.service.snapshot(
