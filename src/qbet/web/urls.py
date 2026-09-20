@@ -11,6 +11,7 @@ from qbet.web.routing_settings import routing_settings
 urlpatterns = [
     path("", views.home, name="home"),
     path("health/", views.health, name="health"),
+    path("metrics/", views.metrics, name="metrics"),
     path("register/", views.register, name="register"),
     path("profile/", views.profile, name="profile"),
     path("dashboard/", views.dashboard, name="dashboard"),

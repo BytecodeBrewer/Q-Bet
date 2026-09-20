@@ -257,3 +257,12 @@ body[data-theme="dark"] .empty-state, body[data-theme="dark"] .message { backgro
   .hero-actions { align-items: stretch; flex-direction: column; }
   .hero-actions .button-link, .hero-actions .secondary-link { text-align: center; }
 }
+
+.monitoring-presets { display: flex; gap: 8px; align-items: center; }
+.monitoring-presets a { border: 1px solid var(--border); border-radius: 5px; padding: 5px 9px; }
+.monitoring-presets a[aria-current="page"] { background: var(--surface-muted); }
+.monitoring-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin: 0 0 20px; }
+.monitoring-summary > div { border: 1px solid var(--border); border-radius: 6px; padding: 12px; background: var(--surface); }
+.monitoring-summary span { display: block; color: var(--text-muted); font-size: .82rem; }
+.monitoring-summary strong { display: block; margin-top: 5px; font-size: 1.2rem; }
+@media (max-width: 700px) { .monitoring-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
