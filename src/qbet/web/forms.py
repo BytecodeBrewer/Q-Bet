@@ -106,6 +106,32 @@ class PresentationSettingsForm(forms.Form):
         choices=(("small", "Small"), ("medium", "Medium"), ("large", "Large")),
         widget=forms.RadioSelect,
     )
+    language = forms.ChoiceField(required=False, choices=(("de", "Deutsch"), ("en", "English")))
+    region = forms.ChoiceField(
+        required=False,
+        choices=(("DE", "Germany"), ("GB", "United Kingdom"), ("US", "United States")),
+    )
+    timezone_name = forms.ChoiceField(
+        label="Time zone",
+        required=False,
+        choices=(
+            ("Europe/Berlin", "Europe/Berlin"),
+            ("Europe/London", "Europe/London"),
+            ("America/New_York", "America/New_York"),
+            ("UTC", "UTC"),
+        ),
+    )
+    time_format = forms.ChoiceField(
+        label="Time format",
+        required=False,
+        choices=(("24h", "24-hour"), ("12h", "12-hour")),
+    )
+    currency = forms.ChoiceField(
+        label="Preferred conversion currency",
+        help_text="Amounts retain their recorded currency until a verified exchange-rate source is available.",
+        required=False,
+        choices=(("EUR", "EUR"), ("GBP", "GBP"), ("USD", "USD")),
+    )
 
 
 class RoutingConfigurationForm(forms.Form):

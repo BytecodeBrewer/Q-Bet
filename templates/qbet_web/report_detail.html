@@ -1,9 +1,10 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
+{% load display_preferences %}
 <section class="page-heading">
   <p><a href="{% url 'report-history' %}">Report history</a></p>
   <h1>Result report</h1>
-  <p>{% if report.mode == 'simulation' %}Simulation result{% else %}Execution result{% endif %}</p>
+  <p>{% if report.mode == 'simulation' %}Simulation result{% else %}Execution result{% endif %}</p><p class="muted">{% currency_preference_note report.currency display_preferences %}</p>
 </section>
 <section class="detail-layout">
   <article class="detail-panel">
@@ -19,11 +20,11 @@
   <article class="detail-panel">
     <h2>Capital and outcome</h2>
     <dl class="metric-list">
-      <div><dt>Invested capital</dt><dd>{{ report.invested_capital }} {{ report.currency }}</dd></div>
-      <div><dt>Profit/loss</dt><dd>{{ report.profit_loss }} {{ report.currency }}</dd></div>
-      <div><dt>Current capital</dt><dd>{{ report.current_capital }} {{ report.currency }}</dd></div>
-      <div><dt>Created</dt><dd>{{ report.created_at }}</dd></div>
-      <div><dt>Completed</dt><dd>{{ report.completed_at }}</dd></div>
+      <div><dt>Invested capital</dt><dd>{% localized_money report.invested_capital report.currency display_preferences %}</dd></div>
+      <div><dt>Profit/loss</dt><dd>{% localized_money report.profit_loss report.currency display_preferences %}</dd></div>
+      <div><dt>Current capital</dt><dd>{% localized_money report.current_capital report.currency display_preferences %}</dd></div>
+      <div><dt>Created</dt><dd>{% localized_datetime report.created_at display_preferences %}</dd></div>
+      <div><dt>Completed</dt><dd>{% localized_datetime report.completed_at display_preferences %}</dd></div>
       {% if report.transaction_id %}<div><dt>Transaction ID</dt><dd>{{ report.transaction_id }}</dd></div>{% endif %}
     </dl>
   </article>
@@ -31,7 +32,7 @@
 <section class="detail-panel">
   <h2>Assigned amounts</h2>
   <dl class="metric-list">
-    {% for amount in report.assigned_amounts %}<div><dt>{{ amount.label }}</dt><dd>{{ amount.amount }} {{ report.currency }}</dd></div>{% endfor %}
+    {% for amount in report.assigned_amounts %}<div><dt>{{ amount.label }}</dt><dd>{% localized_money amount.amount report.currency display_preferences %}</dd></div>{% endfor %}
   </dl>
 </section>
 <section class="detail-panel">

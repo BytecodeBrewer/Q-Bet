@@ -52,6 +52,10 @@ from qbet.storage.observability import (
     PostgresObservabilityRepository,
 )
 from qbet.storage.postgres import PostgresSimulationReportReader
+from qbet.web.display_preferences import (
+    DisplayPreferenceRepository,
+    DisplayPreferences,
+)
 from qbet.web.controls import (
     DashboardLayout,
     PresentationPreferences,
@@ -100,6 +104,7 @@ NOTIFICATION_INBOX = PostgresNotificationInbox()
 WORKFLOW_MONITORING_REPOSITORY = PostgresMonitoringRepository()
 WORKFLOW_MONITORING_SERVICE = WorkflowMonitoringService(WORKFLOW_MONITORING_REPOSITORY)
 SIMULATION_CONTROL = SimulationControlService()
+DISPLAY_PREFERENCES = DisplayPreferenceRepository()
 OBSERVABILITY_REPOSITORY = PostgresObservabilityRepository()
 
 
@@ -125,6 +130,13 @@ def _require_staff(request: HttpRequest) -> None:
 
 def _context(request: HttpRequest, **values: object) -> dict[str, object]:
     values.setdefault("preferences", presentation_preferences(request.session))
+    if request.user.is_authenticated:
+        values.setdefault(
+            "display_preferences",
+            DISPLAY_PREFERENCES.load(cast(User, request.user)),
+        )
+    else:
+        values.setdefault("display_preferences", DisplayPreferences())
     if "simulation_enabled" not in values:
         values["simulation_enabled"] = bool(
             request.user.is_authenticated and _is_staff(request.user) and _simulation_enabled()
@@ -396,10 +408,20 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def presentation_settings(request: HttpRequest) -> HttpResponse:
+    user = cast(User, request.user)
     preferences = presentation_preferences(request.session)
+    display_preferences = DISPLAY_PREFERENCES.load(user)
     form = PresentationSettingsForm(
         request.POST or None,
-        initial={"theme": preferences.theme, "font_size": preferences.font_size},
+        initial={
+            "theme": preferences.theme,
+            "font_size": preferences.font_size,
+            "language": display_preferences.language,
+            "region": display_preferences.region,
+            "timezone_name": display_preferences.timezone_name,
+            "time_format": display_preferences.time_format,
+            "currency": display_preferences.currency,
+        },
     )
     if request.method == "POST" and form.is_valid():
         save_presentation_preferences(
@@ -409,7 +431,22 @@ def presentation_settings(request: HttpRequest) -> HttpResponse:
                 font_size=form.cleaned_data["font_size"],
             ),
         )
-        messages.success(request, "Presentation preferences updated.")
+        try:
+            DISPLAY_PREFERENCES.save(
+                user,
+                DisplayPreferences(
+                    language=form.cleaned_data["language"] or display_preferences.language,
+                    region=form.cleaned_data["region"] or display_preferences.region,
+                    timezone_name=form.cleaned_data["timezone_name"]
+                    or display_preferences.timezone_name,
+                    time_format=form.cleaned_data["time_format"] or display_preferences.time_format,
+                    currency=form.cleaned_data["currency"] or display_preferences.currency,
+                ),
+            )
+        except RuntimeError:
+            messages.error(request, "Display preferences are temporarily unavailable.")
+        else:
+            messages.success(request, "Presentation preferences updated.")
         return redirect("presentation-settings")
 
     values: dict[str, object] = {"form": form}

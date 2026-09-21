@@ -56,7 +56,10 @@ class _ReportStore:
 
 
 def _report(
-    engine: SimulationEngine, *, status: SimulationStatus = SimulationStatus.COMPLETED
+    engine: SimulationEngine,
+    *,
+    status: SimulationStatus = SimulationStatus.COMPLETED,
+    currency: str = "EUR",
 ) -> SimulationReport:
     return SimulationReport(
         run_id=uuid4(),
@@ -82,7 +85,7 @@ def _report(
                 CustomerReportAmount(label="Lay stake", amount=Decimal("48.25")),
             ),
             invested_capital=Decimal("50"),
-            currency="EUR",
+            currency=currency,
         ),
     )
 
@@ -474,3 +477,21 @@ class GuiControlPlaneTests(TestCase):
 
         self.assertEqual(missing.status_code, 404)
         self.assertContains(missing, "This report is not available.", status_code=404)
+
+    def test_report_history_localizes_each_currency_kpi_without_combining_them(self) -> None:
+        dollar_report = _report(SimulationEngine.BONUS, currency="USD")
+        reporting_service = CustomerReportingService(
+            _ReportStore((self.sports_report, dollar_report), ())
+        )
+        self.client.force_login(self.staff)
+
+        with patch("qbet.web.views.CUSTOMER_REPORTING_SERVICE", reporting_service):
+            response = self.client.get("/reports/?range=30d")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<h3>EUR</h3>", html=False)
+        self.assertContains(response, "<h3>USD</h3>", html=False)
+        self.assertContains(response, "50,00 EUR")
+        self.assertContains(response, "50,00 USD")
+        self.assertNotContains(response, "100,00 EUR")
+        self.assertNotContains(response, "100,00 USD")
