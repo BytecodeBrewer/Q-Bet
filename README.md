@@ -73,7 +73,7 @@ python manage.py check
 python -m build
 ```
 
-The GitHub Actions pipeline runs the same quality gates against an isolated PostgreSQL service. Provider-specific E2E workflows are opt-in and isolated from the normal offline validation path.
+The GitHub Actions **PostgreSQL validation gate** is the authoritative standard result for Dev Handoffs and reviews. Every pull request and push to `develop` receives a fresh PostgreSQL 16 service and runs `git diff --check`, Ruff, Pyright, migration checks, migrations, the full standard Pytest suite, Django checks, and the package build. The gate receives no provider or bank credentials; external bunq sandbox E2E remains in its separate opt-in workflow, and the performance baseline remains a separate job.
 
 ## Deployment
 
