@@ -11,12 +11,17 @@ from uuid import UUID
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login
+from django.core.mail import send_mail
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
 from django.db import DatabaseError
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.crypto import constant_time_compare
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 from pydantic import ValidationError
 
@@ -72,7 +77,8 @@ from qbet.web.forms import (
     SimulationAvailabilityForm,
     SimulationStartForm,
 )
-from qbet.web.models import CustomerReportAccess
+from qbet.web.account_security import email_verification_token, remove_expired_unverified_accounts
+from qbet.web.models import AccountVerification, CustomerReportAccess
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.readiness import persistence_readiness
 from qbet.web.simulation_control import (
@@ -216,25 +222,49 @@ def home(request: HttpRequest) -> HttpResponse:
     )
 
 
+def _send_verification_email(request: HttpRequest, user: User) -> None:
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = email_verification_token.make_token(user)
+    url = request.build_absolute_uri(reverse("verify-email", args=(uid, token)))
+    send_mail("Verify your Q-Bet email address", f"Verify your email address within 24 hours: {url}", settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
+
+
 def register(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
         return redirect("dashboard")
-
+    remove_expired_unverified_accounts()
     form = RegistrationForm(request.POST or None)
     if request.method == "POST":
         if form.is_valid():
-            user = form.save()
-            login(request, user)
-            messages.success(request, "Your Q-Bet account is ready.")
-            return redirect("dashboard")
-        return render(
-            request,
-            "qbet_web/register.html",
-            _context(request, form=RegistrationForm(), registration_error=True),
-        )
-
+            user = form.save(commit=False)
+            user.is_active = False
+            user.save()
+            AccountVerification.objects.create(user=user)
+            _send_verification_email(request, user)
+            messages.success(request, "Check your email to verify this account before signing in.")
+            return redirect("verification-pending")
+        return render(request, "qbet_web/register.html", _context(request, form=RegistrationForm(), registration_error=True))
     return render(request, "qbet_web/register.html", _context(request, form=form))
 
+
+def verification_pending(request: HttpRequest) -> HttpResponse:
+    return render(request, "qbet_web/verification_pending.html", _context(request))
+
+
+def verify_email(request: HttpRequest, uidb64: str, token: str) -> HttpResponse:
+    remove_expired_unverified_accounts()
+    try:
+        user = User.objects.get(pk=force_str(urlsafe_base64_decode(uidb64)))
+    except (User.DoesNotExist, ValueError, TypeError, OverflowError):
+        user = None
+    if user is None or user.is_active or not email_verification_token.check_token(user, token):
+        messages.error(request, "This verification link is invalid or has expired.")
+        return redirect("verification-pending")
+    user.is_active = True
+    user.save(update_fields=("is_active",))
+    AccountVerification.objects.filter(user=user).update(verified_at=timezone.now())
+    messages.success(request, "Email verified. You can now sign in.")
+    return redirect("login")
 
 @login_required
 def profile(request: HttpRequest) -> HttpResponse:

@@ -196,6 +196,8 @@ EMAIL_BACKEND = os.environ.get(
     "django.core.mail.backends.console.EmailBackend",
 )
 DEFAULT_FROM_EMAIL = os.environ.get("QBET_DEFAULT_FROM_EMAIL", "qbet@localhost")
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
+QBET_EMAIL_VERIFICATION_TIMEOUT = 60 * 60 * 24
 
 LOGGING = {
     "version": 1,
