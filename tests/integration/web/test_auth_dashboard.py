@@ -1,6 +1,9 @@
 from django.contrib.auth.models import User
 from django.test import Client, TestCase
 
+from qbet.web.display_preferences import DisplayPreferenceRepository
+from qbet.web.models import UserDisplayPreference
+
 import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
@@ -184,3 +187,56 @@ class AuthenticationAndDashboardTests(TestCase):
         staff = User.objects.create_user("staff", password="Strong-pass-123", is_staff=True)
         self.client.force_login(staff)
         self.assertEqual(self.client.get("/admin-area/").status_code, 200)
+
+    def test_display_preferences_persist_per_user_and_do_not_cross_accounts(self) -> None:
+        owner = User.objects.create_user("display-owner", password="Strong-pass-123")
+        other = User.objects.create_user("display-other", password="Strong-pass-123")
+        self.client.force_login(owner)
+
+        response = self.client.post(
+            "/settings/presentation/",
+            {
+                "theme": "dark",
+                "font_size": "large",
+                "language": "en",
+                "region": "US",
+                "timezone_name": "America/New_York",
+                "time_format": "12h",
+                "currency": "USD",
+            },
+        )
+
+        self.assertRedirects(response, "/settings/presentation/")
+        stored = UserDisplayPreference.objects.get(user=owner)
+        self.assertEqual(
+            (
+                stored.language,
+                stored.region,
+                stored.timezone_name,
+                stored.time_format,
+                stored.currency,
+            ),
+            ("en", "US", "America/New_York", "12h", "USD"),
+        )
+        self.assertEqual(
+            DisplayPreferenceRepository().load(other).currency,
+            "EUR",
+        )
+
+    def test_invalid_persisted_display_preferences_fall_back_without_error(self) -> None:
+        user = User.objects.create_user("legacy-display", password="Strong-pass-123")
+        UserDisplayPreference.objects.create(
+            user=user,
+            language="obsolete",
+            region="invalid",
+            timezone_name="invalid/timezone",
+            time_format="invalid",
+            currency="invalid",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/settings/presentation/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'value="de" selected')
+        self.assertContains(response, 'value="Europe/Berlin" selected')

@@ -1,7 +1,14 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-<section class="page-heading"><h1>Settings</h1><p>Presentation choices are saved for this browser session only. Account-wide preference storage is not configured yet.</p></section>
-<form method="post" class="settings-form">{% csrf_token %}<fieldset><legend>Theme</legend>{{ form.theme }}</fieldset><fieldset><legend>Font size</legend>{{ form.font_size }}</fieldset><button class="primary" type="submit">Save settings</button></form>
+<section class="page-heading"><h1>Settings</h1><p>Theme and layout choices stay in this browser. Language, region, time zone, time format, and display currency are saved to your account.</p></section>
+<form method="post" class="settings-form">
+  {% csrf_token %}
+  <fieldset><legend>Theme</legend>{{ form.theme }}</fieldset>
+  <fieldset><legend>Font size</legend>{{ form.font_size }}</fieldset>
+  <fieldset><legend>Language and region</legend><p>{{ form.language.label_tag }}{{ form.language }}</p><p>{{ form.region.label_tag }}{{ form.region }}</p></fieldset>
+  <fieldset><legend>Dates and money</legend><p>{{ form.timezone_name.label_tag }}{{ form.timezone_name }}</p><p>{{ form.time_format.label_tag }}{{ form.time_format }}</p><p>{{ form.currency.label_tag }}{{ form.currency }}</p></fieldset>
+  <button class="primary" type="submit">Save settings</button>
+</form>
 {% if user.is_staff %}
 <section class="admin-zone" aria-labelledby="admin-settings-heading">
   <div class="admin-zone-heading"><div><span class="plane-kicker">Privileged settings</span><h2 id="admin-settings-heading">Admin Area</h2></div><span class="admin-badge">Admin only</span></div>

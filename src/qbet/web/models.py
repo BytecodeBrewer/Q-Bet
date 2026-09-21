@@ -78,3 +78,22 @@ class CustomerReportAccess(models.Model):
             )
         ]
         ordering = ("-granted_at",)
+
+
+class UserDisplayPreference(models.Model):
+    """Durable user-owned regional display choices with no business authority."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_display_preferences",
+    )
+    language = models.CharField(max_length=8, default="de")
+    region = models.CharField(max_length=8, default="DE")
+    timezone_name = models.CharField(max_length=64, default="Europe/Berlin")
+    time_format = models.CharField(max_length=8, default="24h")
+    currency = models.CharField(max_length=3, default="EUR")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_user_display_preferences"
