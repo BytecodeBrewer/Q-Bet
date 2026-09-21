@@ -27,7 +27,7 @@ def approval_navigation(request: HttpRequest) -> dict[str, object]:
         }
 
     simulation_enabled = False
-    if request.user.is_staff:
+    if bool(getattr(request.user, "is_staff", False)):
         try:
             simulation_enabled = _SIMULATION_CONTROL.availability().enabled
         except DatabaseError:

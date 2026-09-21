@@ -29,8 +29,9 @@ class AccountTokenRedactionFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg = redact_account_tokens(record.getMessage())
         record.args = ()
-        if hasattr(record, "path"):
-            record.path = redact_account_tokens(str(record.path))
+        path = getattr(record, "path", None)
+        if path is not None:
+            setattr(record, "path", redact_account_tokens(str(path)))
         return True
 
 
