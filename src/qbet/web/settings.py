@@ -192,10 +192,12 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "home"
 
-EMAIL_BACKEND = os.environ.get(
-    "QBET_EMAIL_BACKEND",
-    "django.core.mail.backends.locmem.EmailBackend",
+_DEFAULT_EMAIL_BACKEND = (
+    "django.core.mail.backends.smtp.EmailBackend"
+    if QBET_HOSTED_PREVIEW
+    else "django.core.mail.backends.locmem.EmailBackend"
 )
+EMAIL_BACKEND = os.environ.get("QBET_EMAIL_BACKEND", _DEFAULT_EMAIL_BACKEND)
 DEFAULT_FROM_EMAIL = os.environ.get("QBET_DEFAULT_FROM_EMAIL", "qbet@localhost")
 EMAIL_HOST = os.environ.get("QBET_EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("QBET_EMAIL_PORT", "25"))
