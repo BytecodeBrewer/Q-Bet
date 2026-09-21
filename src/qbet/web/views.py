@@ -419,6 +419,7 @@ def presentation_settings(request: HttpRequest) -> HttpResponse:
 @login_required
 def report_history(request: HttpRequest) -> HttpResponse:
     now = datetime.now(UTC)
+    visible_report_ids = _visible_customer_report_ids(request)
     preset = request.GET.get("range", "7d")
     start = now - timedelta(hours={"24h": 24, "7d": 168, "30d": 720}.get(preset, 168))
     if preset == "custom":
@@ -435,26 +436,29 @@ def report_history(request: HttpRequest) -> HttpResponse:
                 end=now,
                 engine=request.GET.get("engine") or None,
                 mode=request.GET.get("mode") or None,
+                report_ids=(
+                    frozenset(visible_report_ids) if visible_report_ids is not None else None
+                ),
             )
         )
     except ValueError:
         dashboard = CUSTOMER_REPORTING_SERVICE.dashboard(
-            CustomerReportingQuery(start=now - timedelta(days=7), end=now)
+            CustomerReportingQuery(
+                start=now - timedelta(days=7),
+                end=now,
+                report_ids=(
+                    frozenset(visible_report_ids) if visible_report_ids is not None else None
+                ),
+            )
         )
         preset = "7d"
-    visible_report_ids = _visible_customer_report_ids(request)
-    reports = tuple(
-        report
-        for report in dashboard.reports
-        if visible_report_ids is None or report.report_id in visible_report_ids
-    )
     return render(
         request,
         "qbet_web/report_history.html",
         _context(
             request,
             dashboard=dashboard,
-            reports=reports,
+            reports=dashboard.reports,
             selected_engine=request.GET.get("engine", ""),
             selected_mode=request.GET.get("mode", ""),
             selected_range=preset,

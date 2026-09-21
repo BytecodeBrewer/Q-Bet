@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Protocol
+from uuid import UUID
 
 from qbet.reporting.customer import CustomerReportUnavailable, CustomerResultReport
 from qbet.reporting.models import SimulationReport
@@ -24,6 +25,7 @@ class CustomerReportingQuery:
     end: datetime
     engine: str | None = None
     mode: str | None = None
+    report_ids: frozenset[UUID] | None = None
 
     def __post_init__(self) -> None:
         if self.end < self.start:
@@ -69,6 +71,8 @@ class CustomerReportingService:
             if query.engine and report.engine != query.engine:
                 continue
             if query.mode and report.mode != query.mode:
+                continue
+            if query.report_ids is not None and report.report_id not in query.report_ids:
                 continue
             reports.append(report)
         reports.sort(key=lambda report: report.completed_at, reverse=True)

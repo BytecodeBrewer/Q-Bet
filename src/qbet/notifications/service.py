@@ -139,8 +139,11 @@ class ExecutionNotificationService:
             if self._preference_repository is not None
             else NotificationPreferences()
         )
-        if not preferences.email_enabled:
-            if preferences.inbox_enabled and preferences.accepts("execution_action_required"):
+        category = "execution_action_required"
+        email_enabled = preferences.email_enabled and preferences.accepts(category)
+        inbox_enabled = preferences.inbox_enabled and preferences.accepts(category)
+        if not email_enabled:
+            if inbox_enabled:
                 sent = _transition(queued_task, NotificationStatus.SENT, now=now)
                 sent = self._repository.save(sent)
                 self._emit(sent)
