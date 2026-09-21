@@ -409,11 +409,22 @@ def test_inbox_projection_is_not_actionable_at_or_after_the_deadline() -> None:
     )
 
     before = PostgresNotificationInbox._item(
-        row, read=False, now=sent.task.action_deadline - timedelta(microseconds=1)
+        row,
+        category=sent.task.category,
+        read=False,
+        now=sent.task.action_deadline - timedelta(microseconds=1),
     )
-    at_deadline = PostgresNotificationInbox._item(row, read=False, now=sent.task.action_deadline)
+    at_deadline = PostgresNotificationInbox._item(
+        row,
+        category=sent.task.category,
+        read=False,
+        now=sent.task.action_deadline,
+    )
     after = PostgresNotificationInbox._item(
-        row, read=False, now=sent.task.action_deadline + timedelta(microseconds=1)
+        row,
+        category=sent.task.category,
+        read=False,
+        now=sent.task.action_deadline + timedelta(microseconds=1),
     )
 
     assert before.actionable
