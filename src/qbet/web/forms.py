@@ -127,7 +127,8 @@ class PresentationSettingsForm(forms.Form):
         choices=(("24h", "24-hour"), ("12h", "12-hour")),
     )
     currency = forms.ChoiceField(
-        label="Display currency",
+        label="Preferred conversion currency",
+        help_text="Amounts retain their recorded currency until a verified exchange-rate source is available.",
         required=False,
         choices=(("EUR", "EUR"), ("GBP", "GBP"), ("USD", "USD")),
     )

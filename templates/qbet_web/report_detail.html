@@ -4,7 +4,7 @@
 <section class="page-heading">
   <p><a href="{% url 'report-history' %}">Report history</a></p>
   <h1>Result report</h1>
-  <p>{% if report.mode == 'simulation' %}Simulation result{% else %}Execution result{% endif %}</p>
+  <p>{% if report.mode == 'simulation' %}Simulation result{% else %}Execution result{% endif %}</p><p class="muted">{% currency_preference_note report.currency display_preferences %}</p>
 </section>
 <section class="detail-layout">
   <article class="detail-panel">

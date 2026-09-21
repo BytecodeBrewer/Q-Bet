@@ -132,3 +132,14 @@ def format_money(
     grouping = "." if preferences.language == "de" else ","
     rendered = f"{amount:,.2f}".replace(",", "_").replace(".", separator).replace("_", grouping)
     return f"{rendered} {source_currency}"
+
+
+def currency_preference_notice(source_currency: str, preferences: DisplayPreferences) -> str:
+    """Explain the stored conversion preference without mislabeling source amounts."""
+
+    if source_currency == preferences.currency:
+        return f"Amounts are recorded in {source_currency}."
+    return (
+        f"Preferred conversion currency: {preferences.currency}. "
+        f"Amounts are recorded in {source_currency}; conversion is unavailable."
+    )

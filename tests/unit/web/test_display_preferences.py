@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from qbet.web.display_preferences import (
     DisplayPreferences,
+    currency_preference_notice,
     format_datetime,
     format_money,
     normalize_display_preferences,
@@ -45,3 +46,12 @@ def test_datetime_and_money_formatting_only_changes_presentation() -> None:
         "21.09.2026 12:30"
     )
     assert format_money(Decimal("1234.5"), "EUR", preferences) == "1.234,50 EUR"
+
+
+def test_different_currency_preference_is_disclosed_without_conversion() -> None:
+    notice = currency_preference_notice("EUR", DisplayPreferences(language="en", currency="USD"))
+
+    assert notice == (
+        "Preferred conversion currency: USD. "
+        "Amounts are recorded in EUR; conversion is unavailable."
+    )
