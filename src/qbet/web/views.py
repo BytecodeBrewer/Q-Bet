@@ -70,6 +70,7 @@ from qbet.web.forms import (
 )
 from qbet.web.models import CustomerReportAccess
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
+from qbet.web.readiness import persistence_readiness
 from qbet.web.simulation_control import (
     SimulationControlError,
     SimulationControlService,
@@ -184,7 +185,15 @@ def _dashboard_context(
 
 
 def health(_: HttpRequest) -> JsonResponse:
-    return JsonResponse({"status": "ok", "service": "q-bet-web"})
+    readiness = persistence_readiness()
+    return JsonResponse(
+        {
+            "status": "ok" if readiness.ready else "unavailable",
+            "service": "q-bet-web",
+            "persistence": readiness.code.value,
+        },
+        status=200 if readiness.ready else 503,
+    )
 
 
 def home(request: HttpRequest) -> HttpResponse:

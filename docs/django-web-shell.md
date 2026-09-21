@@ -40,6 +40,26 @@ python manage.py migrate --noinput
 
 For Vercel, configure `QBET_DATABASE_URL` for Preview and Production as required by the chosen environment model. The connection string must remain in environment/secrets configuration and must never be committed.
 
+### Hosted Readiness And Migration Order
+
+`/health/` is an operational readiness probe, not merely a Django-process liveness check. It performs a read-only PostgreSQL connection check and asks Django for the current migration plan. It returns HTTP 200 only when the configured authoritative database is reachable and has no unapplied migrations. Database failures, inconsistent migration state, or pending migrations return HTTP 503 with a stable non-sensitive reason code.
+
+The Vercel preview smoke always inspects `/health/`. A deployment is operationally ready only when the endpoint reports `status=ok` and `persistence=ready`.
+
+Pull-request validation treats the specific `migrations_pending` state as a visible warning rather than a merge-blocking code failure because PR automation is not allowed to mutate the shared hosted database. Other readiness failures still fail the PR. Pushes to `develop` / staging remain strict: any hosted readiness state other than `ready` fails deployment validation. This keeps schema drift visible without creating a PR deadlock that could only be resolved by an unauthorized database write.
+
+Deploying Q-Bet never runs migrations from a web request, serverless cold start, or normal preview smoke. Schema changes remain an explicit operator action:
+
+```powershell
+python manage.py migrate --check
+python manage.py migrate --plan
+python manage.py migrate --noinput
+```
+
+The first two commands are useful read-only checks. Run the final migration command only with the intended target `QBET_DATABASE_URL` and the required operational authorization. After applying migrations, `/health/` should return `status=ok` and `persistence=ready`.
+
+Normal GitHub Actions still use disposable PostgreSQL. CI additionally runs `makemigrations --check --dry-run` and `migrate --check` so model changes without committed migrations and incomplete disposable test schemas fail before deployment.
+
 PostgreSQL is the durable operational source of truth for Django authentication, sessions, simulation control/run state, provider state, simulation reports/log records, and the current monitoring/reporting inputs. Missing `QBET_DATABASE_URL` now fails configuration explicitly; Q-Bet does not silently create a local SQLite database or switch to an ephemeral Vercel file.
 
 ## Django Admin

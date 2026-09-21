@@ -358,11 +358,25 @@ class MonitoringService:
                 for report in engine_reports
                 for record in records_by_run.get(report.run_id, ())
             )
+            latest_records = (
+                records_by_run.get(latest.run_id, ()) if latest is not None else ()
+            )
+            current_records = (
+                latest_records
+                if latest is not None and latest.status is SimulationStatus.RUNNING
+                else ()
+            )
             warning_count = sum(
                 record.record_type is SimulationLogRecordType.WARNING for record in engine_records
             )
             error_count = sum(
                 record.record_type is SimulationLogRecordType.ERROR for record in engine_records
+            )
+            current_warning_count = sum(
+                record.record_type is SimulationLogRecordType.WARNING for record in current_records
+            )
+            current_error_count = sum(
+                record.record_type is SimulationLogRecordType.ERROR for record in current_records
             )
 
             if runtime_configuration is None:
@@ -380,16 +394,16 @@ class MonitoringService:
                     status, detail, live_state = "red", "Control unavailable.", "error"
                 elif not active:
                     status, detail, live_state = "gray", "Inactive.", "inactive"
-                elif error_count:
-                    status, detail, live_state = "red", "Error.", "error"
-                elif warning_count:
-                    status, detail, live_state = "red", "Warning.", "warning"
+                elif current_error_count:
+                    status, detail, live_state = "red", "Current run error.", "error"
+                elif current_warning_count:
+                    status, detail, live_state = "amber", "Current run warning.", "warning"
                 elif latest is not None and latest.status is SimulationStatus.RUNNING:
                     status, detail, live_state = "green", "Running.", "ready"
                 else:
                     status, detail, live_state = "green", "Ready.", "ready"
                 workflow_stages = MonitoringService._workflow_stages(
-                    engine_records,
+                    current_records,
                     engine_id=engine_id,
                     runtime_active=active,
                     runtime_available=runtime_available,
