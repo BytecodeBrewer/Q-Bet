@@ -1,6 +1,6 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-<section class="page-heading"><h1>Settings</h1><p>Account, display, routing, and security preferences are grouped here. Staff controls remain separately privileged.</p></section>
+<section class="page-heading"><h1>Settings</h1><p>Theme and layout choices are browser session only. Account display, routing, and security preferences are grouped here. Staff controls remain separately privileged.</p></section>
 <div class="settings-layout">
   <aside class="settings-toc" aria-label="Settings sections">
     <strong>Account</strong>
@@ -95,7 +95,7 @@
 
     {% if user.is_staff %}
       <section id="staff-controls" class="admin-zone settings-section" aria-labelledby="admin-settings-heading">
-        <div class="admin-zone-heading"><div><span class="plane-kicker">Privileged settings</span><h2 id="admin-settings-heading">Global simulation availability</h2></div><span class="admin-badge">Admin only</span></div>
+        <div class="admin-zone-heading"><div><span class="plane-kicker">Admin Area · Privileged settings</span><h2 id="admin-settings-heading">Global simulation availability</h2></div><span class="admin-badge">Admin only</span></div>
         <p>Simulation is an internal control plane. Enabling it exposes the Simulation dashboard only to staff users; it never changes the normal user Execution dashboard.</p>
         <form method="post" action="{% url 'admin-simulation-availability' %}" class="admin-settings-form">
           {% csrf_token %}

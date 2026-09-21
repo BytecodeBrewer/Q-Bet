@@ -86,7 +86,7 @@ class ExecutionApprovalWebTests(TestCase):
         self.assertContains(response, "Capital required")
         self.assertContains(response, "Remaining")
         self.assertContains(response, "remaining")
-        self.assertContains(response, "Approvals (1)")
+        self.assertContains(response, 'class="nav-count">1</span>')
         self.assertContains(response, "Approve")
         self.assertContains(response, "Reject")
         self.assertNotContains(response, str(CORRELATION_ID))
@@ -98,7 +98,7 @@ class ExecutionApprovalWebTests(TestCase):
         self.assertEqual(hidden.status_code, 200)
         self.assertContains(hidden, "No pending approvals")
         self.assertNotContains(hidden, "web-approval-opportunity")
-        self.assertNotContains(hidden, "Approvals (1)")
+        self.assertNotContains(hidden, 'class="nav-count">1</span>')
 
         self.client.force_login(self.user)
         decision = self.client.post(
@@ -131,7 +131,7 @@ class ExecutionApprovalWebTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No pending approvals")
         self.assertNotContains(response, "expired-web-approval")
-        self.assertNotContains(response, "Approvals (1)")
+        self.assertNotContains(response, 'class="nav-count">1</span>')
         persisted = ExecutionStateRepository().load(execution_id)
         queue = ModeWorkQueueRepository().load(execution_id)
         assert persisted is not None and queue is not None
@@ -155,7 +155,7 @@ class ExecutionApprovalWebTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Dashboard")
         self.assertContains(response, "Approvals")
-        self.assertNotContains(response, "Approvals (1)")
+        self.assertNotContains(response, 'class="nav-count">1</span>')
 
     def test_inbox_read_failure_is_explicitly_unavailable(self) -> None:
         self.client.force_login(self.user)

@@ -151,7 +151,7 @@ class AuthenticationAndDashboardTests(TestCase):
         self.assertNotContains(response, "Operator shortcuts")
         self.assertNotContains(response, "Active matches")
         self.assertNotContains(response, "Warnings / errors")
-        self.assertContains(response, 'href="/reports/"')
+        self.assertContains(response, 'href="/reports/?mode=execution"')
         self.assertContains(response, 'href="/monitoring/"')
         self.assertContains(response, 'href="/admin-area/"')
         self.assertContains(response, 'href="/admin/"')
