@@ -44,7 +44,9 @@ For Vercel, configure `QBET_DATABASE_URL` for Preview and Production as required
 
 `/health/` is an operational readiness probe, not merely a Django-process liveness check. It performs a read-only PostgreSQL connection check and asks Django for the current migration plan. It returns HTTP 200 only when the configured authoritative database is reachable and has no unapplied migrations. Database failures, inconsistent migration state, or pending migrations return HTTP 503 with a stable non-sensitive reason code.
 
-The Vercel preview smoke already calls `/health/` with failure-on-non-2xx behavior. A deployment therefore cannot be treated as healthy when its configured PostgreSQL schema is behind the deployed code.
+The Vercel preview smoke always inspects `/health/`. A deployment is operationally ready only when the endpoint reports `status=ok` and `persistence=ready`.
+
+Pull-request validation treats the specific `migrations_pending` state as a visible warning rather than a merge-blocking code failure because PR automation is not allowed to mutate the shared hosted database. Other readiness failures still fail the PR. Pushes to `develop` / staging remain strict: any hosted readiness state other than `ready` fails deployment validation. This keeps schema drift visible without creating a PR deadlock that could only be resolved by an unauthorized database write.
 
 Deploying Q-Bet never runs migrations from a web request, serverless cold start, or normal preview smoke. Schema changes remain an explicit operator action:
 
