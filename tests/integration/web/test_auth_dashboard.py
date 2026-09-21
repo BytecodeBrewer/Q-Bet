@@ -1,8 +1,9 @@
 from django.contrib.auth.models import User
+from django.core import mail
 from django.test import Client, TestCase
 
 from qbet.web.display_preferences import DisplayPreferenceRepository
-from qbet.web.models import UserDisplayPreference
+from qbet.web.models import AccountVerification, UserDisplayPreference
 
 import os
 
@@ -14,7 +15,7 @@ django.setup()
 
 
 class AuthenticationAndDashboardTests(TestCase):
-    def test_registration_creates_normal_user_and_signs_in(self) -> None:
+    def test_registration_creates_inactive_user_pending_email_verification(self) -> None:
         response = self.client.post(
             "/register/",
             {
@@ -28,11 +29,14 @@ class AuthenticationAndDashboardTests(TestCase):
         )
 
         user = User.objects.get(username="new-user")
-        self.assertRedirects(response, "/dashboard/")
+        self.assertRedirects(response, "/verification/pending/")
+        self.assertFalse(user.is_active)
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
         self.assertEqual(user.email, "new-user@example.com")
-        self.assertTrue(response.wsgi_request.user.is_authenticated)
+        self.assertTrue(AccountVerification.objects.filter(user=user, verified_at=None).exists())
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_invalid_registration_shows_generic_error(self) -> None:
         response = self.client.post("/register/", {"username": "new-user"})
