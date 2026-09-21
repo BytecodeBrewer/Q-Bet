@@ -27,6 +27,9 @@ With the intended Q-Bet development configuration, local and hosted application 
 - `QBET_HOSTED_PREVIEW`: marks a hosted Vercel-style runtime so hosted security requirements such as SSL and disabled debug are enforced.
 - `QBET_SIMULATION_MODE_ENABLED`: bootstrap/default Simulation availability. Preview CI sets this to `false`; another deployed environment may explicitly enable it.
 - `QBET_TEST_DATABASE_URL`: disposable PostgreSQL connection used by pytest. Tests replace `QBET_DATABASE_URL` inside the pytest process with this value so they cannot accidentally mutate the shared Supabase database.
+- `QBET_EMAIL_BACKEND`: optional explicit Django email backend. Local/test runtime defaults to the in-memory backend; hosted preview/runtime defaults to SMTP so verification/reset links are never printed to console logs.
+- `QBET_DEFAULT_FROM_EMAIL`: sender address for verification and password-reset mail.
+- `QBET_EMAIL_HOST`, `QBET_EMAIL_PORT`, `QBET_EMAIL_HOST_USER`, `QBET_EMAIL_HOST_PASSWORD`, `QBET_EMAIL_USE_TLS`: SMTP configuration for hosted account-security mail. Keep credentials in environment/secrets configuration only.
 
 `SUPABASE_QBET_TOKEN` is a Supabase Management API credential for automation and administration. It is not a PostgreSQL password and is not used by Django as `QBET_DATABASE_URL`.
 
@@ -61,6 +64,12 @@ The first two commands are useful read-only checks. Run the final migration comm
 Normal GitHub Actions still use disposable PostgreSQL. CI additionally runs `makemigrations --check --dry-run` and `migrate --check` so model changes without committed migrations and incomplete disposable test schemas fail before deployment.
 
 PostgreSQL is the durable operational source of truth for Django authentication, sessions, simulation control/run state, provider state, simulation reports/log records, and the current monitoring/reporting inputs. Missing `QBET_DATABASE_URL` now fails configuration explicitly; Q-Bet does not silently create a local SQLite database or switch to an ephemeral Vercel file.
+
+## Account Security
+
+New public registrations remain inactive until the address is verified through a one-time, 24-hour verification link. Expired inactive registrations remain unusable and are lazily cleaned when account-verification surfaces are visited. Password changes use Django's authenticated password-change boundary; forgotten-password flows use Django's one-time, 24-hour password-reset tokens.
+
+Verification and reset token paths are redacted by Q-Bet request logging. The hosted email path uses SMTP rather than the console backend so token-bearing links are not written to application logs. If hosted mail delivery is unavailable, registration fails closed and does not leave a newly created inactive account behind.
 
 ## Django Admin
 
