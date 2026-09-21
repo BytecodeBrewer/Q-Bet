@@ -45,6 +45,8 @@ from qbet.simulation import SimulationEngine
 from qbet.storage.ledger import (
     RoutingConfigurationPersistenceError,
     RoutingConfigurationRepository,
+    UserRoutingPreferencePersistenceError,
+    UserRoutingPreferenceRepository,
 )
 from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.observability import (
@@ -67,6 +69,7 @@ from qbet.web.forms import (
     RegistrationForm,
     SimulationAvailabilityForm,
     SimulationStartForm,
+    UserRoutingPreferencesForm,
 )
 from qbet.web.models import CustomerReportAccess
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
@@ -76,7 +79,12 @@ from qbet.web.simulation_control import (
     SimulationControlService,
     SimulationDisableBlockedError,
 )
-from qbet.workflow.routing import RoutingConfiguration, V1Engine, engine_modes
+from qbet.workflow.routing import (
+    RoutingConfiguration,
+    UserRoutingPreferences,
+    V1Engine,
+    engine_modes,
+)
 
 _DETAIL_FIELDS = (
     "include_events",
@@ -97,6 +105,7 @@ MONITORING_SERVICE = _monitoring_service()
 CUSTOMER_REPORTING_SERVICE = CustomerReportingService(PostgresSimulationReportReader())
 NOTIFICATION_PREFERENCES = PostgresNotificationPreferenceRepository()
 NOTIFICATION_INBOX = PostgresNotificationInbox()
+USER_ROUTING_PREFERENCES = UserRoutingPreferenceRepository()
 WORKFLOW_MONITORING_REPOSITORY = PostgresMonitoringRepository()
 WORKFLOW_MONITORING_SERVICE = WorkflowMonitoringService(WORKFLOW_MONITORING_REPOSITORY)
 SIMULATION_CONTROL = SimulationControlService()
@@ -112,6 +121,13 @@ def _routing_configuration() -> tuple[RoutingConfiguration, bool]:
         return RoutingConfigurationRepository().load() or RoutingConfiguration(), True
     except RoutingConfigurationPersistenceError:
         return RoutingConfiguration(), False
+
+
+def _user_routing_preferences(user_id: str) -> tuple[UserRoutingPreferences, bool]:
+    try:
+        return USER_ROUTING_PREFERENCES.load(user_id), True
+    except UserRoutingPreferencePersistenceError:
+        return UserRoutingPreferences(), False
 
 
 def _is_staff(user: object) -> bool:
@@ -412,7 +428,23 @@ def presentation_settings(request: HttpRequest) -> HttpResponse:
         messages.success(request, "Presentation preferences updated.")
         return redirect("presentation-settings")
 
-    values: dict[str, object] = {"form": form}
+    routing_configuration, routing_available = _routing_configuration()
+    user_routing, user_routing_available = _user_routing_preferences(
+        request.user.get_username()
+    )
+    engine_preferences_available = routing_available and user_routing_available
+    values: dict[str, object] = {
+        "form": form,
+        "engine_preferences_available": engine_preferences_available,
+        "engine_preferences_form": (
+            UserRoutingPreferencesForm(
+                global_configuration=routing_configuration,
+                preferences=user_routing,
+            )
+            if engine_preferences_available
+            else None
+        ),
+    }
     if _is_staff(request.user):
         control = SIMULATION_CONTROL.snapshot()
         values.update(
@@ -423,6 +455,39 @@ def presentation_settings(request: HttpRequest) -> HttpResponse:
             simulation_enabled=control.availability.enabled,
         )
     return render(request, "qbet_web/settings.html", _context(request, **values))
+
+
+@login_required
+@require_POST
+def user_routing_preferences_update(request: HttpRequest) -> HttpResponse:
+    routing_configuration, routing_available = _routing_configuration()
+    if not routing_available:
+        messages.error(request, "Engine availability is temporarily unavailable.")
+        return redirect("presentation-settings")
+
+    user_id = request.user.get_username()
+    try:
+        current = USER_ROUTING_PREFERENCES.load(user_id)
+    except UserRoutingPreferencePersistenceError:
+        messages.error(request, "Your engine preferences are temporarily unavailable.")
+        return redirect("presentation-settings")
+
+    form = UserRoutingPreferencesForm(
+        request.POST,
+        global_configuration=routing_configuration,
+        preferences=current,
+    )
+    if not form.is_valid():
+        messages.error(request, "Engine preferences were not accepted.")
+        return redirect("presentation-settings")
+
+    try:
+        USER_ROUTING_PREFERENCES.save(user_id, form.to_preferences())
+    except UserRoutingPreferencePersistenceError:
+        messages.error(request, "Your engine preferences could not be saved.")
+    else:
+        messages.success(request, "Engine and mode preferences updated.")
+    return redirect("presentation-settings")
 
 
 @login_required
