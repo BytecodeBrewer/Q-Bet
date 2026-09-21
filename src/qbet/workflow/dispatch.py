@@ -36,11 +36,16 @@ from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
     RoutingConfigurationRepository,
+    UserRoutingPreferenceRepository,
 )
 from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 from qbet.storage.notifications import (
     NotificationPersistenceError,
     PostgresNotificationRepository,
+)
+from qbet.notifications.preferences import (
+    PostgresNotificationInbox,
+    PostgresNotificationPreferenceRepository,
 )
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
@@ -53,7 +58,7 @@ from qbet.workflow.models import (
 from qbet.workflow.orchestrator import WorkflowOrchestrator
 from qbet.workflow.queue import QueuedWorkItem, WorkState
 from qbet.workflow.readiness import PipelineReadinessProvider, Phase2PipelineReadiness
-from qbet.workflow.routing import RoutingConfiguration, V1Engine
+from qbet.workflow.routing import RoutingConfiguration, UserRoutingPreferences, V1Engine
 
 
 class ModeDispatchCoordinator:
@@ -64,6 +69,7 @@ class ModeDispatchCoordinator:
         configuration: RoutingConfiguration | None = None,
         *,
         routing_configuration_loader: Callable[[], RoutingConfiguration | None] | None = None,
+        user_routing_preferences_loader: Callable[[str], UserRoutingPreferences] | None = None,
         queue_repository: ModeWorkQueueRepository | None = None,
         mode_request_handlers: ModeRequestHandlers | None = None,
         monitoring_writer: PostgresMonitoringRepository | None = None,
@@ -75,11 +81,15 @@ class ModeDispatchCoordinator:
             raise ValueError(
                 "routing configuration and routing configuration loader are mutually exclusive"
             )
-        if configuration is None and routing_configuration_loader is None:
-            routing_configuration_loader = RoutingConfigurationRepository().load
+        if configuration is None:
+            if routing_configuration_loader is None:
+                routing_configuration_loader = RoutingConfigurationRepository().load
+            if user_routing_preferences_loader is None:
+                user_routing_preferences_loader = UserRoutingPreferenceRepository().load
         self._routing_orchestrator = WorkflowOrchestrator(
             routing_configuration=configuration,
             routing_configuration_loader=routing_configuration_loader,
+            user_routing_preferences_loader=user_routing_preferences_loader,
         )
         self._queue_repository = queue_repository or ModeWorkQueueRepository()
         self._mode_request_handlers = mode_request_handlers
@@ -89,6 +99,8 @@ class ModeDispatchCoordinator:
             repository=PostgresNotificationRepository(),
             transport=DjangoEmailTransport(),
             monitoring_writer=self._monitoring_writer,
+            preference_repository=PostgresNotificationPreferenceRepository(),
+            inbox_delivery_repository=PostgresNotificationInbox(),
         )
         self._notification_recipient_resolver = (
             notification_recipient_resolver or ActiveUserNotificationRecipientResolver()
@@ -840,10 +852,7 @@ class ModeDispatchCoordinator:
             for command_id, command in after.commands.items()
             if command_id not in before.commands
             and (dispatch_id is None or command.dispatch_id == dispatch_id)
-            and (
-                dispatch_prefix is None
-                or command.dispatch_id.startswith(dispatch_prefix)
-            )
+            and (dispatch_prefix is None or command.dispatch_id.startswith(dispatch_prefix))
         ]
         cursor = before
         while pending_commands:
@@ -869,9 +878,7 @@ class ModeDispatchCoordinator:
                 self._record_event(
                     item,
                     stage=(
-                        "settlement"
-                        if command.operation.value in {"settle", "fail"}
-                        else "ledger"
+                        "settlement" if command.operation.value in {"settle", "fail"} else "ledger"
                     ),
                     event_type="capital_transition",
                     status=status,

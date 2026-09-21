@@ -8,6 +8,7 @@
     <p><label for="{{ form.first_name.id_for_label }}">First name</label>{{ form.first_name }}</p>
     <p><label for="{{ form.last_name.id_for_label }}">Last name</label>{{ form.last_name }}</p>
     <p><label for="{{ form.email.id_for_label }}">Email</label>{{ form.email }}</p>
+    <fieldset><legend>Notification preferences</legend>{{ preferences_form.email_enabled.label_tag }}{{ preferences_form.email_enabled }}{{ preferences_form.inbox_enabled.label_tag }}{{ preferences_form.inbox_enabled }}{{ preferences_form.categories }}</fieldset>
     <button class="primary">Update profile</button>
   </form>
 </section>

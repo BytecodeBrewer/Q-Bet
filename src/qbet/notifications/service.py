@@ -18,6 +18,11 @@ from .models import (
     NotificationRecipient,
     NotificationStatus,
 )
+from .preferences import (
+    NotificationInboxDeliveryRepository,
+    NotificationPreferenceRepository,
+    NotificationPreferences,
+)
 from .recipients import NotificationRecipientStatus, notification_recipient_status
 
 
@@ -73,10 +78,14 @@ class ExecutionNotificationService:
         repository: NotificationRepository,
         transport: NotificationTransport,
         monitoring_writer: MonitoringWriter | None = None,
+        preference_repository: NotificationPreferenceRepository | None = None,
+        inbox_delivery_repository: NotificationInboxDeliveryRepository | None = None,
     ) -> None:
         self._repository = repository
         self._transport = transport
         self._monitoring_writer = monitoring_writer
+        self._preference_repository = preference_repository
+        self._inbox_delivery_repository = inbox_delivery_repository
 
     def notify(
         self,
@@ -95,7 +104,22 @@ class ExecutionNotificationService:
         if reason is not None:
             return NotificationOutcome(accepted=False, reason_code=reason)
 
-        task = _build_task(record, queued, recipient_status, now)
+        preferences = (
+            self._preference_repository.load(recipient.user_id)
+            if self._preference_repository is not None
+            else NotificationPreferences()
+        )
+        category = "execution_action_required"
+        category_enabled = preferences.accepts(category)
+        task = _build_task(
+            record,
+            queued,
+            recipient_status,
+            now,
+            category=category,
+            email_requested=preferences.email_enabled and category_enabled,
+            inbox_requested=preferences.inbox_enabled and category_enabled,
+        )
         persisted, created = self._repository.create(task)
         if not created:
             sendable = persisted.status in {
@@ -103,6 +127,8 @@ class ExecutionNotificationService:
                 NotificationStatus.SENT,
                 NotificationStatus.ACKNOWLEDGED,
             }
+            if sendable:
+                self._ensure_inbox_delivery(persisted)
             return NotificationOutcome(
                 task=persisted,
                 accepted=sendable,
@@ -112,7 +138,7 @@ class ExecutionNotificationService:
                 duplicate=True,
             )
 
-        if not recipient_status.ready:
+        if task.email_requested and not recipient_status.ready:
             failed = _transition(
                 persisted,
                 NotificationStatus.FAILED,
@@ -130,6 +156,15 @@ class ExecutionNotificationService:
         queued_task = _transition(persisted, NotificationStatus.QUEUED, now=now)
         queued_task = self._repository.save(queued_task)
         self._emit(queued_task)
+        inbox_delivered = self._ensure_inbox_delivery(queued_task)
+
+        if not queued_task.email_requested:
+            if inbox_delivered:
+                sent = _transition(queued_task, NotificationStatus.SENT, now=now)
+                sent = self._repository.save(sent)
+                self._emit(sent)
+                return NotificationOutcome(task=sent, accepted=True)
+            return NotificationOutcome(task=queued_task, accepted=True)
 
         try:
             self._transport.send(queued_task)
@@ -211,6 +246,16 @@ class ExecutionNotificationService:
         self._emit(acknowledged)
         return NotificationOutcome(task=acknowledged, accepted=True)
 
+    def _ensure_inbox_delivery(self, task: ExecutionNotificationTask) -> bool:
+        repository = self._inbox_delivery_repository
+        if not task.inbox_requested or repository is None:
+            return False
+        return repository.deliver(
+            task.recipient.user_id,
+            task.id,
+            task.category,
+        )
+
     def _emit(self, task: ExecutionNotificationTask) -> None:
         writer = self._monitoring_writer
         if writer is None:
@@ -280,6 +325,10 @@ def _build_task(
     queued: QueuedWorkItem,
     recipient: NotificationRecipientStatus,
     now: datetime,
+    *,
+    category: str,
+    email_requested: bool,
+    inbox_requested: bool,
 ) -> ExecutionNotificationTask:
     request = record.proposal.request
     evaluation = (
@@ -315,6 +364,9 @@ def _build_task(
         action_deadline=deadline,
         created_at=now,
         lifecycle_at=now,
+        category=category,
+        email_requested=email_requested,
+        inbox_requested=inbox_requested,
     )
 
 

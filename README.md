@@ -10,6 +10,8 @@ Q-Bet is a cloud-backed Python/Django application with PostgreSQL/Supabase as it
 
 The core system is structurally available from data ingestion to user-facing output. `BonusEngine` and `SportsCapitalEngine` are implemented, GUI-started `SportsCapitalEngine` Simulation can consume normalized The Odds API market data through the Sports Match Builder, bunq sandbox funding feedback returns to the durable Simulation ledger exactly once, and controlled post-event Execution settlement can consume validated The Odds API score/finality data. Simulation, controlled Execution, Portfolio Ledger state, Monitoring, Reporting, notifications, and approval boundaries are already part of the application.
 
+Users can persist personal `BonusEngine` / `SportsCapitalEngine` Simulation and Execution selections inside the global staff routing guardrails. Missing preferences fail closed, globally disabled routes remain unavailable without deleting stored user intent, and Execution selection does not bypass approval or capital boundaries.
+
 The current operating direction is API- and notification-first. Additional engines, broader live execution, and browser-based execution are deliberately not part of the current scope; the focus is on connecting the existing components into complete, realistic system flows and hardening those paths before expanding the product surface.
 
 > [!NOTE]
@@ -73,7 +75,7 @@ python manage.py check
 python -m build
 ```
 
-The GitHub Actions pipeline runs the same quality gates against an isolated PostgreSQL service. Provider-specific E2E workflows are opt-in and isolated from the normal offline validation path.
+The GitHub Actions **PostgreSQL validation gate** is the authoritative standard result for Dev Handoffs and reviews. For pull requests it explicitly checks out and verifies the submitted PR head SHA, rather than GitHub's synthetic merge SHA; pushes verify their own push SHA. Every run receives a fresh PostgreSQL 16 service and runs `git diff --check`, Ruff, Pyright, migration checks, migrations, the full standard Pytest suite, Django checks, and the package build. The gate receives no provider or bank credentials; external bunq sandbox E2E remains in its separate opt-in workflow, and the performance baseline remains a separate job.
 
 ## Deployment
 

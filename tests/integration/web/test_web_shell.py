@@ -7,6 +7,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
@@ -14,6 +15,7 @@ from qbet.reporting import SimulationReport
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
 from qbet.web.logging import SafeRequestJSONFormatter
 from qbet.web.monitoring import MonitoringService
+from qbet.web.readiness import PersistenceReadiness, PersistenceReadinessCode
 from qbet.web.settings import parse_allowed_hosts
 from qbet.web.views import _monitoring_service
 
@@ -32,10 +34,17 @@ class WebShellSmokeTests(SimpleTestCase):
         self.client = Client()
 
     def test_health_route_returns_small_json_status(self) -> None:
-        response = self.client.get("/health/")
+        with patch(
+            "qbet.web.views.persistence_readiness",
+            return_value=PersistenceReadiness(PersistenceReadinessCode.READY),
+        ):
+            response = self.client.get("/health/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ok", "service": "q-bet-web"})
+        self.assertEqual(
+            response.json(),
+            {"status": "ok", "service": "q-bet-web", "persistence": "ready"},
+        )
 
     def test_home_renders_presentation_flow_without_operational_or_staff_state(self) -> None:
         response = self.client.get("/")
@@ -109,13 +118,17 @@ class WebShellSmokeTests(SimpleTestCase):
         request_logger.addHandler(handler)
         correlation_id = "123e4567-e89b-12d3-a456-426614174000"
         try:
-            response = self.client.get(
-                "/health/?password=not-for-logs",
-                HTTP_X_CORRELATION_ID=correlation_id,
-                HTTP_AUTHORIZATION="Bearer not-for-logs",
-                HTTP_X_BANK_DETAILS="not-for-logs",
-                HTTP_X_BOOKMAKER_CREDENTIAL="not-for-logs",
-            )
+            with patch(
+                "qbet.web.views.persistence_readiness",
+                return_value=PersistenceReadiness(PersistenceReadinessCode.READY),
+            ):
+                response = self.client.get(
+                    "/health/?password=not-for-logs",
+                    HTTP_X_CORRELATION_ID=correlation_id,
+                    HTTP_AUTHORIZATION="Bearer not-for-logs",
+                    HTTP_X_BANK_DETAILS="not-for-logs",
+                    HTTP_X_BOOKMAKER_CREDENTIAL="not-for-logs",
+                )
         finally:
             request_logger.removeHandler(handler)
 

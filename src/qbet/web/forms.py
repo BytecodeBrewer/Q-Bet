@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
@@ -16,8 +16,17 @@ from qbet.data.polling import (
     PollingTarget,
 )
 from qbet.notifications import notification_recipient_status
+from qbet.notifications.preferences import NOTIFICATION_CATEGORIES
 from qbet.simulation import SimulationEngine
-from qbet.workflow.routing import EngineModes, RoutingConfiguration, V1Engine
+from qbet.workflow.routing import (
+    EngineModes,
+    RoutingConfiguration,
+    UserEngineModes,
+    UserRoutingPreferences,
+    V1Engine,
+    engine_modes,
+    user_engine_modes,
+)
 
 _ROUTING_MODE_CHOICES = (
     ("inactive", "Inactive"),
@@ -84,6 +93,18 @@ class NotificationProfileForm(forms.ModelForm):
         return cleaned
 
 
+class NotificationPreferencesForm(forms.Form):
+    email_enabled = forms.BooleanField(required=False, initial=True, label="Email notifications")
+    inbox_enabled = forms.BooleanField(required=False, initial=True, label="Internal inbox")
+    categories = forms.MultipleChoiceField(
+        required=False,
+        choices=tuple(
+            (category, category.replace("_", " ").title()) for category in NOTIFICATION_CATEGORIES
+        ),
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+
 class PresentationSettingsForm(forms.Form):
     theme = forms.ChoiceField(
         choices=(("light", "Light"), ("dark", "Dark")),
@@ -93,6 +114,100 @@ class PresentationSettingsForm(forms.Form):
         choices=(("small", "Small"), ("medium", "Medium"), ("large", "Large")),
         widget=forms.RadioSelect,
     )
+    language = forms.ChoiceField(required=False, choices=(("de", "Deutsch"), ("en", "English")))
+    region = forms.ChoiceField(
+        required=False,
+        choices=(("DE", "Germany"), ("GB", "United Kingdom"), ("US", "United States")),
+    )
+    timezone_name = forms.ChoiceField(
+        label="Time zone",
+        required=False,
+        choices=(
+            ("Europe/Berlin", "Europe/Berlin"),
+            ("Europe/London", "Europe/London"),
+            ("America/New_York", "America/New_York"),
+            ("UTC", "UTC"),
+        ),
+    )
+    time_format = forms.ChoiceField(
+        label="Time format",
+        required=False,
+        choices=(("24h", "24-hour"), ("12h", "12-hour")),
+    )
+    currency = forms.ChoiceField(
+        label="Preferred conversion currency",
+        help_text="Amounts retain their recorded currency until a verified exchange-rate source is available.",
+        required=False,
+        choices=(("EUR", "EUR"), ("GBP", "GBP"), ("USD", "USD")),
+    )
+
+
+class UserRoutingPreferencesForm(forms.Form):
+    """Account route choices constrained by the current staff availability."""
+
+    bonus_simulation = forms.BooleanField(required=False, label="BonusEngine Simulation")
+    bonus_execution = forms.BooleanField(required=False, label="BonusEngine Execution")
+    sports_capital_simulation = forms.BooleanField(
+        required=False,
+        label="SportsCapitalEngine Simulation",
+    )
+    sports_capital_execution = forms.BooleanField(
+        required=False,
+        label="SportsCapitalEngine Execution",
+    )
+
+    def __init__(
+        self,
+        *args: Any,
+        global_configuration: RoutingConfiguration,
+        preferences: UserRoutingPreferences,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        for engine in ("bonus", "sports_capital"):
+            for mode in ("simulation", "execution"):
+                self._configure_route(engine, mode, preferences, global_configuration)
+
+    def _configure_route(
+        self,
+        engine: V1Engine,
+        mode: Literal["simulation", "execution"],
+        preferences: UserRoutingPreferences,
+        global_configuration: RoutingConfiguration,
+    ) -> None:
+        field = self.fields[f"{engine}_{mode}"]
+        selected = bool(getattr(user_engine_modes(preferences, engine), mode))
+        available = bool(getattr(engine_modes(global_configuration, engine), mode))
+        field.initial = selected
+        field.disabled = not available
+        if not available:
+            field.help_text = (
+                "Selected but unavailable while staff has disabled this route; "
+                "your selection is retained."
+                if selected
+                else "Unavailable while staff has disabled this route."
+            )
+
+    def clean(self) -> dict[str, Any]:
+        cleaned = super().clean() or {}
+        allowed = {*self.fields, "csrfmiddlewaretoken"}
+        if set(self.data) - allowed:
+            raise forms.ValidationError("Unsupported engine preference field.")
+        return cleaned
+
+    def to_preferences(self) -> UserRoutingPreferences:
+        if not self.is_valid():
+            raise ValueError("user routing preferences form must be valid before conversion")
+        return UserRoutingPreferences(
+            bonus=UserEngineModes(
+                simulation=bool(self.cleaned_data["bonus_simulation"]),
+                execution=bool(self.cleaned_data["bonus_execution"]),
+            ),
+            sports_capital=UserEngineModes(
+                simulation=bool(self.cleaned_data["sports_capital_simulation"]),
+                execution=bool(self.cleaned_data["sports_capital_execution"]),
+            ),
+        )
 
 
 class RoutingConfigurationForm(forms.Form):
@@ -219,11 +334,7 @@ class PollingStrategyForm(forms.Form):
             interval_value = cleaned.get("market_interval_minutes")
             interval = (
                 timedelta(minutes=int(interval_value))
-                if (
-                    interval_value is not None
-                    and target is PollingTarget.MARKET
-                    and not points
-                )
+                if (interval_value is not None and target is PollingTarget.MARKET and not points)
                 else None
             )
             engine = _polling_engine(cleaned.get("engine"))

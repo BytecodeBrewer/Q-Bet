@@ -27,6 +27,24 @@ class RoutingConfiguration(DomainModel):
     sports_capital: EngineModes = Field(default_factory=EngineModes)
 
 
+class UserEngineModes(DomainModel):
+    """Account-scoped route intent; it never controls execution authority."""
+
+    model_config = ConfigDict(frozen=True, str_strip_whitespace=True, extra="forbid")
+
+    simulation: bool = False
+    execution: bool = False
+
+
+class UserRoutingPreferences(DomainModel):
+    """Persisted user selection inside the global staff routing guardrails."""
+
+    model_config = ConfigDict(frozen=True, str_strip_whitespace=True, extra="forbid")
+
+    bonus: UserEngineModes = Field(default_factory=UserEngineModes)
+    sports_capital: UserEngineModes = Field(default_factory=UserEngineModes)
+
+
 class RoutedWorkItem(DomainModel):
     id: UUID
     correlation_id: UUID
@@ -46,14 +64,46 @@ def engine_modes(configuration: RoutingConfiguration, engine: V1Engine) -> Engin
     raise ValueError("unsupported v1 engine")
 
 
+def user_engine_modes(
+    preferences: UserRoutingPreferences,
+    engine: V1Engine,
+) -> UserEngineModes:
+    if engine == "bonus":
+        return preferences.bonus
+    if engine == "sports_capital":
+        return preferences.sports_capital
+    raise ValueError("unsupported v1 engine")
+
+
+def effective_engine_modes(
+    configuration: RoutingConfiguration,
+    preferences: UserRoutingPreferences,
+    engine: V1Engine,
+) -> EngineModes:
+    """Intersect personal intent with the authoritative global availability."""
+
+    global_modes = engine_modes(configuration, engine)
+    selected_modes = user_engine_modes(preferences, engine)
+    return EngineModes(
+        simulation=global_modes.simulation and selected_modes.simulation,
+        execution=global_modes.execution and selected_modes.execution,
+        execution_sandbox=global_modes.execution_sandbox,
+    )
+
+
 def resolve_routes(
     configuration: RoutingConfiguration,
     engine: V1Engine,
     opportunity_id: str,
     correlation_id: UUID,
     owner: str,
+    user_preferences: UserRoutingPreferences | None = None,
 ) -> tuple[RoutedWorkItem, ...]:
-    modes = engine_modes(configuration, engine)
+    modes = (
+        effective_engine_modes(configuration, user_preferences, engine)
+        if user_preferences is not None
+        else engine_modes(configuration, engine)
+    )
     return tuple(
         RoutedWorkItem(
             id=uuid5(correlation_id, f"{owner}:{engine}:{mode.value}:{opportunity_id}"),

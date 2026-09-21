@@ -11,8 +11,15 @@ from qbet.web.routing_settings import routing_settings
 urlpatterns = [
     path("", views.home, name="home"),
     path("health/", views.health, name="health"),
+    path("metrics/", views.metrics, name="metrics"),
     path("register/", views.register, name="register"),
     path("profile/", views.profile, name="profile"),
+    path("notifications/", views.notification_inbox, name="notification-inbox"),
+    path(
+        "notifications/<uuid:task_id>/read/",
+        views.notification_inbox_read,
+        name="notification-inbox-read",
+    ),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
     path("execution/approvals/", execution_approvals, name="execution-approvals"),
@@ -35,6 +42,11 @@ urlpatterns = [
     path("simulation/", views.simulation, name="simulation"),
     path("simulation/start/", views.simulation_start, name="simulation-start"),
     path("settings/presentation/", views.presentation_settings, name="presentation-settings"),
+    path(
+        "settings/engines/",
+        views.user_routing_preferences_update,
+        name="user-routing-preferences",
+    ),
     path("reports/", views.report_history, name="report-history"),
     path("reports/<uuid:run_id>/", views.report_detail, name="report-detail"),
     path(

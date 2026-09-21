@@ -10,6 +10,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 _LOCAL_SECRET_KEY = "qbet-local-development-only-secret"
+_POSTGRES_CONNECT_TIMEOUT_SECONDS = 5
 
 
 def parse_allowed_hosts(value: str) -> list[str]:
@@ -55,7 +56,10 @@ def database_config_from_url(value: str, *, require_ssl: bool = False) -> dict[s
         )
 
     query = parse_qs(parsed.query)
-    options: dict[str, object] = {"prepare_threshold": None}
+    options: dict[str, object] = {
+        "prepare_threshold": None,
+        "connect_timeout": _POSTGRES_CONNECT_TIMEOUT_SECONDS,
+    }
     sslmode = query.get("sslmode", [None])[-1]
     if require_ssl:
         sslmode = "require"
@@ -122,6 +126,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "qbet.web.approval_context.approval_navigation",
             ],
         },
     },
@@ -134,24 +139,39 @@ DATABASES = {
         require_ssl=QBET_HOSTED_PREVIEW,
     )
 }
+
+
+def optional_external_url(name: str) -> str:
+    """Accept only a credential-free HTTP(S) infrastructure link."""
+
+    value = os.environ.get(name, "").strip()
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return ""
+    return value.rstrip("/")
+
+
+QBET_METRICS_TOKEN = os.environ.get("QBET_METRICS_TOKEN", "")
+QBET_GRAFANA_URL = optional_external_url("QBET_GRAFANA_URL")
+QBET_VERCEL_DASHBOARD_URL = optional_external_url("QBET_VERCEL_DASHBOARD_URL")
+QBET_SUPABASE_DASHBOARD_URL = optional_external_url("QBET_SUPABASE_DASHBOARD_URL")
 QBET_SIMULATION_MODE_ENABLED = _environment_flag("QBET_SIMULATION_MODE_ENABLED")
-QBET_SIMULATION_SPORTS_SOURCE = os.environ.get(
-    "QBET_SIMULATION_SPORTS_SOURCE", "fixture"
-).strip().lower()
+QBET_SIMULATION_SPORTS_SOURCE = (
+    os.environ.get("QBET_SIMULATION_SPORTS_SOURCE", "fixture").strip().lower()
+)
 QBET_SIMULATION_ODDS_SPORT = os.environ.get("QBET_SIMULATION_ODDS_SPORT", "").strip()
-QBET_SIMULATION_ODDS_EVENT_ID = os.environ.get(
-    "QBET_SIMULATION_ODDS_EVENT_ID", ""
-).strip()
+QBET_SIMULATION_ODDS_EVENT_ID = os.environ.get("QBET_SIMULATION_ODDS_EVENT_ID", "").strip()
 QBET_SIMULATION_ODDS_MARKET = os.environ.get("QBET_SIMULATION_ODDS_MARKET", "").strip()
-QBET_SIMULATION_ASSUMED_LIQUIDITY = os.environ.get(
-    "QBET_SIMULATION_ASSUMED_LIQUIDITY", ""
-).strip()
+QBET_SIMULATION_ASSUMED_LIQUIDITY = os.environ.get("QBET_SIMULATION_ASSUMED_LIQUIDITY", "").strip()
 QBET_SIMULATION_REQUESTED_TOTAL_STAKE = os.environ.get(
     "QBET_SIMULATION_REQUESTED_TOTAL_STAKE", ""
 ).strip()
-QBET_SIMULATION_STAKE_PRECISION = os.environ.get(
-    "QBET_SIMULATION_STAKE_PRECISION", ""
-).strip()
+QBET_SIMULATION_STAKE_PRECISION = os.environ.get("QBET_SIMULATION_STAKE_PRECISION", "").strip()
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

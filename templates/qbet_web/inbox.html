@@ -1,0 +1,7 @@
+{% extends "qbet_web/base.html" %}
+{% block content %}
+<section class="page-heading"><h1>Notifications</h1><p>Customer-safe activity and action reminders.</p></section>
+{% if inbox %}
+<table><thead><tr><th>Status</th><th>Notification</th><th>When</th><th>Action</th></tr></thead><tbody>{% for item in inbox %}<tr><td>{% if item.read %}Read{% else %}Unread{% endif %}</td><td><strong>{{ item.title }}</strong><br>{{ item.message }}</td><td>{{ item.occurred_at }}</td><td>{% if item.actionable %}<a href="{{ item.link }}">Review</a>{% endif %}{% if not item.read %}<form method="post" action="{% url 'notification-inbox-read' item.task_id %}">{% csrf_token %}<button type="submit">Mark read</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>
+{% else %}<p class="empty-state">No notifications are available.</p>{% endif %}
+{% endblock %}

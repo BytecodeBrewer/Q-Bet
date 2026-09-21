@@ -21,9 +21,16 @@ from qbet.workflow.protocol import (
     RequestHandler,
     WorkflowStageHandler,
 )
-from qbet.workflow.routing import RoutedWorkItem, RoutingConfiguration, V1Engine, resolve_routes
+from qbet.workflow.routing import (
+    RoutedWorkItem,
+    RoutingConfiguration,
+    UserRoutingPreferences,
+    V1Engine,
+    resolve_routes,
+)
 
 RoutingConfigurationLoader = Callable[[], RoutingConfiguration | None]
+UserRoutingPreferencesLoader = Callable[[str], UserRoutingPreferences]
 
 
 class StaticStageHandler:
@@ -63,12 +70,18 @@ class WorkflowOrchestrator:
             if self._routing_configuration_loader is not None
             else self._routing_configuration
         )
+        user_preferences = (
+            self._user_routing_preferences_loader(owner)
+            if self._user_routing_preferences_loader is not None
+            else None
+        )
         return self.route_opportunity(
             configuration or RoutingConfiguration(),
             engine,
             opportunity_id,
             correlation_id,
             owner,
+            user_preferences,
         )
 
     @staticmethod
@@ -78,8 +91,16 @@ class WorkflowOrchestrator:
         opportunity_id: str,
         correlation_id: UUID,
         owner: str,
+        user_preferences: UserRoutingPreferences | None = None,
     ) -> tuple[RoutedWorkItem, ...]:
-        return resolve_routes(configuration, engine, opportunity_id, correlation_id, owner)
+        return resolve_routes(
+            configuration,
+            engine,
+            opportunity_id,
+            correlation_id,
+            owner,
+            user_preferences=user_preferences,
+        )
 
     def __init__(
         self,
@@ -90,6 +111,7 @@ class WorkflowOrchestrator:
         mode_request_handlers: ModeRequestHandlers | None = None,
         routing_configuration: RoutingConfiguration | None = None,
         routing_configuration_loader: RoutingConfigurationLoader | None = None,
+        user_routing_preferences_loader: UserRoutingPreferencesLoader | None = None,
     ) -> None:
         if routing_configuration is not None and routing_configuration_loader is not None:
             raise ValueError(
@@ -101,6 +123,7 @@ class WorkflowOrchestrator:
         self._mode_request_handlers = mode_request_handlers
         self._routing_configuration = routing_configuration
         self._routing_configuration_loader = routing_configuration_loader
+        self._user_routing_preferences_loader = user_routing_preferences_loader
 
     def process(
         self,

@@ -257,6 +257,40 @@ class SimulationGuiControlTests(TestCase):
             any(record.record_type is SimulationLogRecordType.RUN_FINISHED for record in records)
         )
 
+    def test_routing_and_simulation_state_survive_service_recreation(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        expected_routing = RoutingConfiguration(
+            bonus=EngineModes(simulation=True)
+        )
+        RoutingConfigurationRepository().save(expected_routing)
+
+        run = SimulationControlService().start(
+            engine=SimulationEngine.BONUS,
+            starting_capital=Decimal("100"),
+            max_duration=timedelta(minutes=60),
+        )
+
+        restored_routing = RoutingConfigurationRepository().load()
+        self.assertEqual(restored_routing, expected_routing)
+
+        restored_control = SimulationControlService().snapshot()
+        restored_run = next(item for item in restored_control.runs if item.run_id == run.run_id)
+        self.assertEqual(restored_run.status, SimulationRunState.Status.COMPLETED)
+        self.assertEqual(restored_run.report_id, run.report_id)
+
+        reader = PostgresSimulationReportReader()
+        assert run.report_id is not None
+        restored_report = reader.load_report(run.report_id)
+        self.assertEqual(restored_report.run_id, run.run_id)
+
+        monitoring = MonitoringService(reader).snapshot(
+            runtime_configuration=restored_routing
+        )
+        bonus = next(engine for engine in monitoring.engines if engine.engine_id == "bonus")
+        self.assertEqual(bonus.status, "green")
+        self.assertEqual(bonus.live_state, "ready")
+        self.assertEqual(bonus.total_activity, 1)
+
     def test_control_service_supports_both_current_v1_engines(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         service = SimulationControlService()
