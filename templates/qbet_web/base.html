@@ -81,10 +81,6 @@
       </aside>
 
       <main id="main-content" class="app-main">
-        {% for message in messages %}<p class="message" role="status">{{ message }}</p>{% endfor %}
-        {% block content %}{% endblock %}
-      </main>
-    </div>
   {% else %}
     <header class="site-header">
       <div class="site-header-inner">
@@ -96,9 +92,10 @@
       </div>
     </header>
     <main id="main-content">
+  {% endif %}
       {% for message in messages %}<p class="message" role="status">{{ message }}</p>{% endfor %}
       {% block content %}{% endblock %}
     </main>
-  {% endif %}
+  {% if user.is_authenticated %}</div>{% endif %}
 </body>
 </html>

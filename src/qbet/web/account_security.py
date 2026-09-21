@@ -96,12 +96,20 @@ def remove_expired_unverified_accounts() -> int:
     return len(user_ids)
 
 
+_ACCOUNT_CLEANUP_PATH_PREFIXES = (
+    "/register/",
+    "/verification/",
+    "/verify-email/",
+)
+
+
 class ExpiredUnverifiedAccountCleanupMiddleware:
-    """Apply bounded inactive-account cleanup without a separate runtime scheduler."""
+    """Lazily clean expired registrations on account-verification surfaces only."""
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        remove_expired_unverified_accounts()
+        if request.path.startswith(_ACCOUNT_CLEANUP_PATH_PREFIXES):
+            remove_expired_unverified_accounts()
         return self.get_response(request)

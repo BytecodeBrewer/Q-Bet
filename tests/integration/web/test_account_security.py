@@ -68,7 +68,7 @@ class AccountSecurityTests(TestCase):
             created_at=timezone.now() - timedelta(hours=25)
         )
 
-        self.assertEqual(self.client.get("/").status_code, 200)
+        self.assertEqual(self.client.get("/verification/pending/").status_code, 200)
         self.assertFalse(User.objects.filter(pk=user.pk).exists())
 
     def test_verification_rejects_registration_after_24_hours(self) -> None:
