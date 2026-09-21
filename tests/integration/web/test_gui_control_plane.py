@@ -391,8 +391,8 @@ class GuiControlPlaneTests(TestCase):
 
     def test_customer_reports_require_an_owner_grant_or_staff_access(self) -> None:
         self.client.force_login(self.user)
-        self.assertEqual(self.client.get("/reports/").status_code, 200)
-        self.assertNotContains(self.client.get("/reports/"), "Northbridge v Riverside")
+        self.assertEqual(self.client.get("/reports/?range=30d").status_code, 200)
+        self.assertNotContains(self.client.get("/reports/?range=30d"), "Northbridge v Riverside")
         self.assertEqual(self.client.get(f"/reports/{self.sports_report.run_id}/").status_code, 404)
         self.assertEqual(
             self.client.get(f"/reports/{self.sports_report.run_id}/export/json/").status_code,
@@ -400,7 +400,7 @@ class GuiControlPlaneTests(TestCase):
         )
 
         CustomerReportAccess.objects.create(report_id=self.sports_report.run_id, user=self.user)
-        history = self.client.get("/reports/")
+        history = self.client.get("/reports/?range=30d")
         detail = self.client.get(f"/reports/{self.sports_report.run_id}/")
         csv_export = self.client.get(f"/reports/{self.sports_report.run_id}/export/csv/")
         json_export = self.client.get(f"/reports/{self.sports_report.run_id}/export/json/")
@@ -414,7 +414,7 @@ class GuiControlPlaneTests(TestCase):
         self.assertEqual(pdf_export.status_code, 200)
 
         self.client.force_login(self.other_user)
-        self.assertNotContains(self.client.get("/reports/"), "Northbridge v Riverside")
+        self.assertNotContains(self.client.get("/reports/?range=30d"), "Northbridge v Riverside")
         self.assertEqual(self.client.get(f"/reports/{self.sports_report.run_id}/").status_code, 404)
         self.assertEqual(
             self.client.get(f"/reports/{self.sports_report.run_id}/export/json/").status_code,
@@ -422,7 +422,7 @@ class GuiControlPlaneTests(TestCase):
         )
 
         self.client.force_login(self.staff)
-        history = self.client.get("/reports/")
+        history = self.client.get("/reports/?range=30d")
         self.assertEqual(history.status_code, 200)
         self.assertContains(history, "bonus")
         self.assertContains(history, "sports_capital")

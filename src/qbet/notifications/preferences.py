@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from qbet.notifications.models import ExecutionNotificationTask, NotificationStatus
 from qbet.storage.models import (
+    NotificationInboxDeliveryRow,
     NotificationInboxReadRow,
     NotificationPreferenceRow,
     NotificationTaskRow,
@@ -40,6 +41,10 @@ class NotificationPreferenceRepository(Protocol):
     def save(
         self, user_id: str, preferences: NotificationPreferences
     ) -> NotificationPreferences: ...
+
+
+class NotificationInboxDeliveryRepository(Protocol):
+    def deliver(self, user_id: str, task_id: UUID, category: str) -> bool: ...
 
 
 class PostgresNotificationPreferenceRepository:
@@ -84,7 +89,22 @@ class InboxItem:
 
 
 class PostgresNotificationInbox:
-    """Read-only task projection plus a separate per-user read marker."""
+    """Durable event-time inbox delivery plus per-user read markers."""
+
+    def deliver(self, user_id: str, task_id: UUID, category: str) -> bool:
+        try:
+            if not NotificationTaskRow.objects.filter(
+                task_id=task_id, recipient_id=user_id
+            ).exists():
+                return False
+            row, _ = NotificationInboxDeliveryRow.objects.get_or_create(
+                user_id=user_id,
+                task_id=task_id,
+                defaults={"category": category},
+            )
+        except DatabaseError:
+            return False
+        return row.category == category
 
     def list(
         self,
@@ -96,24 +116,43 @@ class PostgresNotificationInbox:
         bounded_limit = max(1, min(limit, 100))
         current_time = now or timezone.now()
         try:
-            rows = list(
-                NotificationTaskRow.objects.filter(recipient_id=user_id).order_by("-updated_at")[
-                    :bounded_limit
-                ]
+            deliveries = list(
+                NotificationInboxDeliveryRow.objects.filter(user_id=user_id).order_by(
+                    "-created_at", "-id"
+                )[:bounded_limit]
             )
+            task_ids = [delivery.task_id for delivery in deliveries]
+            rows = {
+                row.task_id: row
+                for row in NotificationTaskRow.objects.filter(
+                    task_id__in=task_ids,
+                    recipient_id=user_id,
+                )
+            }
             reads = set(
                 NotificationInboxReadRow.objects.filter(
-                    user_id=user_id, task_id__in=[row.task_id for row in rows]
+                    user_id=user_id,
+                    task_id__in=task_ids,
                 ).values_list("task_id", flat=True)
             )
         except DatabaseError:
             return ()
-        return tuple(self._item(row, row.task_id in reads, current_time) for row in rows)
+        return tuple(
+            self._item(
+                row,
+                category=delivery.category,
+                read=delivery.task_id in reads,
+                now=current_time,
+            )
+            for delivery in deliveries
+            if (row := rows.get(delivery.task_id)) is not None
+        )
 
     def mark_read(self, user_id: str, task_id: UUID) -> bool:
         try:
-            if not NotificationTaskRow.objects.filter(
-                task_id=task_id, recipient_id=user_id
+            if not NotificationInboxDeliveryRow.objects.filter(
+                user_id=user_id,
+                task_id=task_id,
             ).exists():
                 return False
             NotificationInboxReadRow.objects.get_or_create(user_id=user_id, task_id=task_id)
@@ -122,7 +161,13 @@ class PostgresNotificationInbox:
         return True
 
     @staticmethod
-    def _item(row: NotificationTaskRow, read: bool, now: datetime) -> InboxItem:
+    def _item(
+        row: NotificationTaskRow,
+        *,
+        category: str,
+        read: bool,
+        now: datetime,
+    ) -> InboxItem:
         task = ExecutionNotificationTask.model_validate(row.payload)
         actionable = (
             task.status in {NotificationStatus.SENT, NotificationStatus.QUEUED}
@@ -132,7 +177,7 @@ class PostgresNotificationInbox:
         message = f"{task.engine}: {task.strategy} for {task.opportunity_id}."
         return InboxItem(
             task_id=task.id,
-            category="execution_action_required",
+            category=category,
             title=title,
             message=message,
             link="/execution/approvals/" if actionable else "/inbox/",

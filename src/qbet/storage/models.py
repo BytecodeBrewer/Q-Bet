@@ -211,3 +211,22 @@ class NotificationInboxReadRow(models.Model):
             )
         ]
         ordering = ("-read_at",)
+
+
+class NotificationInboxDeliveryRow(models.Model):
+    """Durable event-time decision that one task was delivered to the internal inbox."""
+
+    user_id = models.CharField(max_length=255)
+    task_id = models.UUIDField()
+    category = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "qbet_notification_inbox_deliveries"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user_id", "task_id"),
+                name="qbet_notification_inbox_delivery_unique",
+            )
+        ]
+        ordering = ("-created_at",)

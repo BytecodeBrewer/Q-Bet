@@ -320,6 +320,61 @@ class PreferenceRepository:
         return preferences
 
 
+class InboxDeliveryRepository:
+    def __init__(self) -> None:
+        self.deliveries: set[tuple[str, UUID, str]] = set()
+
+    def deliver(self, user_id: str, task_id: UUID, category: str) -> bool:
+        self.deliveries.add((user_id, task_id, category))
+        return True
+
+
+def test_inbox_delivery_decision_is_not_reinterpreted_after_preferences_change() -> None:
+    preferences = PreferenceRepository(
+        NotificationPreferences(email_enabled=False, inbox_enabled=False)
+    )
+    deliveries = InboxDeliveryRepository()
+    repository = InMemoryNotificationRepository()
+    record, queued = approved_record()
+    service = ExecutionNotificationService(
+        repository=repository,
+        transport=CaptureEmailTransport(),
+        preference_repository=preferences,
+        inbox_delivery_repository=deliveries,
+    )
+
+    first = service.notify(record, queued, recipient(), now=NOW)
+    preferences.save("owner", NotificationPreferences(email_enabled=False, inbox_enabled=True))
+    repeated = service.notify(record, queued, recipient(), now=NOW + timedelta(seconds=1))
+
+    assert first.accepted
+    assert first.task is not None
+    assert not first.task.inbox_requested
+    assert repeated.duplicate
+    assert repeated.task == first.task
+    assert not deliveries.deliveries
+
+
+def test_inbox_delivery_survives_invalid_email_when_email_channel_is_disabled() -> None:
+    deliveries = InboxDeliveryRepository()
+    record, queued = approved_record()
+    outcome = ExecutionNotificationService(
+        repository=InMemoryNotificationRepository(),
+        transport=CaptureEmailTransport(),
+        preference_repository=PreferenceRepository(
+            NotificationPreferences(email_enabled=False, inbox_enabled=True)
+        ),
+        inbox_delivery_repository=deliveries,
+    ).notify(record, queued, recipient(email=""), now=NOW)
+
+    assert outcome.accepted
+    assert outcome.task is not None
+    assert outcome.task.status is NotificationStatus.SENT
+    assert outcome.task.inbox_requested
+    assert not outcome.task.email_requested
+    assert ("owner", outcome.task.id, "execution_action_required") in deliveries
+
+
 def test_category_preference_suppresses_email_without_changing_execution_state() -> None:
     preferences = NotificationPreferences(categories=())
     transport = CaptureEmailTransport()

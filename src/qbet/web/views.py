@@ -479,15 +479,7 @@ def report_history(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def notification_inbox(request: HttpRequest) -> HttpResponse:
-    user_id = request.user.get_username()
-    preferences = NOTIFICATION_PREFERENCES.load(user_id)
-    inbox = (
-        tuple(
-            item for item in NOTIFICATION_INBOX.list(user_id) if preferences.accepts(item.category)
-        )
-        if preferences.inbox_enabled
-        else ()
-    )
+    inbox = NOTIFICATION_INBOX.list(request.user.get_username())
     return render(request, "qbet_web/inbox.html", _context(request, inbox=inbox))
 
 

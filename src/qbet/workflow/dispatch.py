@@ -42,7 +42,10 @@ from qbet.storage.notifications import (
     NotificationPersistenceError,
     PostgresNotificationRepository,
 )
-from qbet.notifications.preferences import PostgresNotificationPreferenceRepository
+from qbet.notifications.preferences import (
+    PostgresNotificationInbox,
+    PostgresNotificationPreferenceRepository,
+)
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
 from qbet.workflow.models import (
@@ -91,6 +94,7 @@ class ModeDispatchCoordinator:
             transport=DjangoEmailTransport(),
             monitoring_writer=self._monitoring_writer,
             preference_repository=PostgresNotificationPreferenceRepository(),
+            inbox_delivery_repository=PostgresNotificationInbox(),
         )
         self._notification_recipient_resolver = (
             notification_recipient_resolver or ActiveUserNotificationRecipientResolver()
