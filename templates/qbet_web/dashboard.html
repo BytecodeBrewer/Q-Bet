@@ -98,7 +98,7 @@
         <article class="summary-item"><span>Pending matches</span><strong>{{ simulation_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
         <article class="summary-item"><span>Recorded runs</span><strong>{{ simulation_monitoring.summary.recorded_activity }}</strong><small>available history</small></article>
         <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{{ simulation_monitoring.summary.involved_capital }}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>simulation only</small></article>
-        <article class="summary-item incident-summary{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %} has-incidents{% endif %}"><span>Warnings / errors</span><strong>{{ simulation_monitoring.summary.warning_count }} / {{ simulation_monitoring.summary.error_count }}</strong><small>{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %}needs attention{% else %}No known issues{% endif %}</small></article>
+        <article class="summary-item incident-summary{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %} has-incidents{% endif %}"><span>Recorded warnings / errors</span><strong>{{ simulation_monitoring.summary.warning_count }} / {{ simulation_monitoring.summary.error_count }}</strong><small>{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %}recent run history{% else %}No recorded issues{% endif %}</small></article>
       </section>
 
       <section class="simulation-control-panel">
@@ -145,7 +145,7 @@
               <div><span>Virtual capital</span><strong>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}—{% endif %}</strong></div>
             </div>
             {% if engine.warning_count or engine.error_count %}
-              <div class="issue-badges" aria-label="{{ engine.name }} simulation warnings and errors">
+              <div class="issue-badges" aria-label="{{ engine.name }} recorded simulation warnings and errors" title="Recorded incidents from recent simulation history">
                 {% if engine.warning_count %}<span class="issue-badge warning-badge">⚠ {{ engine.warning_count }}</span>{% endif %}
                 {% if engine.error_count %}<span class="issue-badge error-badge">! {{ engine.error_count }}</span>{% endif %}
               </div>

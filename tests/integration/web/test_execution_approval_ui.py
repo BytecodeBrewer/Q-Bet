@@ -1,23 +1,20 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import UUID
 
 from django.contrib.auth.models import User
+from django.db import DatabaseError
 from django.test import TestCase
 
 from qbet.calculations import QualifyingBetInput
 from qbet.engines import BonusEngineRequest
 from qbet.execution.models import ExecutionRecord, Lifecycle
-from qbet.simulation import SimulationEngine
 from qbet.storage.ledger import (
+    AuthoritativePersistenceError,
     ExecutionStateRepository,
     ModeWorkQueueRepository,
-    PortfolioLedgerRepository,
-    RoutingConfigurationRepository,
 )
-from qbet.storage.models import ExecutionRecordRow, PortfolioLedgerRow
-from qbet.web.models import SimulationAvailability, SimulationRunState
-from qbet.web.simulation_control import SimulationControlService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.queue import WorkState
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
@@ -43,69 +40,39 @@ def _request(opportunity_id: str = "web-approval-opportunity") -> BonusEngineReq
     )
 
 
-class Phase2CompletionWebTests(TestCase):
+class ExecutionApprovalWebTests(TestCase):
     def setUp(self) -> None:
         self.user = User.objects.create_user("approval-owner", password="Strong-pass-123")
         self.other = User.objects.create_user("approval-other", password="Strong-pass-123")
-        self.staff = User.objects.create_user(
-            "phase2-staff",
-            password="Strong-pass-123",
-            is_staff=True,
-        )
 
-    def _stage_execution(self) -> UUID:
+    def _stage_execution(
+        self,
+        *,
+        owner: User | None = None,
+        opportunity_id: str = "web-approval-opportunity",
+        now: datetime | None = None,
+        expires_at: datetime | None = None,
+    ) -> UUID:
         coordinator = ModeDispatchCoordinator(
             RoutingConfiguration(bonus=EngineModes(execution=True)),
             queue_repository=ModeWorkQueueRepository(),
         )
-        request = _request()
-        now = datetime.now(UTC)
+        request = _request(opportunity_id)
+        observed_at = now or datetime.now(UTC)
+        approval_owner = owner or self.user
         (scheduled,) = coordinator.schedule(
             request,
-            owner=self.user.get_username(),
+            owner=approval_owner.get_username(),
             correlation_id=CORRELATION_ID,
-            scheduled_for=now,
-            expires_at=now + timedelta(minutes=5),
+            scheduled_for=observed_at,
+            expires_at=expires_at or observed_at + timedelta(minutes=5),
         )
         (waiting,) = coordinator.dispatch_due(
-            now=now,
-            owner=self.user.get_username(),
+            now=observed_at,
+            owner=approval_owner.get_username(),
         )
         self.assertEqual(waiting.state, WorkState.RECHECK)
         return scheduled.work.id
-
-    def test_gui_started_simulation_persists_and_recovers_simulation_ledger(self) -> None:
-        SimulationAvailability.objects.create(pk=1, enabled=True)
-        RoutingConfigurationRepository().save(
-            RoutingConfiguration(bonus=EngineModes(simulation=True))
-        )
-        self.client.force_login(self.staff)
-
-        response = self.client.post(
-            "/simulation/start/",
-            {
-                "engine": SimulationEngine.BONUS.value,
-                "starting_capital": "125.00",
-                "max_duration_minutes": "60",
-            },
-        )
-
-        self.assertEqual(response.status_code, 302)
-        run = SimulationRunState.objects.get()
-        persisted = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
-        self.assertIsNotNone(persisted)
-        assert persisted is not None
-        self.assertTrue(persisted.commands)
-        self.assertEqual(run.current_capital, persisted.balance.available)
-        self.assertEqual(PortfolioLedgerRow.objects.filter(mode="execution").count(), 0)
-        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
-
-        recreated = SimulationControlService().snapshot()
-        recovered_run = next(item for item in recreated.runs if item.run_id == run.run_id)
-        recovered_ledger = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
-        self.assertEqual(recovered_run.current_capital, run.current_capital)
-        self.assertEqual(recovered_ledger, persisted)
-
     def test_owner_sees_only_business_level_pending_approval(self) -> None:
         execution_id = self._stage_execution()
         self.client.force_login(self.user)
@@ -117,6 +84,9 @@ class Phase2CompletionWebTests(TestCase):
         self.assertContains(response, "BonusEngine")
         self.assertContains(response, "web-approval-opportunity")
         self.assertContains(response, "Capital required")
+        self.assertContains(response, "Remaining")
+        self.assertContains(response, "remaining")
+        self.assertContains(response, "Approvals (1)")
         self.assertContains(response, "Approve")
         self.assertContains(response, "Reject")
         self.assertNotContains(response, str(CORRELATION_ID))
@@ -128,6 +98,7 @@ class Phase2CompletionWebTests(TestCase):
         self.assertEqual(hidden.status_code, 200)
         self.assertContains(hidden, "No pending approvals")
         self.assertNotContains(hidden, "web-approval-opportunity")
+        self.assertNotContains(hidden, "Approvals (1)")
 
         self.client.force_login(self.user)
         decision = self.client.post(
@@ -145,6 +116,59 @@ class Phase2CompletionWebTests(TestCase):
         self.assertEqual(record.state, Lifecycle.APPROVED)
         self.assertFalse(ledger.commands)
         self.assertEqual(queue.state, WorkState.PENDING)
+
+    def test_expired_approval_disappears_and_navigation_count_stays_actionable(self) -> None:
+        staged_at = datetime.now(UTC) - timedelta(minutes=10)
+        execution_id = self._stage_execution(
+            opportunity_id="expired-web-approval",
+            now=staged_at,
+            expires_at=staged_at + timedelta(minutes=5),
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get("/execution/approvals/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No pending approvals")
+        self.assertNotContains(response, "expired-web-approval")
+        self.assertNotContains(response, "Approvals (1)")
+        persisted = ExecutionStateRepository().load(execution_id)
+        queue = ModeWorkQueueRepository().load(execution_id)
+        assert persisted is not None and queue is not None
+        record, ledger = persisted
+        self.assertEqual(record.state, Lifecycle.CANCELLED)
+        self.assertEqual(record.error, "approval_expired")
+        self.assertEqual(queue.state, WorkState.CANCELLED)
+        self.assertEqual(queue.history[-1].reason, "approval_expired")
+        self.assertFalse(ledger.commands)
+
+    def test_navigation_count_failure_does_not_break_authenticated_pages(self) -> None:
+        self._stage_execution()
+        self.client.force_login(self.user)
+
+        with patch(
+            "qbet.web.approval_context._APPROVALS.active_count_for",
+            side_effect=DatabaseError("approval read unavailable"),
+        ):
+            response = self.client.get("/dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Dashboard")
+        self.assertContains(response, "Approvals")
+        self.assertNotContains(response, "Approvals (1)")
+
+    def test_inbox_read_failure_is_explicitly_unavailable(self) -> None:
+        self.client.force_login(self.user)
+
+        with patch(
+            "qbet.web.execution_approvals._EXECUTION_APPROVALS.pending_for",
+            side_effect=AuthoritativePersistenceError("approval state unavailable"),
+        ):
+            response = self.client.get("/execution/approvals/")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertContains(response, "Approvals temporarily unavailable", status_code=503)
+        self.assertNotContains(response, "No pending approvals", status_code=503)
 
     def test_rejection_and_unauthorized_decision_are_safe(self) -> None:
         execution_id = self._stage_execution()

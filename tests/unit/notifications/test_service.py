@@ -15,9 +15,12 @@ from qbet.notifications import (
     CaptureEmailTransport,
     ExecutionNotificationService,
     InMemoryNotificationRepository,
+    NotificationPreferences,
     NotificationRecipient,
     NotificationStatus,
+    PostgresNotificationInbox,
 )
+from qbet.storage.models import NotificationTaskRow
 from qbet.workflow import WorkflowMode
 from qbet.workflow.queue import QueuedWorkItem
 from qbet.workflow.routing import RoutedWorkItem
@@ -221,7 +224,9 @@ def test_notification_accepts_the_action_window_boundaries() -> None:
         }
     )
 
-    assert service.notify(twenty_record, twenty_minutes, recipient(user_id="twenty"), now=NOW).accepted
+    assert service.notify(
+        twenty_record, twenty_minutes, recipient(user_id="twenty"), now=NOW
+    ).accepted
     assert service.notify(fifty_record, fifty_minutes, recipient(user_id="fifty"), now=NOW).accepted
 
 
@@ -301,3 +306,129 @@ def test_sent_notification_can_be_acknowledged_once_by_its_recipient() -> None:
     assert first.accepted and first.task is not None
     assert first.task.status is NotificationStatus.ACKNOWLEDGED
     assert repeated.accepted and repeated.duplicate
+
+
+class PreferenceRepository:
+    def __init__(self, preferences: NotificationPreferences) -> None:
+        self._preferences = preferences
+
+    def load(self, user_id: str) -> NotificationPreferences:
+        return self._preferences
+
+    def save(self, user_id: str, preferences: NotificationPreferences) -> NotificationPreferences:
+        self._preferences = preferences
+        return preferences
+
+
+class InboxDeliveryRepository:
+    def __init__(self) -> None:
+        self.deliveries: set[tuple[str, UUID, str]] = set()
+
+    def deliver(self, user_id: str, task_id: UUID, category: str) -> bool:
+        self.deliveries.add((user_id, task_id, category))
+        return True
+
+
+def test_inbox_delivery_decision_is_not_reinterpreted_after_preferences_change() -> None:
+    preferences = PreferenceRepository(
+        NotificationPreferences(email_enabled=False, inbox_enabled=False)
+    )
+    deliveries = InboxDeliveryRepository()
+    repository = InMemoryNotificationRepository()
+    record, queued = approved_record()
+    service = ExecutionNotificationService(
+        repository=repository,
+        transport=CaptureEmailTransport(),
+        preference_repository=preferences,
+        inbox_delivery_repository=deliveries,
+    )
+
+    first = service.notify(record, queued, recipient(), now=NOW)
+    preferences.save("owner", NotificationPreferences(email_enabled=False, inbox_enabled=True))
+    repeated = service.notify(record, queued, recipient(), now=NOW + timedelta(seconds=1))
+
+    assert first.accepted
+    assert first.task is not None
+    assert not first.task.inbox_requested
+    assert repeated.duplicate
+    assert repeated.task == first.task
+    assert not deliveries.deliveries
+
+
+def test_inbox_delivery_survives_invalid_email_when_email_channel_is_disabled() -> None:
+    deliveries = InboxDeliveryRepository()
+    record, queued = approved_record()
+    outcome = ExecutionNotificationService(
+        repository=InMemoryNotificationRepository(),
+        transport=CaptureEmailTransport(),
+        preference_repository=PreferenceRepository(
+            NotificationPreferences(email_enabled=False, inbox_enabled=True)
+        ),
+        inbox_delivery_repository=deliveries,
+    ).notify(record, queued, recipient(email=""), now=NOW)
+
+    assert outcome.accepted
+    assert outcome.task is not None
+    assert outcome.task.status is NotificationStatus.SENT
+    assert outcome.task.inbox_requested
+    assert not outcome.task.email_requested
+    assert ("owner", outcome.task.id, "execution_action_required") in deliveries.deliveries
+
+
+def test_category_preference_suppresses_email_without_changing_execution_state() -> None:
+    preferences = NotificationPreferences(categories=())
+    transport = CaptureEmailTransport()
+    record, queued = approved_record()
+    outcome = ExecutionNotificationService(
+        repository=InMemoryNotificationRepository(),
+        transport=transport,
+        preference_repository=PreferenceRepository(preferences),
+    ).notify(record, queued, recipient(), now=NOW)
+
+    assert outcome.accepted
+    assert outcome.task is not None
+    assert outcome.task.status is NotificationStatus.QUEUED
+    assert not transport.messages
+    assert record.state is Lifecycle.APPROVED
+
+
+def test_inbox_projection_is_not_actionable_at_or_after_the_deadline() -> None:
+    record, queued = approved_record()
+    sent = ExecutionNotificationService(
+        repository=InMemoryNotificationRepository(),
+        transport=CaptureEmailTransport(),
+    ).notify(record, queued, recipient(), now=NOW)
+    assert sent.task is not None
+    row = NotificationTaskRow(
+        task_id=sent.task.id,
+        execution_id=sent.task.execution_id,
+        correlation_id=sent.task.correlation_id,
+        recipient_id=sent.task.recipient.user_id,
+        state=sent.task.status.value,
+        payload=sent.task.model_dump(mode="json"),
+    )
+
+    before = PostgresNotificationInbox._item(
+        row,
+        category=sent.task.category,
+        read=False,
+        now=sent.task.action_deadline - timedelta(microseconds=1),
+    )
+    at_deadline = PostgresNotificationInbox._item(
+        row,
+        category=sent.task.category,
+        read=False,
+        now=sent.task.action_deadline,
+    )
+    after = PostgresNotificationInbox._item(
+        row,
+        category=sent.task.category,
+        read=False,
+        now=sent.task.action_deadline + timedelta(microseconds=1),
+    )
+
+    assert before.actionable
+    assert before.link == "/execution/approvals/"
+    assert not at_deadline.actionable
+    assert not after.actionable
+    assert at_deadline.link == "/inbox/"

@@ -70,9 +70,14 @@ class ExecutionApprovalBoundaryTests(TransactionTestCase):
         self.assertFalse(ledger.commands)
 
         recreated = ExecutionApprovalService()
-        pending = recreated.pending_for("owner")
+        pending = recreated.pending_for("owner", now=NOW)
         self.assertEqual(tuple(item.execution_id for item in pending), (scheduled.work.id,))
-        self.assertEqual(recreated.pending_for("other"), ())
+        self.assertEqual(recreated.pending_for("other", now=NOW), ())
+        self.assertEqual(recreated.active_count_for("owner", now=NOW), 1)
+        self.assertEqual(
+            recreated.active_count_for("owner", now=NOW + timedelta(minutes=5)),
+            0,
+        )
 
     def test_approval_survives_recreation_revalidates_and_dispatches_once(self) -> None:
         scheduled, _ = self._stage()
@@ -168,6 +173,88 @@ class ExecutionApprovalBoundaryTests(TransactionTestCase):
         self.assertEqual(cancelled.state, WorkState.CANCELLED)
         self.assertEqual(record.state, Lifecycle.CANCELLED)
         self.assertFalse(ledger.commands)
+
+    def test_expired_approval_reconciles_once_without_side_effects(self) -> None:
+        scheduled, _ = self._stage()
+        approvals = ExecutionApprovalService()
+        before = ExecutionStateRepository().load(scheduled.work.id)
+        assert before is not None
+        _, before_ledger = before
+
+        with (
+            patch("qbet.execution.service.BonusSandboxAdapter.dispatch") as dispatch,
+            patch("qbet.notifications.service.ExecutionNotificationService.notify") as notify,
+            patch.object(approvals._monitoring_writer, "append") as monitoring,
+        ):
+            first = approvals.pending_for(
+                "owner",
+                now=NOW + timedelta(minutes=5),
+            )
+            first_queue = ModeWorkQueueRepository().load(scheduled.work.id)
+            second = ExecutionApprovalService().pending_for(
+                "owner",
+                now=NOW + timedelta(minutes=6),
+            )
+            after_dispatch = _coordinator(
+                scheduled.request.opportunity_id
+            ).dispatch_due(
+                now=NOW + timedelta(minutes=6),
+                owner="owner",
+            )
+
+        persisted = ExecutionStateRepository().load(scheduled.work.id)
+        queue = ModeWorkQueueRepository().load(scheduled.work.id)
+        assert persisted is not None and queue is not None and first_queue is not None
+        record, ledger = persisted
+        self.assertEqual(first, ())
+        self.assertEqual(second, ())
+        self.assertEqual(after_dispatch, ())
+        self.assertEqual(record.state, Lifecycle.CANCELLED)
+        self.assertEqual(record.error, "approval_expired")
+        self.assertEqual(record.transitions.count(Lifecycle.CANCELLED), 1)
+        self.assertEqual(queue.state, WorkState.CANCELLED)
+        self.assertEqual(queue.history[-1].reason, "approval_expired")
+        self.assertEqual(len(queue.history), len(first_queue.history))
+        self.assertEqual(ledger.commands, before_ledger.commands)
+        dispatch.assert_not_called()
+        notify.assert_not_called()
+        monitoring.assert_called_once()
+        monitoring_record = monitoring.call_args.args[0]
+        self.assertEqual(monitoring_record.status, Lifecycle.CANCELLED.value)
+        self.assertEqual(monitoring_record.reason_code, "approval_expired")
+
+    def test_approval_at_deadline_fails_closed_as_expired(self) -> None:
+        scheduled, _ = self._stage()
+
+        with patch(
+            "qbet.execution.service.BonusSandboxAdapter.dispatch",
+            side_effect=AssertionError("expired approval must never dispatch"),
+        ):
+            record = ExecutionApprovalService().decide(
+                scheduled.work.id,
+                actor="owner",
+                approve=True,
+                now=NOW + timedelta(minutes=5),
+            )
+
+        persisted = ExecutionStateRepository().load(scheduled.work.id)
+        queue = ModeWorkQueueRepository().load(scheduled.work.id)
+        assert persisted is not None and queue is not None
+        _, ledger = persisted
+        self.assertEqual(record.state, Lifecycle.CANCELLED)
+        self.assertEqual(record.error, "approval_expired")
+        self.assertEqual(queue.state, WorkState.CANCELLED)
+        self.assertEqual(queue.history[-1].reason, "approval_expired")
+        self.assertFalse(ledger.commands)
+
+        replay = ExecutionApprovalService().decide(
+            scheduled.work.id,
+            actor="owner",
+            approve=True,
+            now=NOW + timedelta(minutes=5, seconds=1),
+        )
+        self.assertEqual(replay.state, Lifecycle.CANCELLED)
+        self.assertEqual(replay.error, "approval_expired")
 
     def test_unauthorized_actor_cannot_approve_another_owners_work(self) -> None:
         scheduled, _ = self._stage(owner="alice")

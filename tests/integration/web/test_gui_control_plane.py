@@ -11,10 +11,16 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
-from qbet.reporting import CustomerReportAmount, CustomerReportInput, SimulationReport
+from qbet.reporting import (
+    CustomerReportAmount,
+    CustomerReportInput,
+    CustomerReportingService,
+    SimulationReport,
+)
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
 from qbet.web.models import CustomerReportAccess, SimulationAvailability
 from qbet.web.monitoring import MonitoringService
+from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
@@ -144,15 +150,20 @@ class GuiControlPlaneTests(TestCase):
         self.staff = User.objects.create_user("staff", password="Strong-pass-123", is_staff=True)
         self.bonus_report = _report(SimulationEngine.BONUS, status=SimulationStatus.RUNNING)
         self.sports_report = _report(SimulationEngine.SPORTS_CAPITAL)
-        self.service = MonitoringService(
-            _ReportStore(
-                (self.bonus_report, self.sports_report),
-                _records(self.bonus_report) + _records(self.sports_report),
-            )
+        self.report_store = _ReportStore(
+            (self.bonus_report, self.sports_report),
+            _records(self.bonus_report) + _records(self.sports_report),
         )
+        self.service = MonitoringService(self.report_store)
         self.monitoring_patch = patch("qbet.web.views.MONITORING_SERVICE", self.service)
         self.monitoring_patch.start()
         self.addCleanup(self.monitoring_patch.stop)
+        self.reporting_patch = patch(
+            "qbet.web.views.CUSTOMER_REPORTING_SERVICE",
+            CustomerReportingService(self.report_store),
+        )
+        self.reporting_patch.start()
+        self.addCleanup(self.reporting_patch.stop)
         SimulationAvailability.objects.all().delete()
 
     def test_dashboard_is_protected_and_normal_user_sees_execution_only(self) -> None:
@@ -197,6 +208,87 @@ class GuiControlPlaneTests(TestCase):
         self.assertContains(response, "Admin only")
         self.assertContains(response, "Deterministic pipeline test")
         self.assertContains(response, "Run pipeline test")
+
+    def test_historical_incidents_do_not_poison_current_runtime_state(self) -> None:
+        report = _report(SimulationEngine.BONUS)
+        service = MonitoringService(_ReportStore((report,), _records(report)))
+        active_configuration = RoutingConfiguration(
+            bonus=EngineModes(simulation=True)
+        )
+
+        active = service.snapshot(runtime_configuration=active_configuration)
+        active_bonus = next(engine for engine in active.engines if engine.engine_id == "bonus")
+
+        self.assertEqual(active_bonus.status, "green")
+        self.assertEqual(active_bonus.live_state, "ready")
+        self.assertEqual(active_bonus.detail, "Ready.")
+        self.assertEqual(active_bonus.warning_count, 1)
+        self.assertEqual(active_bonus.error_count, 1)
+        self.assertTrue(active_bonus.workflow_stages)
+        self.assertTrue(all(stage.status == "green" for stage in active_bonus.workflow_stages))
+
+        inactive = service.snapshot(runtime_configuration=RoutingConfiguration())
+        inactive_bonus = next(engine for engine in inactive.engines if engine.engine_id == "bonus")
+        self.assertEqual(inactive_bonus.status, "gray")
+        self.assertEqual(inactive_bonus.live_state, "inactive")
+        self.assertTrue(all(stage.status == "gray" for stage in inactive_bonus.workflow_stages))
+
+        unavailable = service.snapshot(
+            runtime_configuration=active_configuration,
+            runtime_available=False,
+        )
+        unavailable_bonus = next(
+            engine for engine in unavailable.engines if engine.engine_id == "bonus"
+        )
+        self.assertEqual(unavailable_bonus.status, "red")
+        self.assertEqual(unavailable_bonus.live_state, "error")
+        self.assertTrue(
+            all(stage.status == "red" for stage in unavailable_bonus.workflow_stages)
+        )
+
+    def test_old_run_transition_does_not_override_current_running_readiness(self) -> None:
+        current = _report(SimulationEngine.BONUS, status=SimulationStatus.RUNNING)
+        old = _report(SimulationEngine.BONUS)
+        old_rejection = SimulationLogRecord(
+            run_id=old.run_id,
+            sequence=1,
+            timestamp=datetime(2026, 9, 1, tzinfo=UTC),
+            record_type=SimulationLogRecordType.WORKFLOW_TRANSITION,
+            source="workflow.orchestrator",
+            payload={
+                "stage": "domain_risk",
+                "decision": "reject",
+                "reason": "historical_rejection",
+            },
+        )
+        service = MonitoringService(_ReportStore((current, old), (old_rejection,)))
+
+        snapshot = service.snapshot(
+            runtime_configuration=RoutingConfiguration(
+                bonus=EngineModes(simulation=True)
+            )
+        )
+        bonus = next(engine for engine in snapshot.engines if engine.engine_id == "bonus")
+        risk = next(stage for stage in bonus.workflow_stages if stage.name == "Domain risk")
+
+        self.assertEqual(bonus.status, "green")
+        self.assertEqual(bonus.detail, "Running.")
+        self.assertEqual(risk.status, "green")
+        self.assertEqual(risk.detail, "Ready")
+
+    def test_current_running_error_remains_a_current_failure(self) -> None:
+        snapshot = self.service.snapshot(
+            runtime_configuration=RoutingConfiguration(
+                bonus=EngineModes(simulation=True)
+            )
+        )
+        bonus = next(engine for engine in snapshot.engines if engine.engine_id == "bonus")
+
+        self.assertEqual(bonus.status, "red")
+        self.assertEqual(bonus.live_state, "error")
+        self.assertEqual(bonus.detail, "Current run error.")
+        self.assertEqual(bonus.warning_count, 1)
+        self.assertEqual(bonus.error_count, 1)
 
     def test_engine_detail_hides_monitoring_internals_from_normal_user(self) -> None:
         self.client.force_login(self.user)
@@ -309,8 +401,8 @@ class GuiControlPlaneTests(TestCase):
 
     def test_customer_reports_require_an_owner_grant_or_staff_access(self) -> None:
         self.client.force_login(self.user)
-        self.assertEqual(self.client.get("/reports/").status_code, 200)
-        self.assertNotContains(self.client.get("/reports/"), "Northbridge v Riverside")
+        self.assertEqual(self.client.get("/reports/?range=30d").status_code, 200)
+        self.assertNotContains(self.client.get("/reports/?range=30d"), "Northbridge v Riverside")
         self.assertEqual(self.client.get(f"/reports/{self.sports_report.run_id}/").status_code, 404)
         self.assertEqual(
             self.client.get(f"/reports/{self.sports_report.run_id}/export/json/").status_code,
@@ -318,7 +410,7 @@ class GuiControlPlaneTests(TestCase):
         )
 
         CustomerReportAccess.objects.create(report_id=self.sports_report.run_id, user=self.user)
-        history = self.client.get("/reports/")
+        history = self.client.get("/reports/?range=30d")
         detail = self.client.get(f"/reports/{self.sports_report.run_id}/")
         csv_export = self.client.get(f"/reports/{self.sports_report.run_id}/export/csv/")
         json_export = self.client.get(f"/reports/{self.sports_report.run_id}/export/json/")
@@ -332,7 +424,7 @@ class GuiControlPlaneTests(TestCase):
         self.assertEqual(pdf_export.status_code, 200)
 
         self.client.force_login(self.other_user)
-        self.assertNotContains(self.client.get("/reports/"), "Northbridge v Riverside")
+        self.assertNotContains(self.client.get("/reports/?range=30d"), "Northbridge v Riverside")
         self.assertEqual(self.client.get(f"/reports/{self.sports_report.run_id}/").status_code, 404)
         self.assertEqual(
             self.client.get(f"/reports/{self.sports_report.run_id}/export/json/").status_code,
@@ -340,7 +432,7 @@ class GuiControlPlaneTests(TestCase):
         )
 
         self.client.force_login(self.staff)
-        history = self.client.get("/reports/")
+        history = self.client.get("/reports/?range=30d")
         self.assertEqual(history.status_code, 200)
         self.assertContains(history, "bonus")
         self.assertContains(history, "sports_capital")
