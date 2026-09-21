@@ -372,7 +372,7 @@ def test_inbox_delivery_survives_invalid_email_when_email_channel_is_disabled() 
     assert outcome.task.status is NotificationStatus.SENT
     assert outcome.task.inbox_requested
     assert not outcome.task.email_requested
-    assert ("owner", outcome.task.id, "execution_action_required") in deliveries
+    assert ("owner", outcome.task.id, "execution_action_required") in deliveries.deliveries
 
 
 def test_category_preference_suppresses_email_without_changing_execution_state() -> None:

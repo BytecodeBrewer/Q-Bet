@@ -122,12 +122,13 @@ class ExecutionNotificationService:
         )
         persisted, created = self._repository.create(task)
         if not created:
-            self._ensure_inbox_delivery(persisted)
             sendable = persisted.status in {
                 NotificationStatus.QUEUED,
                 NotificationStatus.SENT,
                 NotificationStatus.ACKNOWLEDGED,
             }
+            if sendable:
+                self._ensure_inbox_delivery(persisted)
             return NotificationOutcome(
                 task=persisted,
                 accepted=sendable,
@@ -137,19 +138,9 @@ class ExecutionNotificationService:
                 duplicate=True,
             )
 
-        queued_task = _transition(persisted, NotificationStatus.QUEUED, now=now)
-        queued_task = self._repository.save(queued_task)
-        self._emit(queued_task)
-        inbox_delivered = self._ensure_inbox_delivery(queued_task)
-
-        if queued_task.email_requested and not recipient_status.ready:
-            if inbox_delivered:
-                sent = _transition(queued_task, NotificationStatus.SENT, now=now)
-                sent = self._repository.save(sent)
-                self._emit(sent)
-                return NotificationOutcome(task=sent, accepted=True)
+        if task.email_requested and not recipient_status.ready:
             failed = _transition(
-                queued_task,
+                persisted,
                 NotificationStatus.FAILED,
                 now=now,
                 failure_reason=recipient_status.reason_code or "notification_recipient_not_ready",
@@ -162,6 +153,11 @@ class ExecutionNotificationService:
                 reason_code=failed.failure_reason,
             )
 
+        queued_task = _transition(persisted, NotificationStatus.QUEUED, now=now)
+        queued_task = self._repository.save(queued_task)
+        self._emit(queued_task)
+        inbox_delivered = self._ensure_inbox_delivery(queued_task)
+
         if not queued_task.email_requested:
             if inbox_delivered:
                 sent = _transition(queued_task, NotificationStatus.SENT, now=now)
@@ -173,11 +169,6 @@ class ExecutionNotificationService:
         try:
             self._transport.send(queued_task)
         except NotificationDeliveryError as error:
-            if inbox_delivered:
-                sent = _transition(queued_task, NotificationStatus.SENT, now=now)
-                sent = self._repository.save(sent)
-                self._emit(sent)
-                return NotificationOutcome(task=sent, accepted=True)
             failed = _transition(
                 queued_task,
                 NotificationStatus.FAILED,
@@ -192,11 +183,6 @@ class ExecutionNotificationService:
                 reason_code=error.reason_code,
             )
         except Exception:
-            if inbox_delivered:
-                sent = _transition(queued_task, NotificationStatus.SENT, now=now)
-                sent = self._repository.save(sent)
-                self._emit(sent)
-                return NotificationOutcome(task=sent, accepted=True)
             failed = _transition(
                 queued_task,
                 NotificationStatus.FAILED,

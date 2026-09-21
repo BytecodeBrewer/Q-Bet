@@ -11,7 +11,12 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
-from qbet.reporting import CustomerReportAmount, CustomerReportInput, SimulationReport
+from qbet.reporting import (
+    CustomerReportAmount,
+    CustomerReportInput,
+    CustomerReportingService,
+    SimulationReport,
+)
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
 from qbet.web.models import CustomerReportAccess, SimulationAvailability
 from qbet.web.monitoring import MonitoringService
@@ -154,6 +159,12 @@ class GuiControlPlaneTests(TestCase):
         self.monitoring_patch = patch("qbet.web.views.MONITORING_SERVICE", self.service)
         self.monitoring_patch.start()
         self.addCleanup(self.monitoring_patch.stop)
+        self.reporting_patch = patch(
+            "qbet.web.views.CUSTOMER_REPORTING_SERVICE",
+            CustomerReportingService(self.service.reader),
+        )
+        self.reporting_patch.start()
+        self.addCleanup(self.reporting_patch.stop)
         SimulationAvailability.objects.all().delete()
 
     def test_dashboard_is_protected_and_normal_user_sees_execution_only(self) -> None:
