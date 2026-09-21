@@ -47,6 +47,12 @@ class NotificationReadyUserCreationForm(UserCreationForm):
         model = User
         fields = ("username", "first_name", "last_name", "email", "password1", "password2")
 
+    def clean_email(self) -> str:
+        email = str(self.cleaned_data["email"]).strip()
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError("Registration details were not accepted.")
+        return email
+
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean() or {}
         username = str(cleaned.get("username") or "")
