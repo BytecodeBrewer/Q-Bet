@@ -59,3 +59,29 @@ def test_dashboard_excludes_unowned_reports_before_calculating_kpis() -> None:
     assert dashboard.completed_count == 1
     assert dashboard.invested_capital == Decimal("50")
     assert dashboard.profit_loss == Decimal("12.50")
+
+
+def test_dashboard_groups_kpis_by_recorded_currency_without_cross_currency_totals() -> None:
+    euro = _simulation_report(customer_input=_customer_input())
+    dollar_input = _customer_input().model_copy(update={"currency": "USD"})
+    dollar = _simulation_report(customer_input=dollar_input)
+
+    dashboard = CustomerReportingService(Reader((euro, dollar))).dashboard(
+        CustomerReportingQuery(
+            start=datetime(2026, 9, 5, 0, tzinfo=UTC),
+            end=datetime(2026, 9, 6, 0, tzinfo=UTC),
+        )
+    )
+
+    assert dashboard.invested_capital is None
+    assert dashboard.profit_loss is None
+    assert dashboard.roi is None
+    assert [summary.currency for summary in dashboard.currency_summaries] == ["EUR", "USD"]
+    assert [summary.invested_capital for summary in dashboard.currency_summaries] == [
+        Decimal("50"),
+        Decimal("50"),
+    ]
+    assert [summary.profit_loss for summary in dashboard.currency_summaries] == [
+        Decimal("12.50"),
+        Decimal("12.50"),
+    ]
