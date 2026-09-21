@@ -227,11 +227,11 @@ class AuthenticationAndDashboardTests(TestCase):
         user = User.objects.create_user("legacy-display", password="Strong-pass-123")
         UserDisplayPreference.objects.create(
             user=user,
-            language="obsolete",
-            region="invalid",
-            timezone_name="invalid/timezone",
-            time_format="invalid",
-            currency="invalid",
+            language="xx",
+            region="ZZ",
+            timezone_name="Invalid/Zone",
+            time_format="bad",
+            currency="XXX",
         )
         self.client.force_login(user)
 

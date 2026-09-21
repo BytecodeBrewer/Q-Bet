@@ -435,11 +435,12 @@ def presentation_settings(request: HttpRequest) -> HttpResponse:
             DISPLAY_PREFERENCES.save(
                 user,
                 DisplayPreferences(
-                    language=form.cleaned_data["language"],
-                    region=form.cleaned_data["region"],
-                    timezone_name=form.cleaned_data["timezone_name"],
-                    time_format=form.cleaned_data["time_format"],
-                    currency=form.cleaned_data["currency"],
+                    language=form.cleaned_data["language"] or display_preferences.language,
+                    region=form.cleaned_data["region"] or display_preferences.region,
+                    timezone_name=form.cleaned_data["timezone_name"]
+                    or display_preferences.timezone_name,
+                    time_format=form.cleaned_data["time_format"] or display_preferences.time_format,
+                    currency=form.cleaned_data["currency"] or display_preferences.currency,
                 ),
             )
         except RuntimeError:

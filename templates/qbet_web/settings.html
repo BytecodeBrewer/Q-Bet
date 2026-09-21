@@ -1,6 +1,6 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-<section class="page-heading"><h1>Settings</h1><p>Theme and layout choices stay in this browser. Language, region, time zone, time format, and display currency are saved to your account.</p></section>
+<section class="page-heading"><h1>Settings</h1><p>Theme and layout choices are browser session only. Language, region, time zone, time format, and display currency are saved to your account.</p></section>
 <form method="post" class="settings-form">
   {% csrf_token %}
   <fieldset><legend>Theme</legend>{{ form.theme }}</fieldset>
