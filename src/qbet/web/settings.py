@@ -194,9 +194,14 @@ LOGOUT_REDIRECT_URL = "home"
 
 EMAIL_BACKEND = os.environ.get(
     "QBET_EMAIL_BACKEND",
-    "django.core.mail.backends.console.EmailBackend",
+    "django.core.mail.backends.locmem.EmailBackend",
 )
 DEFAULT_FROM_EMAIL = os.environ.get("QBET_DEFAULT_FROM_EMAIL", "qbet@localhost")
+EMAIL_HOST = os.environ.get("QBET_EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.environ.get("QBET_EMAIL_PORT", "25"))
+EMAIL_HOST_USER = os.environ.get("QBET_EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("QBET_EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = _environment_flag("QBET_EMAIL_USE_TLS")
 PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 QBET_EMAIL_VERIFICATION_TIMEOUT = 60 * 60 * 24
 
