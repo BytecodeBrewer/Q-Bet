@@ -7,9 +7,11 @@ from django.test import TestCase
 
 from qbet.calculations.qualifying_bet import QualifyingBetInput
 from qbet.engines import BonusEngineRequest
+from qbet.storage.ledger import UserRoutingPreferenceRepository
 from qbet.storage.models import ExecutionRecordRow, ModeWorkQueueRow, PortfolioLedgerRow
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.models import WorkflowMode
+from qbet.workflow.routing import UserEngineModes, UserRoutingPreferences
 
 NOW = datetime(2026, 9, 8, 12, tzinfo=UTC)
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
@@ -50,6 +52,13 @@ class StoredRoutingDispatchTests(TestCase):
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
+
+        UserRoutingPreferenceRepository().save(
+            "owner",
+            UserRoutingPreferences(
+                bonus=UserEngineModes(simulation=True, execution=True)
+            ),
+        )
 
         coordinator = ModeDispatchCoordinator()
         request = _bonus_request("bonus-routing-1")

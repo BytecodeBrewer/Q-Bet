@@ -42,7 +42,7 @@ The central success criterion is not the number of available components. The com
 | Results/settlement data | The Odds API scores are connected through the provider-neutral result boundary and the connected E2E path to post-event SettlementService composition | no remaining core Phase 3 gap; add another result source only when coverage requires it |
 | Monitoring/Reporting | technical Monitoring now includes bounded operational windows, summaries, durable Prometheus-compatible metrics, an importable Grafana dashboard, degraded-source visibility and configured infrastructure links; customer Reporting remains separate | customer/business Reporting UX improvements only |
 | Performance | repeatable Phase 3 connected baseline exists | later provider/network hot-path baselines where useful |
-| GUI controls | routing/runtime controls and basic profile/admin surfaces exist | later consolidated Settings/Admin Control Center and product-quality UX |
+| GUI controls | routing/runtime controls, persistent per-user engine/mode selection inside staff guardrails, and basic profile/admin surfaces exist | later consolidated Settings/Admin Control Center and product-quality UX |
 
 ## Architecture Rules
 
