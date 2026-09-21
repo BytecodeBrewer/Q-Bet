@@ -16,6 +16,7 @@ from qbet.data.polling import (
     PollingTarget,
 )
 from qbet.notifications import notification_recipient_status
+from qbet.notifications.preferences import NOTIFICATION_CATEGORIES
 from qbet.simulation import SimulationEngine
 from qbet.workflow.routing import EngineModes, RoutingConfiguration, V1Engine
 
@@ -82,6 +83,18 @@ class NotificationProfileForm(forms.ModelForm):
         if not status.ready and "email" not in self.errors:
             self.add_error("email", "Enter a valid email address for notifications.")
         return cleaned
+
+
+class NotificationPreferencesForm(forms.Form):
+    email_enabled = forms.BooleanField(required=False, initial=True, label="Email notifications")
+    inbox_enabled = forms.BooleanField(required=False, initial=True, label="Internal inbox")
+    categories = forms.MultipleChoiceField(
+        required=False,
+        choices=tuple(
+            (category, category.replace("_", " ").title()) for category in NOTIFICATION_CATEGORIES
+        ),
+        widget=forms.CheckboxSelectMultiple,
+    )
 
 
 class PresentationSettingsForm(forms.Form):
@@ -219,11 +232,7 @@ class PollingStrategyForm(forms.Form):
             interval_value = cleaned.get("market_interval_minutes")
             interval = (
                 timedelta(minutes=int(interval_value))
-                if (
-                    interval_value is not None
-                    and target is PollingTarget.MARKET
-                    and not points
-                )
+                if (interval_value is not None and target is PollingTarget.MARKET and not points)
                 else None
             )
             engine = _polling_engine(cleaned.get("engine"))

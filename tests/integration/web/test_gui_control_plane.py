@@ -11,7 +11,12 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 
 from qbet.layers import SimulationLogRecord, SimulationLogRecordType
-from qbet.reporting import CustomerReportAmount, CustomerReportInput, SimulationReport
+from qbet.reporting import (
+    CustomerReportAmount,
+    CustomerReportInput,
+    CustomerReportingService,
+    SimulationReport,
+)
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
 from qbet.web.models import CustomerReportAccess, SimulationAvailability
 from qbet.web.monitoring import MonitoringService
@@ -145,15 +150,20 @@ class GuiControlPlaneTests(TestCase):
         self.staff = User.objects.create_user("staff", password="Strong-pass-123", is_staff=True)
         self.bonus_report = _report(SimulationEngine.BONUS, status=SimulationStatus.RUNNING)
         self.sports_report = _report(SimulationEngine.SPORTS_CAPITAL)
-        self.service = MonitoringService(
-            _ReportStore(
-                (self.bonus_report, self.sports_report),
-                _records(self.bonus_report) + _records(self.sports_report),
-            )
+        self.report_store = _ReportStore(
+            (self.bonus_report, self.sports_report),
+            _records(self.bonus_report) + _records(self.sports_report),
         )
+        self.service = MonitoringService(self.report_store)
         self.monitoring_patch = patch("qbet.web.views.MONITORING_SERVICE", self.service)
         self.monitoring_patch.start()
         self.addCleanup(self.monitoring_patch.stop)
+        self.reporting_patch = patch(
+            "qbet.web.views.CUSTOMER_REPORTING_SERVICE",
+            CustomerReportingService(self.report_store),
+        )
+        self.reporting_patch.start()
+        self.addCleanup(self.reporting_patch.stop)
         SimulationAvailability.objects.all().delete()
 
     def test_dashboard_is_protected_and_normal_user_sees_execution_only(self) -> None:
@@ -391,8 +401,8 @@ class GuiControlPlaneTests(TestCase):
 
     def test_customer_reports_require_an_owner_grant_or_staff_access(self) -> None:
         self.client.force_login(self.user)
-        self.assertEqual(self.client.get("/reports/").status_code, 200)
-        self.assertNotContains(self.client.get("/reports/"), "Northbridge v Riverside")
+        self.assertEqual(self.client.get("/reports/?range=30d").status_code, 200)
+        self.assertNotContains(self.client.get("/reports/?range=30d"), "Northbridge v Riverside")
         self.assertEqual(self.client.get(f"/reports/{self.sports_report.run_id}/").status_code, 404)
         self.assertEqual(
             self.client.get(f"/reports/{self.sports_report.run_id}/export/json/").status_code,
@@ -400,7 +410,7 @@ class GuiControlPlaneTests(TestCase):
         )
 
         CustomerReportAccess.objects.create(report_id=self.sports_report.run_id, user=self.user)
-        history = self.client.get("/reports/")
+        history = self.client.get("/reports/?range=30d")
         detail = self.client.get(f"/reports/{self.sports_report.run_id}/")
         csv_export = self.client.get(f"/reports/{self.sports_report.run_id}/export/csv/")
         json_export = self.client.get(f"/reports/{self.sports_report.run_id}/export/json/")
@@ -414,7 +424,7 @@ class GuiControlPlaneTests(TestCase):
         self.assertEqual(pdf_export.status_code, 200)
 
         self.client.force_login(self.other_user)
-        self.assertNotContains(self.client.get("/reports/"), "Northbridge v Riverside")
+        self.assertNotContains(self.client.get("/reports/?range=30d"), "Northbridge v Riverside")
         self.assertEqual(self.client.get(f"/reports/{self.sports_report.run_id}/").status_code, 404)
         self.assertEqual(
             self.client.get(f"/reports/{self.sports_report.run_id}/export/json/").status_code,
@@ -422,7 +432,7 @@ class GuiControlPlaneTests(TestCase):
         )
 
         self.client.force_login(self.staff)
-        history = self.client.get("/reports/")
+        history = self.client.get("/reports/?range=30d")
         self.assertEqual(history.status_code, 200)
         self.assertContains(history, "bonus")
         self.assertContains(history, "sports_capital")

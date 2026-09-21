@@ -47,6 +47,9 @@ class ExecutionNotificationTask(DomainModel):
     action_deadline: AwareDatetime
     created_at: AwareDatetime
     lifecycle_at: AwareDatetime
+    category: Identifier = "execution_action_required"
+    email_requested: bool = True
+    inbox_requested: bool = True
     status: NotificationStatus = NotificationStatus.PENDING
     failure_reason: Identifier | None = None
     sent_at: AwareDatetime | None = None

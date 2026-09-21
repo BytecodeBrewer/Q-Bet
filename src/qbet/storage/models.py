@@ -180,3 +180,53 @@ class SandboxFundingOutcomeRow(models.Model):
     class Meta:
         db_table = "qbet_sandbox_funding_outcomes"
         ordering = ("-updated_at",)
+
+
+class NotificationPreferenceRow(models.Model):
+    """Per-recipient durable notification channel and category choices."""
+
+    user_id = models.CharField(max_length=255, primary_key=True)
+    email_enabled = models.BooleanField(default=True)
+    inbox_enabled = models.BooleanField(default=True)
+    categories = models.JSONField(default=list)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_notification_preferences"
+
+
+class NotificationInboxReadRow(models.Model):
+    """Per-recipient read marker; it never changes the execution task itself."""
+
+    user_id = models.CharField(max_length=255)
+    task_id = models.UUIDField()
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "qbet_notification_inbox_reads"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user_id", "task_id"),
+                name="qbet_notification_inbox_read_unique",
+            )
+        ]
+        ordering = ("-read_at",)
+
+
+class NotificationInboxDeliveryRow(models.Model):
+    """Durable event-time decision that one task was delivered to the internal inbox."""
+
+    user_id = models.CharField(max_length=255)
+    task_id = models.UUIDField()
+    category = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "qbet_notification_inbox_deliveries"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user_id", "task_id"),
+                name="qbet_notification_inbox_delivery_unique",
+            )
+        ]
+        ordering = ("-created_at",)
