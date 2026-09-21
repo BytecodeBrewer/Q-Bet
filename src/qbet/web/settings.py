@@ -213,13 +213,25 @@ LOGGING = {
     "formatters": {
         "request_json": {"()": "qbet.web.logging.SafeRequestJSONFormatter"},
     },
+    "filters": {
+        "redact_account_tokens": {"()": "qbet.web.logging.AccountTokenRedactionFilter"},
+    },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "request_json"},
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "request_json",
+            "filters": ["redact_account_tokens"],
+        },
     },
     "loggers": {
         "qbet.web.request": {
             "handlers": ["console"],
             "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
             "propagate": False,
         },
     },

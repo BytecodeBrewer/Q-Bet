@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import timedelta
 from unittest.mock import patch
@@ -12,6 +13,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
 from qbet.web.account_security import email_verification_token
+from qbet.web.logging import AccountTokenRedactionFilter
 from qbet.web.middleware import safe_request_path
 from qbet.web.models import AccountVerification
 
@@ -176,3 +178,20 @@ class AccountSecurityTests(TestCase):
         self.assertEqual(verification_path, "/verify-email/<redacted>/")
         self.assertEqual(reset_path, "/accounts/password/reset/<redacted>/")
         self.assertNotIn("token-value", verification_path + reset_path)
+
+
+def test_django_request_log_filter_redacts_account_tokens() -> None:
+    record = logging.LogRecord(
+        "django.request",
+        logging.ERROR,
+        __file__,
+        1,
+        "Internal Server Error: /verify-email/MQ/highly-secret-token/",
+        (),
+        None,
+    )
+
+    AccountTokenRedactionFilter().filter(record)
+
+    assert "highly-secret-token" not in record.getMessage()
+    assert "/verify-email/<redacted>/" in record.getMessage()

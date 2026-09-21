@@ -44,19 +44,19 @@
 
           <details class="sidebar-group" open>
             <summary>Execution Engine</summary>
-            <a class="sidebar-link sidebar-sublink" href="{% url 'engine-detail' 'bonus' %}">BonusEngine</a>
-            <a class="sidebar-link sidebar-sublink" href="{% url 'engine-detail' 'sports_capital' %}">SportsCapitalEngine</a>
-            <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=execution">Reports</a>
+            <a class="sidebar-link sidebar-sublink" href="{% url 'engine-detail' 'bonus' %}"{% if request.resolver_match.url_name == 'engine-detail' and request.resolver_match.kwargs.engine_id == 'bonus' %} aria-current="page"{% endif %}>BonusEngine</a>
+            <a class="sidebar-link sidebar-sublink" href="{% url 'engine-detail' 'sports_capital' %}"{% if request.resolver_match.url_name == 'engine-detail' and request.resolver_match.kwargs.engine_id == 'sports_capital' %} aria-current="page"{% endif %}>SportsCapitalEngine</a>
+            <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=execution"{% if request.resolver_match.url_name == 'report-history' and request.GET.mode != 'simulation' %} aria-current="page"{% endif %}>Reports</a>
           </details>
 
           {% if user.is_staff %}
             <details class="sidebar-group" open>
               <summary>Simulation</summary>
               {% if simulation_enabled %}
-                <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}">Simulation Dashboard</a>
+                <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}"{% if request.resolver_match.url_name == 'simulation' %} aria-current="page"{% endif %}>Simulation Dashboard</a>
                 <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}#simulation-bonus">BonusEngine Simulation</a>
                 <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}#simulation-sports_capital">SportsCapitalEngine Simulation</a>
-                <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=simulation">Simulation Reports</a>
+                <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=simulation"{% if request.resolver_match.url_name == 'report-history' and request.GET.mode == 'simulation' %} aria-current="page"{% endif %}>Simulation Reports</a>
               {% else %}
                 <span class="sidebar-unavailable">Simulation unavailable</span>
               {% endif %}
@@ -68,14 +68,14 @@
           {% if user.is_staff %}
             <details class="sidebar-group">
               <summary>Staff tools</summary>
-              <a class="sidebar-link sidebar-sublink" href="{% url 'monitoring' %}">Monitoring</a>
-              <a class="sidebar-link sidebar-sublink" href="{% url 'admin-area' %}">Q-Bet Admin</a>
+              <a class="sidebar-link sidebar-sublink" href="{% url 'monitoring' %}"{% if request.resolver_match.url_name == 'monitoring' %} aria-current="page"{% endif %}>Monitoring</a>
+              <a class="sidebar-link sidebar-sublink" href="{% url 'admin-area' %}"{% if request.resolver_match.url_name == 'admin-area' %} aria-current="page"{% endif %}>Q-Bet Admin</a>
               <a class="sidebar-link sidebar-sublink" href="{% url 'admin:index' %}">Django Admin</a>
             </details>
           {% endif %}
         </nav>
         <div class="sidebar-account">
-          <a class="sidebar-link" href="{% url 'profile' %}">Profile &amp; account</a>
+          <a class="sidebar-link" href="{% url 'profile' %}"{% if request.resolver_match.url_name == 'profile' %} aria-current="page"{% endif %}>Profile &amp; account</a>
           <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button sidebar-signout" type="submit">Sign out</button></form>
         </div>
       </aside>
