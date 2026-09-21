@@ -86,8 +86,15 @@ class InboxItem:
 class PostgresNotificationInbox:
     """Read-only task projection plus a separate per-user read marker."""
 
-    def list(self, user_id: str, *, limit: int = 100) -> tuple[InboxItem, ...]:
+    def list(
+        self,
+        user_id: str,
+        *,
+        limit: int = 100,
+        now: datetime | None = None,
+    ) -> tuple[InboxItem, ...]:
         bounded_limit = max(1, min(limit, 100))
+        current_time = now or timezone.now()
         try:
             rows = list(
                 NotificationTaskRow.objects.filter(recipient_id=user_id).order_by("-updated_at")[
@@ -101,7 +108,7 @@ class PostgresNotificationInbox:
             )
         except DatabaseError:
             return ()
-        return tuple(self._item(row, row.task_id in reads) for row in rows)
+        return tuple(self._item(row, row.task_id in reads, current_time) for row in rows)
 
     def mark_read(self, user_id: str, task_id: UUID) -> bool:
         try:
@@ -115,9 +122,12 @@ class PostgresNotificationInbox:
         return True
 
     @staticmethod
-    def _item(row: NotificationTaskRow, read: bool) -> InboxItem:
+    def _item(row: NotificationTaskRow, read: bool, now: datetime) -> InboxItem:
         task = ExecutionNotificationTask.model_validate(row.payload)
-        actionable = task.status in {NotificationStatus.SENT, NotificationStatus.QUEUED}
+        actionable = (
+            task.status in {NotificationStatus.SENT, NotificationStatus.QUEUED}
+            and now < task.action_deadline
+        )
         title = "Execution action required" if actionable else "Execution notification update"
         message = f"{task.engine}: {task.strategy} for {task.opportunity_id}."
         return InboxItem(
@@ -125,7 +135,7 @@ class PostgresNotificationInbox:
             category="execution_action_required",
             title=title,
             message=message,
-            link="/execution/approvals/",
+            link="/execution/approvals/" if actionable else "/inbox/",
             occurred_at=task.lifecycle_at,
             actionable=actionable,
             read=read,
