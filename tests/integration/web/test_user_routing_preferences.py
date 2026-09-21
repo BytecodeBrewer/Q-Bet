@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 
@@ -61,8 +63,12 @@ class UserRoutingPreferenceSettingsTests(TestCase):
 
         response = self.client.get("/settings/presentation/")
 
-        form = response.context["engine_preferences_form"]
-        self.assertFalse(form.fields["sports_capital_simulation"].initial)
+        match = re.search(
+            r'<input[^>]+name="sports_capital_simulation"[^>]*>',
+            response.content.decode(),
+        )
+        self.assertIsNotNone(match)
+        self.assertNotIn("checked", match.group(0))
 
     def test_global_disable_retains_selected_preference_and_marks_it_unavailable(self) -> None:
         self.preferences.save(
@@ -76,9 +82,13 @@ class UserRoutingPreferenceSettingsTests(TestCase):
 
         response = self.client.get("/settings/presentation/")
 
-        form = response.context["engine_preferences_form"]
-        self.assertTrue(form.fields["bonus_execution"].disabled)
-        self.assertTrue(form.fields["bonus_execution"].initial)
+        match = re.search(
+            r'<input[^>]+name="bonus_execution"[^>]*>',
+            response.content.decode(),
+        )
+        self.assertIsNotNone(match)
+        self.assertIn("disabled", match.group(0))
+        self.assertIn("checked", match.group(0))
         self.assertContains(
             response,
             "Selected but unavailable while staff has disabled this route",
