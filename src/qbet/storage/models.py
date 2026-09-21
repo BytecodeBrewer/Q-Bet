@@ -90,6 +90,17 @@ class RoutingConfigurationRow(models.Model):
         db_table = "qbet_routing_configurations"
 
 
+class UserRoutingPreferenceRow(models.Model):
+    """Durable account-scoped engine/mode intent inside staff guardrails."""
+
+    user_id = models.CharField(max_length=255, primary_key=True)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_user_routing_preferences"
+
+
 class ModeWorkQueueRow(models.Model):
     """Durable mode-specific dispatch queue and lifecycle history snapshot."""
 
