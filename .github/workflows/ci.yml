@@ -199,15 +199,14 @@ jobs:
           if printf '%s' "$health" | grep -q '"status": "ok"' && \
              printf '%s' "$health" | grep -q '"persistence": "ready"'; then
             echo "Hosted preview is operationally ready." >> "$GITHUB_STEP_SUMMARY"
-          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]] && \
-               printf '%s' "$health" | grep -q '"status": "unavailable"' && \
+          elif printf '%s' "$health" | grep -q '"status": "unavailable"' && \
                printf '%s' "$health" | grep -q '"persistence": "migrations_pending"'; then
-            echo "::warning::Hosted preview has pending migrations; PR validation continues without mutating the shared database."
+            echo "::warning::Hosted preview has pending migrations; validation continues without mutating the shared database."
             {
               echo "### Hosted preview readiness: migrations pending"
               echo
-              echo "The preview deployed successfully, but its configured shared PostgreSQL schema is behind this PR."
-              echo "PR validation remains mergeable because migrations are an explicit operator action; develop/staging pushes remain strict."
+              echo "The deployment succeeded, but its configured shared PostgreSQL schema is behind the deployed code."
+              echo "Validation remains non-blocking for this operator-owned migration state; all other readiness failures remain blocking."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::error::Hosted preview is not operationally ready."

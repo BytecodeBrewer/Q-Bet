@@ -46,7 +46,7 @@ For Vercel, configure `QBET_DATABASE_URL` for Preview and Production as required
 
 The Vercel preview smoke always inspects `/health/`. A deployment is operationally ready only when the endpoint reports `status=ok` and `persistence=ready`.
 
-Pull-request validation treats the specific `migrations_pending` state as a visible warning rather than a merge-blocking code failure because PR automation is not allowed to mutate the shared hosted database. Other readiness failures still fail the PR. Pushes to `develop` / staging remain strict: any hosted readiness state other than `ready` fails deployment validation. This keeps schema drift visible without creating a PR deadlock that could only be resolved by an unauthorized database write.
+Preview and `develop` / staging validation treat the specific `migrations_pending` state as a visible warning rather than a merge-blocking code failure because normal CI is not allowed to mutate the shared hosted database. Other readiness failures such as database unavailability, invalid migration state, or an unexpected health response still fail validation. This keeps schema drift visible without creating a CI deadlock that could only be resolved by an unauthorized database write. Production promotion still requires operators to apply the intended migrations so `/health/` can return `persistence=ready`.
 
 Deploying Q-Bet never runs migrations from a web request, serverless cold start, or normal preview smoke. Schema changes remain an explicit operator action:
 
