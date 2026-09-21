@@ -10,11 +10,10 @@ from uuid import UUID
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login
 from django.core.mail import send_mail
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -59,7 +58,11 @@ from qbet.storage.observability import (
     PostgresObservabilityRepository,
 )
 from qbet.storage.postgres import PostgresSimulationReportReader
-from qbet.web.account_security import email_verification_token, remove_expired_unverified_accounts
+from qbet.web.account_security import (
+    account_verification_status,
+    email_verification_token,
+    remove_expired_unverified_accounts,
+)
 from qbet.web.display_preferences import (
     DisplayPreferenceRepository,
     DisplayPreferences,
@@ -238,17 +241,21 @@ def home(request: HttpRequest) -> HttpResponse:
     )
 
 
-def _send_verification_email(request: HttpRequest, user: User) -> None:
+def _send_verification_email(request: HttpRequest, user: User) -> bool:
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     token = email_verification_token.make_token(user)
     url = request.build_absolute_uri(reverse("verify-email", args=(uid, token)))
-    send_mail(
-        "Verify your Q-Bet email address",
-        f"Verify your email address within 24 hours: {url}",
-        settings.DEFAULT_FROM_EMAIL,
-        [user.email],
-        fail_silently=False,
-    )
+    try:
+        delivered = send_mail(
+            "Verify your Q-Bet email address",
+            f"Verify your email address within 24 hours: {url}",
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=False,
+        )
+    except Exception:
+        return False
+    return delivered == 1
 
 
 def register(request: HttpRequest) -> HttpResponse:
@@ -262,7 +269,18 @@ def register(request: HttpRequest) -> HttpResponse:
             user.is_active = False
             user.save()
             AccountVerification.objects.create(user=user)
-            _send_verification_email(request, user)
+            if not _send_verification_email(request, user):
+                user.delete()
+                messages.error(
+                    request,
+                    "Account verification email could not be sent. Please try again.",
+                )
+                return render(
+                    request,
+                    "qbet_web/register.html",
+                    _context(request, form=RegistrationForm(), registration_error=True),
+                    status=503,
+                )
             request.session["pending_verification_user_id"] = user.pk
             messages.success(
                 request,
@@ -278,21 +296,52 @@ def register(request: HttpRequest) -> HttpResponse:
 
 
 def verification_pending(request: HttpRequest) -> HttpResponse:
-    return render(request, "qbet_web/verification_pending.html", _context(request))
+    pending_user = None
+    pending_status = None
+    pending_user_id = request.session.get("pending_verification_user_id")
+    if pending_user_id is not None:
+        try:
+            pending_user = User.objects.get(pk=pending_user_id, is_active=False)
+        except (User.DoesNotExist, ValueError, TypeError):
+            request.session.pop("pending_verification_user_id", None)
+        else:
+            pending_status = account_verification_status(pending_user)
+    return render(
+        request,
+        "qbet_web/verification_pending.html",
+        _context(
+            request,
+            pending_email=getattr(pending_user, "email", ""),
+            verification_status=pending_status,
+        ),
+    )
 
 
 def verify_email(request: HttpRequest, uidb64: str, token: str) -> HttpResponse:
     remove_expired_unverified_accounts()
     try:
-        user = User.objects.get(pk=force_str(urlsafe_base64_decode(uidb64)))
-    except (User.DoesNotExist, ValueError, TypeError, OverflowError):
-        user = None
-    if user is None or user.is_active or not email_verification_token.check_token(user, token):
+        user_id = force_str(urlsafe_base64_decode(uidb64))
+    except (ValueError, TypeError, OverflowError):
+        user_id = ""
+    try:
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=user_id, is_active=False)
+            verification = AccountVerification.objects.select_for_update().get(user=user)
+            state = account_verification_status(user)
+            if (
+                verification.verified_at is not None
+                or state.expired
+                or not email_verification_token.check_token(user, token)
+            ):
+                raise ValueError("invalid verification")
+            now = timezone.now()
+            user.is_active = True
+            user.save(update_fields=("is_active",))
+            verification.verified_at = now
+            verification.save(update_fields=("verified_at",))
+    except (User.DoesNotExist, AccountVerification.DoesNotExist, ValueError):
         messages.error(request, "This verification link is invalid or has expired.")
         return redirect("verification-pending")
-    user.is_active = True
-    user.save(update_fields=("is_active",))
-    AccountVerification.objects.filter(user=user).update(verified_at=timezone.now())
     request.session.pop("pending_verification_user_id", None)
     messages.success(request, "Email verified. You can now sign in.")
     return redirect("login")
@@ -332,7 +381,13 @@ def profile(request: HttpRequest) -> HttpResponse:
     return render(
         request,
         "qbet_web/profile.html",
-        _context(request, form=form, preferences_form=preferences_form, status=status),
+        _context(
+            request,
+            form=form,
+            preferences_form=preferences_form,
+            status=status,
+            verification_status=account_verification_status(user),
+        ),
     )
 
 
@@ -518,6 +573,7 @@ def presentation_settings(request: HttpRequest) -> HttpResponse:
     engine_preferences_available = routing_available and user_routing_available
     values: dict[str, object] = {
         "form": form,
+        "verification_status": account_verification_status(user),
         "engine_preferences_available": engine_preferences_available,
         "engine_preferences_form": (
             UserRoutingPreferencesForm(
