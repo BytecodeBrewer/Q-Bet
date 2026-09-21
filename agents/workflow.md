@@ -81,7 +81,7 @@ Only if the user explicitly enables it, the Dev Agent may commit to a feature br
 
 ## Validation Gate
 
-For committed changes, Dev Handoffs and Reviewer decisions use the exact-head GitHub Actions job **PostgreSQL validation gate** as the authoritative standard validation result. The gate runs against a disposable PostgreSQL service and receives no provider or bank credentials. Local or focused checks may supplement the gate but do not replace its exact-head result. External sandbox E2E and the performance baseline remain separate opt-in or dedicated jobs.
+For committed changes, Dev Handoffs and Reviewer decisions use the exact-head GitHub Actions job **PostgreSQL validation gate** as the authoritative standard validation result. On pull requests it explicitly checks out and verifies `github.event.pull_request.head.sha`; on pushes it verifies `github.sha`. The gate runs against a disposable PostgreSQL service and receives no provider or bank credentials. Local or focused checks may supplement the gate but do not replace its exact-head result. External sandbox E2E and the performance baseline remain separate opt-in or dedicated jobs.
 
 ## Retry Rule
 
