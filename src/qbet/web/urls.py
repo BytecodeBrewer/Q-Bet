@@ -42,6 +42,11 @@ urlpatterns = [
     path("simulation/", views.simulation, name="simulation"),
     path("simulation/start/", views.simulation_start, name="simulation-start"),
     path("settings/presentation/", views.presentation_settings, name="presentation-settings"),
+    path(
+        "settings/engines/",
+        views.user_routing_preferences_update,
+        name="user-routing-preferences",
+    ),
     path("reports/", views.report_history, name="report-history"),
     path("reports/<uuid:run_id>/", views.report_detail, name="report-detail"),
     path(
