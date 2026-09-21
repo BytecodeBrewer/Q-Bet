@@ -12,10 +12,16 @@ from qbet.storage.models import (
     ModeWorkQueueRow,
     PortfolioLedgerRow,
     RoutingConfigurationRow,
+    UserRoutingPreferenceRow,
 )
 from qbet.workflow.models import WorkflowMode
 from qbet.workflow.queue import QueuedWorkItem, WorkState
-from qbet.workflow.routing import RoutingConfiguration, V1Engine, engine_modes
+from qbet.workflow.routing import (
+    RoutingConfiguration,
+    UserRoutingPreferences,
+    V1Engine,
+    engine_modes,
+)
 
 
 class AuthoritativePersistenceError(RuntimeError):
@@ -28,6 +34,10 @@ class AuthoritativeStateConflict(ValueError):
 
 class RoutingConfigurationPersistenceError(RuntimeError):
     """Raised when durable engine/mode routing configuration is unavailable or invalid."""
+
+
+class UserRoutingPreferencePersistenceError(RuntimeError):
+    """Raised when durable per-user routing preferences cannot be used safely."""
 
 
 def _validate_record_progress(stored: ExecutionRecord, incoming: ExecutionRecord) -> None:
@@ -296,6 +306,41 @@ class RoutingConfigurationRepository:
             raise RoutingConfigurationPersistenceError(
                 "routing configuration is unavailable"
             ) from error
+
+
+class UserRoutingPreferenceRepository:
+    """Persist personal route intent without mutating global availability or runtime state."""
+
+    def load(self, user_id: str) -> UserRoutingPreferences:
+        if not user_id.strip():
+            raise ValueError("user_id is required")
+        try:
+            row = UserRoutingPreferenceRow.objects.filter(user_id=user_id).first()
+            if row is None:
+                return UserRoutingPreferences()
+            return UserRoutingPreferences.model_validate(row.payload)
+        except (DatabaseError, ValidationError) as error:
+            raise UserRoutingPreferencePersistenceError(
+                "user routing preferences are unavailable"
+            ) from error
+
+    def save(
+        self,
+        user_id: str,
+        preferences: UserRoutingPreferences,
+    ) -> UserRoutingPreferences:
+        if not user_id.strip():
+            raise ValueError("user_id is required")
+        try:
+            UserRoutingPreferenceRow.objects.update_or_create(
+                user_id=user_id,
+                defaults={"payload": preferences.model_dump(mode="json")},
+            )
+        except DatabaseError as error:
+            raise UserRoutingPreferencePersistenceError(
+                "user routing preferences are unavailable"
+            ) from error
+        return preferences
 
 
 class ModeWorkQueueRepository:
