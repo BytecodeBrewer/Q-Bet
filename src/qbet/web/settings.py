@@ -10,6 +10,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 _LOCAL_SECRET_KEY = "qbet-local-development-only-secret"
+_POSTGRES_CONNECT_TIMEOUT_SECONDS = 5
 
 
 def parse_allowed_hosts(value: str) -> list[str]:
@@ -55,7 +56,10 @@ def database_config_from_url(value: str, *, require_ssl: bool = False) -> dict[s
         )
 
     query = parse_qs(parsed.query)
-    options: dict[str, object] = {"prepare_threshold": None}
+    options: dict[str, object] = {
+        "prepare_threshold": None,
+        "connect_timeout": _POSTGRES_CONNECT_TIMEOUT_SECONDS,
+    }
     sslmode = query.get("sslmode", [None])[-1]
     if require_ssl:
         sslmode = "require"
