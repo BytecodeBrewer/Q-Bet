@@ -1,53 +1,111 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-<section class="page-heading"><h1>Settings</h1><p>Theme and layout choices are browser session only. Language, region, time zone, time format, preferred conversion currency, and engine/mode selections are saved to your account.</p></section>
-<form method="post" class="settings-form">
-  {% csrf_token %}
-  <fieldset><legend>Theme</legend>{{ form.theme }}</fieldset>
-  <fieldset><legend>Font size</legend>{{ form.font_size }}</fieldset>
-  <fieldset><legend>Language and region</legend><p>{{ form.language.label_tag }}{{ form.language }}</p><p>{{ form.region.label_tag }}{{ form.region }}</p></fieldset>
-  <fieldset><legend>Dates and money</legend><p>{{ form.timezone_name.label_tag }}{{ form.timezone_name }}</p><p>{{ form.time_format.label_tag }}{{ form.time_format }}</p><p>{{ form.currency.label_tag }}{{ form.currency }}<span class="muted">{{ form.currency.help_text }}</span></p></fieldset>
-  <button class="primary" type="submit">Save settings</button>
-</form>
-<section class="detail-panel">
-  <h2>Engines and modes</h2>
-  <p>Choose which globally available routes Q-Bet may use for your account. Staff availability remains the hard upper limit.</p>
-  <p class="muted">Selecting Execution only permits future routing. It does not approve an execution, place an order, or move capital.</p>
-  {% if engine_preferences_available and engine_preferences_form %}
-    <form method="post" action="{% url 'user-routing-preferences' %}" class="settings-form">
+<section class="page-heading"><h1>Settings</h1><p>Account, display, routing, and security preferences are grouped here. Staff controls remain separately privileged.</p></section>
+<div class="settings-layout">
+  <aside class="settings-toc" aria-label="Settings sections">
+    <strong>Account</strong>
+    <a href="#profile-account">Profile and account data</a>
+    <a href="#email-verification">Email and verification</a>
+    <a href="#password-security">Password and security</a>
+    <a href="#notification-settings">Notifications</a>
+    <strong>Preferences</strong>
+    <a href="#regional-display">Language, region, time and currency</a>
+    <a href="#engine-modes">Engine and mode preferences</a>
+    <a href="#appearance">Appearance</a>
+    {% if user.is_staff %}
+      <strong>Staff / Admin</strong>
+      <a href="#staff-controls">Global controls</a>
+      <a href="{% url 'admin-gui-settings' %}">Global engine availability</a>
+      <a href="{% url 'admin-polling-settings' %}">Smart Polling</a>
+      <a href="{% url 'execution-approvals' %}">Approvals</a>
+      <a href="{% url 'notification-inbox' %}">Notifications</a>
+      <a href="{% url 'monitoring' %}">Monitoring</a>
+      <a href="{% url 'report-history' %}">Reports</a>
+      <a href="{% url 'admin-area' %}">Adapter / infrastructure overview</a>
+      <a href="{% url 'admin:index' %}">Django Admin</a>
+    {% endif %}
+  </aside>
+
+  <div class="settings-content">
+    <section id="profile-account" class="detail-panel settings-section">
+      <h2>Profile and account data</h2>
+      <p>Signed in as <strong>{{ user.get_username }}</strong>.</p>
+      <p><a href="{% url 'profile' %}">Edit profile and account details</a></p>
+    </section>
+
+    <section id="email-verification" class="detail-panel settings-section">
+      <h2>Email and verification</h2>
+      <p>{{ user.email }}</p>
+      <p>{% if verification_status.verified %}<span class="tag">Verified</span>{% elif verification_status.pending %}<span class="tag neutral-tag">Pending verification</span>{% else %}<span class="status-warning">Verification unavailable</span>{% endif %}</p>
+    </section>
+
+    <section id="password-security" class="detail-panel settings-section">
+      <h2>Password and security</h2>
+      <p><a href="{% url 'password-change' %}">Change password</a> · <a href="{% url 'password-reset' %}">Reset password by email</a></p>
+    </section>
+
+    <section id="notification-settings" class="detail-panel settings-section">
+      <h2>Notification settings</h2>
+      <p><a href="{% url 'profile' %}#notification-preferences">Manage notification channels and categories</a></p>
+    </section>
+
+    <form method="post" class="settings-form settings-section-stack">
       {% csrf_token %}
-      {{ engine_preferences_form.non_field_errors }}
-      <fieldset>
-        <legend>BonusEngine</legend>
-        <label class="toggle-row">{{ engine_preferences_form.bonus_simulation }} <span>{{ engine_preferences_form.bonus_simulation.label }}</span></label>
-        {% if engine_preferences_form.bonus_simulation.help_text %}<small>{{ engine_preferences_form.bonus_simulation.help_text }}</small>{% endif %}
-        <label class="toggle-row">{{ engine_preferences_form.bonus_execution }} <span>{{ engine_preferences_form.bonus_execution.label }}</span></label>
-        {% if engine_preferences_form.bonus_execution.help_text %}<small>{{ engine_preferences_form.bonus_execution.help_text }}</small>{% endif %}
-      </fieldset>
-      <fieldset>
-        <legend>SportsCapitalEngine</legend>
-        <label class="toggle-row">{{ engine_preferences_form.sports_capital_simulation }} <span>{{ engine_preferences_form.sports_capital_simulation.label }}</span></label>
-        {% if engine_preferences_form.sports_capital_simulation.help_text %}<small>{{ engine_preferences_form.sports_capital_simulation.help_text }}</small>{% endif %}
-        <label class="toggle-row">{{ engine_preferences_form.sports_capital_execution }} <span>{{ engine_preferences_form.sports_capital_execution.label }}</span></label>
-        {% if engine_preferences_form.sports_capital_execution.help_text %}<small>{{ engine_preferences_form.sports_capital_execution.help_text }}</small>{% endif %}
-      </fieldset>
-      <button class="primary" type="submit">Save engine selection</button>
+      <section id="regional-display" class="detail-panel settings-section">
+        <h2>Language, region, time and currency</h2>
+        <fieldset><legend>Language and region</legend><p>{{ form.language.label_tag }}{{ form.language }}</p><p>{{ form.region.label_tag }}{{ form.region }}</p></fieldset>
+        <fieldset><legend>Dates and money</legend><p>{{ form.timezone_name.label_tag }}{{ form.timezone_name }}</p><p>{{ form.time_format.label_tag }}{{ form.time_format }}</p><p>{{ form.currency.label_tag }}{{ form.currency }}<span class="muted">{{ form.currency.help_text }}</span></p></fieldset>
+      </section>
+      <section id="appearance" class="detail-panel settings-section">
+        <h2>Appearance</h2>
+        <fieldset><legend>Theme</legend>{{ form.theme }}</fieldset>
+        <fieldset><legend>Font size</legend>{{ form.font_size }}</fieldset>
+      </section>
+      <button class="primary" type="submit">Save display settings</button>
     </form>
-  {% else %}
-    <p class="status-warning">Engine preferences are temporarily unavailable. No routing preference was changed.</p>
-  {% endif %}
-</section>
-{% if user.is_staff %}
-<section class="admin-zone" aria-labelledby="admin-settings-heading">
-  <div class="admin-zone-heading"><div><span class="plane-kicker">Privileged settings</span><h2 id="admin-settings-heading">Admin Area</h2></div><span class="admin-badge">Admin only</span></div>
-  <p>Simulation is an internal control plane. Enabling it exposes the Simulation dashboard only to staff users; it never changes the normal user Execution dashboard.</p>
-  <form method="post" action="{% url 'admin-simulation-availability' %}" class="admin-settings-form">
-    {% csrf_token %}
-    <label class="toggle-row">{{ simulation_toggle_form.enabled }} <span>Enable Simulation plane</span></label>
-    <p class="muted">Disabling is blocked while a simulation run is active.</p>
-    <button class="warning-button" type="submit">Save simulation availability</button>
-  </form>
-  {% if simulation_control.active_runs %}<p class="admin-warning">{{ simulation_control.active_runs|length }} active simulation run{{ simulation_control.active_runs|length|pluralize }} must finish before disabling.</p>{% endif %}
-</section>
-{% endif %}
+
+    <section id="engine-modes" class="detail-panel settings-section">
+      <h2>Engine and mode preferences</h2>
+      <p>Choose which globally available routes Q-Bet may use for your account. Staff availability remains the hard upper limit.</p>
+      <p class="muted">Selecting Execution only permits future routing. It does not approve an execution, place an order, or move capital.</p>
+      {% if engine_preferences_available and engine_preferences_form %}
+        <form method="post" action="{% url 'user-routing-preferences' %}" class="settings-form">
+          {% csrf_token %}
+          {{ engine_preferences_form.non_field_errors }}
+          <fieldset>
+            <legend>BonusEngine</legend>
+            <label class="toggle-row">{{ engine_preferences_form.bonus_simulation }} <span>{{ engine_preferences_form.bonus_simulation.label }}</span></label>
+            {% if engine_preferences_form.bonus_simulation.help_text %}<small>{{ engine_preferences_form.bonus_simulation.help_text }}</small>{% endif %}
+            <label class="toggle-row">{{ engine_preferences_form.bonus_execution }} <span>{{ engine_preferences_form.bonus_execution.label }}</span></label>
+            {% if engine_preferences_form.bonus_execution.help_text %}<small>{{ engine_preferences_form.bonus_execution.help_text }}</small>{% endif %}
+          </fieldset>
+          <fieldset>
+            <legend>SportsCapitalEngine</legend>
+            <label class="toggle-row">{{ engine_preferences_form.sports_capital_simulation }} <span>{{ engine_preferences_form.sports_capital_simulation.label }}</span></label>
+            {% if engine_preferences_form.sports_capital_simulation.help_text %}<small>{{ engine_preferences_form.sports_capital_simulation.help_text }}</small>{% endif %}
+            <label class="toggle-row">{{ engine_preferences_form.sports_capital_execution }} <span>{{ engine_preferences_form.sports_capital_execution.label }}</span></label>
+            {% if engine_preferences_form.sports_capital_execution.help_text %}<small>{{ engine_preferences_form.sports_capital_execution.help_text }}</small>{% endif %}
+          </fieldset>
+          <button class="primary" type="submit">Save engine selection</button>
+        </form>
+      {% else %}
+        <p class="status-warning">Engine preferences are temporarily unavailable. No routing preference was changed.</p>
+      {% endif %}
+    </section>
+
+    {% if user.is_staff %}
+      <section id="staff-controls" class="admin-zone settings-section" aria-labelledby="admin-settings-heading">
+        <div class="admin-zone-heading"><div><span class="plane-kicker">Privileged settings</span><h2 id="admin-settings-heading">Global simulation availability</h2></div><span class="admin-badge">Admin only</span></div>
+        <p>Simulation is an internal control plane. Enabling it exposes the Simulation dashboard only to staff users; it never changes the normal user Execution dashboard.</p>
+        <form method="post" action="{% url 'admin-simulation-availability' %}" class="admin-settings-form">
+          {% csrf_token %}
+          <label class="toggle-row">{{ simulation_toggle_form.enabled }} <span>Enable Simulation plane</span></label>
+          <p class="muted">Disabling is blocked while a simulation run is active.</p>
+          <button class="warning-button" type="submit">Save simulation availability</button>
+        </form>
+        {% if simulation_control.active_runs %}<p class="admin-warning">{{ simulation_control.active_runs|length }} active simulation run{{ simulation_control.active_runs|length|pluralize }} must finish before disabling.</p>{% endif %}
+      </section>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}

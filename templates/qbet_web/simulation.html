@@ -55,7 +55,7 @@
 
 <section class="engine-grid">
   {% for engine in monitoring.engines %}
-    <article class="engine-card" data-simulation-engine="{{ engine.engine_id }}">
+    <article id="simulation-{{ engine.engine_id }}" class="engine-card" data-simulation-engine="{{ engine.engine_id }}">
       <div class="card-heading"><h2>{{ engine.name }}</h2><span class="tag">Simulation</span></div>
       <dl class="metric-list">
         <div><dt>Status</dt><dd>{{ engine.detail }}</dd></div>
