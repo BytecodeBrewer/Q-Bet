@@ -12,4 +12,5 @@
   <p><label for="{{ form.password2.id_for_label }}">Confirm password</label>{{ form.password2 }}</p>
   <button class="primary">Create account</button>
 </form>
+<p>Already registered? <a href="{% url 'login' %}">Sign in</a>.</p>
 {% endblock %}

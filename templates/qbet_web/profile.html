@@ -3,12 +3,14 @@
 <section class="content-section">
   <h1>Profile</h1>
   <p>{% if status.ready %}Notification ready{% else %}Notification unavailable: {{ status.reason_code }}{% endif %}</p>
+  <p>{% if verification_status.verified %}Email verified{% elif verification_status.pending %}Email verification pending{% else %}Email verification unavailable{% endif %}</p>
+  <p><a href="{% url 'password-change' %}">Change password</a></p>
   <form method="post" class="auth-form">
     {% csrf_token %}
     <p><label for="{{ form.first_name.id_for_label }}">First name</label>{{ form.first_name }}</p>
     <p><label for="{{ form.last_name.id_for_label }}">Last name</label>{{ form.last_name }}</p>
     <p><label for="{{ form.email.id_for_label }}">Email</label>{{ form.email }}</p>
-    <fieldset><legend>Notification preferences</legend>{{ preferences_form.email_enabled.label_tag }}{{ preferences_form.email_enabled }}{{ preferences_form.inbox_enabled.label_tag }}{{ preferences_form.inbox_enabled }}{{ preferences_form.categories }}</fieldset>
+    <fieldset id="notification-preferences"><legend>Notification preferences</legend>{{ preferences_form.email_enabled.label_tag }}{{ preferences_form.email_enabled }}{{ preferences_form.inbox_enabled.label_tag }}{{ preferences_form.inbox_enabled }}{{ preferences_form.categories }}</fieldset>
     <button class="primary">Update profile</button>
   </form>
 </section>

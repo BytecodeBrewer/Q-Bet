@@ -1,0 +1,15 @@
+{% extends "qbet_web/base.html" %}
+{% block content %}
+<section class="content-section auth-form">
+  <h1>Verify your email</h1>
+  {% if verification_status and verification_status.pending %}
+    <p>We sent a verification link{% if pending_email %} to {{ pending_email }}{% endif %}.</p>
+    <p>The link expires at {{ verification_status.expires_at }}. The account remains inactive until verification succeeds.</p>
+  {% elif verification_status and verification_status.expired %}
+    <p>This verification window has expired. The inactive registration is being cleaned up.</p>
+  {% else %}
+    <p>Use the one-time verification link from your registration email. Verification links expire after 24 hours.</p>
+  {% endif %}
+  <p><a href="{% url 'login' %}">Return to sign in</a></p>
+</section>
+{% endblock %}
