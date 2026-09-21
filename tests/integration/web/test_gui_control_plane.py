@@ -150,18 +150,17 @@ class GuiControlPlaneTests(TestCase):
         self.staff = User.objects.create_user("staff", password="Strong-pass-123", is_staff=True)
         self.bonus_report = _report(SimulationEngine.BONUS, status=SimulationStatus.RUNNING)
         self.sports_report = _report(SimulationEngine.SPORTS_CAPITAL)
-        self.service = MonitoringService(
-            _ReportStore(
-                (self.bonus_report, self.sports_report),
-                _records(self.bonus_report) + _records(self.sports_report),
-            )
+        self.report_store = _ReportStore(
+            (self.bonus_report, self.sports_report),
+            _records(self.bonus_report) + _records(self.sports_report),
         )
+        self.service = MonitoringService(self.report_store)
         self.monitoring_patch = patch("qbet.web.views.MONITORING_SERVICE", self.service)
         self.monitoring_patch.start()
         self.addCleanup(self.monitoring_patch.stop)
         self.reporting_patch = patch(
             "qbet.web.views.CUSTOMER_REPORTING_SERVICE",
-            CustomerReportingService(self.service.reader),
+            CustomerReportingService(self.report_store),
         )
         self.reporting_patch.start()
         self.addCleanup(self.reporting_patch.stop)
