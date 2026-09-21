@@ -18,7 +18,11 @@ def test_database_config_from_url_parses_supabase_pooler_connection() -> None:
         "HOST": "pooler.example.com",
         "PORT": 6543,
         "CONN_MAX_AGE": 0,
-        "OPTIONS": {"prepare_threshold": None, "sslmode": "require"},
+        "OPTIONS": {
+            "prepare_threshold": None,
+            "connect_timeout": 5,
+            "sslmode": "require",
+        },
     }
 
 
