@@ -156,8 +156,11 @@ class PresentationSettingsForm(forms.Form):
         choices=(("24h", "24-hour"), ("12h", "12-hour")),
     )
     currency = forms.ChoiceField(
-        label="Preferred conversion currency",
-        help_text="Amounts retain their recorded currency until a verified exchange-rate source is available.",
+        label="Preferred report currency",
+        help_text=(
+            "Presentation preference only: reports highlight matching recorded currency. "
+            "Q-Bet never relabels or converts authoritative amounts without a verified FX source."
+        ),
         required=False,
         choices=(("EUR", "EUR"), ("GBP", "GBP"), ("USD", "USD")),
     )
@@ -414,12 +417,19 @@ class SimulationStartForm(forms.Form):
         decimal_places=2,
         initial=Decimal("100"),
     )
-    max_duration_minutes = forms.IntegerField(
-        min_value=1,
-        max_value=48 * 60,
-        initial=24 * 60,
-        required=False,
-        help_text="Internal safety bound; selected automatically by the simulation workflow.",
+
+
+
+class PipelineDryRunForm(forms.Form):
+    engine = forms.ChoiceField(
+        choices=(
+            (SimulationEngine.BONUS.value, "BonusEngine"),
+            (SimulationEngine.SPORTS_CAPITAL.value, "SportsCapitalEngine"),
+        )
+    )
+    mode = forms.ChoiceField(
+        choices=(("simulation", "Simulation"), ("execution", "Execution")),
+        initial="simulation",
     )
 
 
