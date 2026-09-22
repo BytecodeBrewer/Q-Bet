@@ -16,6 +16,9 @@
       return before.length !== after.length ||
         before.some((value, index) => value !== after[index]);
     },
+    shouldPersist({ dragStarted, commit, before, after }) {
+      return Boolean(dragStarted && commit && api.orderChanged(before, after));
+    },
     restoreOrder(grid, order) {
       const byId = new Map(
         Array.from(grid.querySelectorAll("[data-widget-id]"))
