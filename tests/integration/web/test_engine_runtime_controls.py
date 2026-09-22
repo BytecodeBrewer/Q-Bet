@@ -97,8 +97,8 @@ class EngineRuntimeControlTests(TestCase):
             response = self.client.get("/dashboard/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Control unavailable.")
         self.assertContains(response, 'title="Error"')
+        self.assertContains(response, "State <strong>error</strong>", html=False)
         self.assertNotContains(response, "Execution running")
 
     def test_engine_detail_uses_durable_execution_running_state(self) -> None:
