@@ -255,6 +255,7 @@ def _dashboard_context(
         "execution_monitoring": execution,
         "execution_engines": _ordered_engines(execution.engines, layout.execution),
         "execution_layer_active": execution.summary.active_engines > 0,
+        "execution_layer_running": execution.summary.running_engines > 0,
         "dashboard_layout": layout,
         "routing_available": routing_available,
         "simulation_enabled": False,
@@ -274,6 +275,7 @@ def _dashboard_context(
                 layout.simulation,
             ),
             simulation_layer_active=simulation_monitoring.summary.active_engines > 0,
+            simulation_layer_running=simulation_monitoring.summary.running_engines > 0,
             simulation_control=simulation_control,
             start_form=start_form or SimulationStartForm(),
         )
