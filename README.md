@@ -12,6 +12,8 @@ The core system is structurally available from data ingestion to user-facing out
 
 Users can persist personal `BonusEngine` / `SportsCapitalEngine` Simulation and Execution selections inside the global staff routing guardrails. Missing preferences fail closed, globally disabled routes remain unavailable without deleting stored user intent, and Execution selection does not bypass approval or capital boundaries.
 
+Engine runtime state is explicit: `Inactive` means routing is disabled, `Active` means the engine is enabled and ready to accept work, and `Running` is reserved for durable work that is actually processing. Monitoring and the dashboard use the same persisted state sources for that distinction.
+
 The current operating direction is API- and notification-first. Additional engines, broader live execution, and browser-based execution are deliberately not part of the current scope; the focus is on connecting the existing components into complete, realistic system flows and hardening those paths before expanding the product surface.
 
 > [!NOTE]

@@ -10,8 +10,10 @@
     <div class="dashboard-health" aria-label="Execution health summary">
       {% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %}
         <span class="status status-red" aria-hidden="true"></span><strong>Attention required</strong>
+      {% elif execution_layer_running %}
+        <span class="status status-green" aria-hidden="true"></span><strong>Execution running</strong>
       {% elif execution_layer_active %}
-        <span class="status status-green" aria-hidden="true"></span><strong>Execution ready</strong>
+        <span class="status status-green" aria-hidden="true"></span><strong>Execution active</strong>
       {% else %}
         <span class="status status-gray" aria-hidden="true"></span><strong>Execution idle</strong>
       {% endif %}
@@ -45,15 +47,15 @@
     <div class="section-heading section-heading-spacious"><div><span class="eyebrow">Engine status</span><h3>V1 engines</h3></div></div>
     <div class="engine-grid dashboard-engine-grid" data-widget-grid data-plane="execution">
       {% for engine in execution_engines %}
-        <article class="engine-card dashboard-engine-card draggable-card{% if not engine.active %} is-inactive{% endif %}" data-engine-widget="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
+        <article class="engine-card dashboard-engine-card draggable-card{% if not engine.enabled %} is-inactive{% endif %}" data-engine-widget="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
           <div class="engine-card-controls">
             {% if user.is_staff %}
               <form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'execution' 'stop' %}">
                 {% csrf_token %}
-                {% if engine.active %}
-                  <button class="engine-runtime-button is-stop" type="submit" title="Stop" aria-label="Stop {{ engine.name }} execution"><span aria-hidden="true">■</span></button>
+                {% if engine.enabled %}
+                  <button class="engine-runtime-button is-stop" type="submit" title="Disable" aria-label="Disable {{ engine.name }} execution"><span aria-hidden="true">■</span></button>
                 {% else %}
-                  <button class="engine-runtime-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'execution' 'start' %}" title="Start" aria-label="Start {{ engine.name }} execution"><span aria-hidden="true">▶</span></button>
+                  <button class="engine-runtime-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'execution' 'start' %}" title="Enable" aria-label="Enable {{ engine.name }} execution"><span aria-hidden="true">▶</span></button>
                 {% endif %}
               </form>
             {% endif %}
@@ -65,7 +67,7 @@
             <div class="card-heading engine-card-heading">
               <div>
                 <span class="engine-state-label">
-                  <span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span>
+                  <span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span>
                 </span>
                 <h3>{{ engine.name }}</h3>
               </div>
@@ -118,14 +120,14 @@
       <div class="section-heading section-heading-spacious"><div><span class="eyebrow">Engine status</span><h3>Simulation engines</h3></div><a class="compact-link" href="{% url 'report-history' %}">Simulation reports</a></div>
       <div class="engine-grid dashboard-engine-grid" data-widget-grid data-plane="simulation">
         {% for engine in simulation_engines %}
-          <article class="engine-card simulation-card dashboard-engine-card draggable-card{% if not engine.active %} is-inactive{% endif %}" data-simulation-engine="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
+          <article class="engine-card simulation-card dashboard-engine-card draggable-card{% if not engine.enabled %} is-inactive{% endif %}" data-simulation-engine="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
             <div class="engine-card-controls">
               <form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'stop' %}">
                 {% csrf_token %}
-                {% if engine.active %}
-                  <button class="engine-runtime-button is-stop" type="submit" title="Stop" aria-label="Stop {{ engine.name }} simulation"><span aria-hidden="true">■</span></button>
+                {% if engine.enabled %}
+                  <button class="engine-runtime-button is-stop" type="submit" title="Disable" aria-label="Disable {{ engine.name }} simulation"><span aria-hidden="true">■</span></button>
                 {% else %}
-                  <button class="engine-runtime-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'start' %}" title="Start" aria-label="Start {{ engine.name }} simulation"><span aria-hidden="true">▶</span></button>
+                  <button class="engine-runtime-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'start' %}" title="Enable" aria-label="Enable {{ engine.name }} simulation"><span aria-hidden="true">▶</span></button>
                 {% endif %}
               </form>
               <button class="drag-handle" type="button" data-drag-handle aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move simulated {{ engine.name }}" title="Reorder">
@@ -134,7 +136,7 @@
             </div>
             <div class="card-heading engine-card-heading">
               <div>
-                <span class="engine-state-label"><span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span></span>
+                <span class="engine-state-label"><span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span></span>
                 <h3>{{ engine.name }}</h3>
               </div>
               <span class="tag simulation-tag">Simulation</span>

@@ -52,6 +52,7 @@ from qbet.storage.ledger import (
     UserRoutingPreferencePersistenceError,
     UserRoutingPreferenceRepository,
 )
+from qbet.storage.models import ModeWorkQueueRow
 from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.observability import (
     ObservabilityPersistenceError,
@@ -86,12 +87,13 @@ from qbet.web.forms import (
 )
 from qbet.web.models import AccountVerification, CustomerReportAccess
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
-from qbet.web.readiness import persistence_readiness
+from qbet.web.readiness import deployment_release_id, persistence_readiness
 from qbet.web.simulation_control import (
     SimulationControlError,
     SimulationControlService,
     SimulationDisableBlockedError,
 )
+from qbet.workflow.queue import WorkState
 from qbet.workflow.routing import (
     RoutingConfiguration,
     UserRoutingPreferences,
@@ -135,6 +137,61 @@ def _routing_configuration() -> tuple[RoutingConfiguration, bool]:
         return RoutingConfigurationRepository().load() or RoutingConfiguration(), True
     except RoutingConfigurationPersistenceError:
         return RoutingConfiguration(), False
+
+
+def _execution_runtime_activity() -> tuple[dict[str, tuple[int, int]], bool]:
+    """Return actual non-terminal Execution work counts per engine."""
+
+    try:
+        rows = tuple(
+            ModeWorkQueueRow.objects.filter(
+                mode="execution",
+                state__in=(
+                    WorkState.PENDING.value,
+                    WorkState.PROCESSING.value,
+                    WorkState.RECHECK.value,
+                ),
+            ).values("state", "payload")
+        )
+    except DatabaseError:
+        return {}, False
+
+    counts: dict[str, list[int]] = {}
+    for row in rows:
+        payload = row.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        work = payload.get("work")
+        if not isinstance(work, dict):
+            continue
+        engine_id = str(work.get("engine", ""))
+        if not engine_id:
+            continue
+        values = counts.setdefault(engine_id, [0, 0])
+        if row.get("state") == WorkState.PROCESSING.value:
+            values[0] += 1
+        else:
+            values[1] += 1
+    return {engine: (values[0], values[1]) for engine, values in counts.items()}, True
+
+
+def _simulation_runtime_activity(
+    control: object,
+) -> dict[str, tuple[int, int]]:
+    """Return actual persisted Simulation run counts per engine."""
+
+    counts: dict[str, list[int]] = {}
+    for run in getattr(control, "runs", ()):
+        engine_id = str(getattr(run, "engine", ""))
+        if not engine_id:
+            continue
+        values = counts.setdefault(engine_id, [0, 0])
+        status = str(getattr(run, "status", ""))
+        if status == "running":
+            values[0] += 1
+        elif status == "pending":
+            values[1] += 1
+    return {engine: (values[0], values[1]) for engine, values in counts.items()}
 
 
 def _user_routing_preferences(user_id: str) -> tuple[UserRoutingPreferences, bool]:
@@ -190,22 +247,27 @@ def _dashboard_context(
 ) -> dict[str, object]:
     layout: DashboardLayout = dashboard_layout(request.session)
     routing_configuration, routing_available = _routing_configuration()
+    execution_activity, execution_activity_available = _execution_runtime_activity()
     execution = execution_snapshot(
         routing_configuration,
-        configuration_available=routing_available,
+        configuration_available=routing_available and execution_activity_available,
+        runtime_activity=execution_activity,
     )
     values: dict[str, object] = {
         "execution_monitoring": execution,
         "execution_engines": _ordered_engines(execution.engines, layout.execution),
         "execution_layer_active": execution.summary.active_engines > 0,
+        "execution_layer_running": execution.summary.running_engines > 0,
         "dashboard_layout": layout,
         "routing_available": routing_available,
         "simulation_enabled": False,
     }
     if _is_staff(request.user) and _simulation_enabled():
+        simulation_control = SIMULATION_CONTROL.snapshot()
         simulation_monitoring = MONITORING_SERVICE.snapshot(
             runtime_configuration=routing_configuration,
             runtime_available=routing_available,
+            runtime_activity=_simulation_runtime_activity(simulation_control),
         )
         values.update(
             simulation_enabled=True,
@@ -215,7 +277,8 @@ def _dashboard_context(
                 layout.simulation,
             ),
             simulation_layer_active=simulation_monitoring.summary.active_engines > 0,
-            simulation_control=SIMULATION_CONTROL.snapshot(),
+            simulation_layer_running=simulation_monitoring.summary.running_engines > 0,
+            simulation_control=simulation_control,
             start_form=start_form or SimulationStartForm(),
         )
     return _context(request, **values)
@@ -227,7 +290,10 @@ def health(_: HttpRequest) -> JsonResponse:
         {
             "status": "ok" if readiness.ready else "unavailable",
             "service": "q-bet-web",
-            "persistence": readiness.code.value,
+            "persistence": readiness.persistence,
+            "readiness": readiness.code.value,
+            "runtime": readiness.runtime,
+            "release": deployment_release_id(),
         },
         status=200 if readiness.ready else 503,
     )
@@ -422,9 +488,11 @@ def dashboard_layout_update(request: HttpRequest) -> JsonResponse:
 @login_required
 def engine_detail(request: HttpRequest, engine_id: str) -> HttpResponse:
     routing_configuration, routing_available = _routing_configuration()
+    execution_activity, execution_activity_available = _execution_runtime_activity()
     snapshot = execution_snapshot(
         routing_configuration,
-        configuration_available=routing_available,
+        configuration_available=routing_available and execution_activity_available,
+        runtime_activity=execution_activity,
     )
     engine = next(
         (candidate for candidate in snapshot.engines if candidate.engine_id == engine_id),
@@ -455,6 +523,7 @@ def simulation(request: HttpRequest) -> HttpResponse:
             monitoring=MONITORING_SERVICE.snapshot(
                 runtime_configuration=routing_configuration,
                 runtime_available=routing_available,
+                runtime_activity=_simulation_runtime_activity(control),
             ),
             simulation_control=control,
             start_form=SimulationStartForm(),
@@ -810,9 +879,12 @@ def monitoring(request: HttpRequest) -> HttpResponse:
     except ObservabilityPersistenceError:
         observability = ObservabilitySnapshot.unavailable()
     routing_configuration, routing_available = _routing_configuration()
+    execution_activity, execution_activity_available = _execution_runtime_activity()
+    simulation_control = SIMULATION_CONTROL.snapshot()
     simulation_runtime = MONITORING_SERVICE.snapshot(
         runtime_configuration=routing_configuration,
         runtime_available=routing_available,
+        runtime_activity=_simulation_runtime_activity(simulation_control),
     )
     return render(
         request,
@@ -822,7 +894,8 @@ def monitoring(request: HttpRequest) -> HttpResponse:
             monitoring=simulation_runtime,
             execution_runtime=execution_snapshot(
                 routing_configuration,
-                configuration_available=routing_available,
+                configuration_available=routing_available and execution_activity_available,
+                runtime_activity=execution_activity,
             ),
             simulation_runtime=simulation_runtime,
             routing_available=routing_available,

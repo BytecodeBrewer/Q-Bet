@@ -34,16 +34,35 @@ class WebShellSmokeTests(SimpleTestCase):
         self.client = Client()
 
     def test_health_route_returns_small_json_status(self) -> None:
-        with patch(
-            "qbet.web.views.persistence_readiness",
-            return_value=PersistenceReadiness(PersistenceReadinessCode.READY),
+        with (
+            patch(
+                "qbet.web.views.persistence_readiness",
+                return_value=PersistenceReadiness(
+                    PersistenceReadinessCode.READY,
+                    routing="ready",
+                    approvals="ready",
+                    monitoring="ready",
+                ),
+            ),
+            patch("qbet.web.views.deployment_release_id", return_value="unknown"),
         ):
             response = self.client.get("/health/")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"status": "ok", "service": "q-bet-web", "persistence": "ready"},
+            {
+                "status": "ok",
+                "service": "q-bet-web",
+                "persistence": "ready",
+                "readiness": "ready",
+                "runtime": {
+                    "routing": "ready",
+                    "approvals": "ready",
+                    "monitoring": "ready",
+                },
+                "release": "unknown",
+            },
         )
 
     def test_home_renders_presentation_flow_without_operational_or_staff_state(self) -> None:
@@ -120,7 +139,12 @@ class WebShellSmokeTests(SimpleTestCase):
         try:
             with patch(
                 "qbet.web.views.persistence_readiness",
-                return_value=PersistenceReadiness(PersistenceReadinessCode.READY),
+                return_value=PersistenceReadiness(
+                    PersistenceReadinessCode.READY,
+                    routing="ready",
+                    approvals="ready",
+                    monitoring="ready",
+                ),
             ):
                 response = self.client.get(
                     "/health/?password=not-for-logs",
