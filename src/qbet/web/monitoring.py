@@ -188,7 +188,7 @@ def execution_snapshot(
                 "red"
                 if not configuration_available
                 else "green"
-                if enabled
+                if running
                 else "gray"
             )
             detail = (
@@ -196,7 +196,7 @@ def execution_snapshot(
                 if not configuration_available
                 else "Running."
                 if running
-                else "Active."
+                else "Ready; no work running."
                 if active
                 else "Inactive."
             )
