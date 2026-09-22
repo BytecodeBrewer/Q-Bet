@@ -62,10 +62,10 @@
     <div class="runtime-plane-heading"><h3>Execution</h3><span class="tag neutral-tag">Execution</span></div>
     <div class="engine-grid">
       {% for engine in execution_runtime.engines %}
-        <article class="surface-subtle readiness-card{% if not engine.active %} is-inactive{% endif %}" data-runtime-engine="execution:{{ engine.engine_id }}">
+        <article class="surface-subtle readiness-card{% if not engine.enabled %} is-inactive{% endif %}" data-runtime-engine="execution:{{ engine.engine_id }}">
           <div class="card-heading">
             <strong>{{ engine.name }}</strong>
-            <span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span>
+            <span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span>
           </div>
           <div class="readiness-track" aria-label="{{ engine.name }} execution readiness">
             {% for stage in engine.workflow_stages %}
@@ -82,10 +82,10 @@
       <div class="runtime-plane-heading"><h3>Simulation</h3><span class="tag simulation-tag">Simulation</span></div>
       <div class="engine-grid">
         {% for engine in simulation_runtime.engines %}
-          <article class="surface-subtle readiness-card{% if not engine.active %} is-inactive{% endif %}" data-runtime-engine="simulation:{{ engine.engine_id }}">
+          <article class="surface-subtle readiness-card{% if not engine.enabled %} is-inactive{% endif %}" data-runtime-engine="simulation:{{ engine.engine_id }}">
             <div class="card-heading">
               <strong>{{ engine.name }}</strong>
-              <span class="status status-{{ engine.status }}" title="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.status == 'green' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.status == 'red' %}Error{% else %}Inactive{% endif %}"></span>
+              <span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span>
             </div>
             <div class="readiness-track" aria-label="{{ engine.name }} simulation readiness">
               {% for stage in engine.workflow_stages %}
