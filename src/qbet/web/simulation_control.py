@@ -27,6 +27,7 @@ from qbet.simulation.opportunity_source import (
     TheOddsApiSportsSimulationConfig,
     TheOddsApiSportsSimulationOpportunitySource,
 )
+from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
 from qbet.web.models import SimulationAvailability, SimulationRunState
@@ -39,6 +40,7 @@ _SUPPORTED_ENGINES = (
     SimulationEngine.BONUS,
     SimulationEngine.SPORTS_CAPITAL,
 )
+_DEFAULT_MAX_DURATION = timedelta(hours=24)
 
 
 class SimulationControlError(RuntimeError):
@@ -152,24 +154,18 @@ class SimulationControlService:
             ) from error
         return SimulationAvailabilitySnapshot(enabled=enabled, persisted=True)
 
-    def start(
+    def begin(
         self,
         *,
         engine: SimulationEngine,
         starting_capital: Decimal,
-        max_duration: timedelta,
     ) -> SimulationRunSnapshot:
+        """Persist a visible running lifecycle before the synchronous worker request starts."""
+
         if engine not in _SUPPORTED_ENGINES:
             raise SimulationControlError("Only the two current sports engines are supported.")
 
-        report_store = self._report_store()
-        config = SimulationRunConfig(
-            engine=engine,
-            starting_capital=starting_capital,
-            max_duration=max_duration,
-        )
         run_id = uuid4()
-
         try:
             with transaction.atomic():
                 availability, _ = SimulationAvailability.objects.select_for_update().get_or_create(
@@ -185,10 +181,10 @@ class SimulationControlService:
                     raise SimulationAlreadyRunningError(
                         f"A {engine.value} simulation is already active."
                     )
-                SimulationRunState.objects.create(
+                row = SimulationRunState.objects.create(
                     run_id=run_id,
                     engine=engine.value,
-                    status=SimulationRunState.Status.PENDING,
+                    status=SimulationRunState.Status.RUNNING,
                     progress=Decimal("0"),
                     current_capital=starting_capital,
                 )
@@ -198,13 +194,41 @@ class SimulationControlService:
             raise SimulationControlError(
                 "Simulation control state is unavailable. Run database migrations first."
             ) from error
+        return self._snapshot_from_row(row)
 
+    def run(
+        self,
+        run_id: UUID,
+        *,
+        max_duration: timedelta = _DEFAULT_MAX_DURATION,
+    ) -> SimulationRunSnapshot:
+        """Execute one already-visible Simulation run and persist its terminal state."""
+
+        try:
+            row = SimulationRunState.objects.get(pk=run_id)
+        except SimulationRunState.DoesNotExist as error:
+            raise SimulationControlError("Simulation run was not found.") from error
+        except (OperationalError, ProgrammingError) as error:
+            raise SimulationControlError("Simulation control state is unavailable.") from error
+
+        if row.status == SimulationRunState.Status.STOPPED:
+            return self._snapshot_from_row(row)
+        if row.status not in _ACTIVE_STATUSES:
+            raise SimulationControlError("Simulation run is already finished.")
+
+        engine = SimulationEngine(row.engine)
+        report_store = self._report_store()
+        config = SimulationRunConfig(
+            engine=engine,
+            starting_capital=row.current_capital,
+            max_duration=max_duration,
+        )
         ledger_repository = SimulationPortfolioLedgerRepository()
         initial_ledger = PortfolioLedger(
             balance=PortfolioBalance(
                 mode="simulation",
                 currency="EUR",
-                available=starting_capital,
+                available=row.current_capital,
             )
         )
         simulation_ledger = ledger_repository.load_or_create(initial_ledger)
@@ -223,9 +247,14 @@ class SimulationControlService:
             current_capital=simulation_ledger.balance.available,
         )
 
+        if self._stop_requested(run_id):
+            return self._snapshot(run_id)
+
         try:
             source = self._opportunity_source or self._configured_opportunity_source(engine)
             bundle = source.build(effective_config, run_id)
+            if self._stop_requested(run_id):
+                return self._snapshot(run_id)
             request = WorkflowSimulationRequest(
                 config=effective_config,
                 opportunities=bundle.opportunities,
@@ -233,11 +262,24 @@ class SimulationControlService:
                 correlation_id=run_id,
                 customer_report_input=bundle.customer_report_input,
             )
+
+            def observe_progress(context: SimulationContext) -> None:
+                stop_requested = self._stop_requested(run_id)
+                self._record_progress(
+                    run_id,
+                    context,
+                    keep_terminal_status=stop_requested,
+                )
+                if stop_requested:
+                    runner.request_stop()
+
             result = runner.run(
                 request,
-                on_step_completed=lambda context: self._record_progress(run_id, context),
+                on_step_completed=observe_progress,
             )
         except SimulationOpportunitySourceError as error:
+            if self._stop_requested(run_id):
+                return self._snapshot(run_id)
             self._update_run(
                 run_id,
                 status=SimulationRunState.Status.FAILED,
@@ -248,6 +290,8 @@ class SimulationControlService:
                 reason_code=error.reason_code,
             ) from None
         except SimulationControlError as error:
+            if self._stop_requested(run_id):
+                return self._snapshot(run_id)
             self._update_run(
                 run_id,
                 status=SimulationRunState.Status.FAILED,
@@ -255,6 +299,8 @@ class SimulationControlService:
             )
             raise
         except Exception as error:
+            if self._stop_requested(run_id):
+                return self._snapshot(run_id)
             self._update_run(
                 run_id,
                 status=SimulationRunState.Status.FAILED,
@@ -283,8 +329,34 @@ class SimulationControlService:
             report_id=report_id,
             error_message="",
         )
-        row = SimulationRunState.objects.get(pk=run_id)
-        return self._snapshot_from_row(row)
+        return self._snapshot(run_id)
+
+    def stop(self, run_id: UUID) -> SimulationRunSnapshot:
+        """Request a safe stop. The active deterministic step may finish first."""
+
+        try:
+            with transaction.atomic():
+                row = SimulationRunState.objects.select_for_update().get(pk=run_id)
+                if row.status in _ACTIVE_STATUSES:
+                    row.status = SimulationRunState.Status.STOPPED
+                    row.save(update_fields=("status", "updated_at"))
+        except SimulationRunState.DoesNotExist as error:
+            raise SimulationControlError("Simulation run was not found.") from error
+        except (OperationalError, ProgrammingError) as error:
+            raise SimulationControlError("Simulation control state is unavailable.") from error
+        return self._snapshot(run_id)
+
+    def start(
+        self,
+        *,
+        engine: SimulationEngine,
+        starting_capital: Decimal,
+        max_duration: timedelta = _DEFAULT_MAX_DURATION,
+    ) -> SimulationRunSnapshot:
+        """Backward-compatible synchronous API used outside the interactive GUI."""
+
+        run = self.begin(engine=engine, starting_capital=starting_capital)
+        return self.run(run.run_id, max_duration=max_duration)
 
     def has_active_runs(self) -> bool:
         try:
@@ -313,13 +385,36 @@ class SimulationControlService:
         return PostgresSimulationReportStore()
 
     @staticmethod
-    def _record_progress(run_id: UUID, context: SimulationContext) -> None:
+    def _record_progress(
+        run_id: UUID,
+        context: SimulationContext,
+        *,
+        keep_terminal_status: bool = False,
+    ) -> None:
         SimulationControlService._update_run(
             run_id,
-            status=SimulationRunState.Status.RUNNING,
+            status=None if keep_terminal_status else SimulationRunState.Status.RUNNING,
             progress=context.progress,
             current_capital=context.current_capital,
         )
+
+    @staticmethod
+    def _stop_requested(run_id: UUID) -> bool:
+        try:
+            status = SimulationRunState.objects.filter(pk=run_id).values_list(
+                "status", flat=True
+            ).first()
+        except (OperationalError, ProgrammingError):
+            return False
+        return status == SimulationRunState.Status.STOPPED
+
+    @staticmethod
+    def _snapshot(run_id: UUID) -> SimulationRunSnapshot:
+        try:
+            row = SimulationRunState.objects.get(pk=run_id)
+        except (SimulationRunState.DoesNotExist, OperationalError, ProgrammingError) as error:
+            raise SimulationControlError("Simulation run state is unavailable.") from error
+        return SimulationControlService._snapshot_from_row(row)
 
     @staticmethod
     def _update_run(
@@ -388,4 +483,7 @@ class SimulationControlService:
                 "Connected SportsCapital Simulation configuration is invalid.",
                 reason_code="simulation_market_configuration_invalid",
             ) from None
-        return TheOddsApiSportsSimulationOpportunitySource(connected)
+        return TheOddsApiSportsSimulationOpportunitySource(
+            connected,
+            monitoring_writer=PostgresMonitoringRepository(),
+        )
