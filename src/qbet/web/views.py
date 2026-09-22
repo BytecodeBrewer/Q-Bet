@@ -703,12 +703,16 @@ def report_history(request: HttpRequest) -> HttpResponse:
     now = datetime.now(UTC)
     visible_report_ids = _visible_customer_report_ids(request)
     preset = request.GET.get("range", "7d")
-    start = now - timedelta(hours={"24h": 24, "7d": 168, "30d": 720}.get(preset, 168))
+    start = now - timedelta(hours={"1h": 1, "24h": 24, "7d": 168, "30d": 720}.get(preset, 168))
     if preset == "custom":
         try:
-            start = datetime.fromisoformat(request.GET["start"]).astimezone(UTC)
-            now = datetime.fromisoformat(request.GET["end"]).astimezone(UTC)
-        except (KeyError, ValueError):
+            start = _query_datetime(request.GET.get("start"))
+            end = _query_datetime(request.GET.get("end"))
+            if start is None or end is None:
+                raise ValueError("missing report range")
+            now = end
+        except (Http404, ValueError):
+            messages.error(request, "Enter a valid start and end date and time.")
             preset = "7d"
             start = now - timedelta(days=7)
     try:
@@ -734,6 +738,8 @@ def report_history(request: HttpRequest) -> HttpResponse:
             )
         )
         preset = "7d"
+        start = now - timedelta(days=7)
+        messages.error(request, "Choose a valid report range up to the supported reporting limit.")
     return render(
         request,
         "qbet_web/report_history.html",
@@ -929,6 +935,7 @@ def monitoring_export(request: HttpRequest, export_format: str) -> HttpResponse:
         if mode == "extended"
         else WORKFLOW_MONITORING_SERVICE.compact(query)
     )
+    filename = _monitoring_export_filename(query, mode, export_format)
     if not values.available:
         message = values.message or "Monitoring history is temporarily unavailable."
         if export_format == "json":
@@ -938,25 +945,44 @@ def monitoring_export(request: HttpRequest, export_format: str) -> HttpResponse:
                     "message": message,
                 },
                 status=503,
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
         output = StringIO()
         writer = csv.writer(output)
         writer.writerow(("error", "message"))
         writer.writerow(("monitoring_history_unavailable", message))
-        return HttpResponse(
+        response = HttpResponse(
             output.getvalue(),
             content_type="text/csv; charset=utf-8",
             status=503,
         )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
     if export_format == "json":
-        return HttpResponse(
+        response = HttpResponse(
             monitoring_json_document(values), content_type="application/json; charset=utf-8"
         )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(monitoring_csv_header(extended=mode == "extended"))
     writer.writerows(monitoring_csv_rows(values))
-    return HttpResponse(output.getvalue(), content_type="text/csv; charset=utf-8")
+    response = HttpResponse(output.getvalue(), content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _monitoring_export_filename(
+    query: MonitoringQuery,
+    mode: str,
+    export_format: str,
+) -> str:
+    """Use a concise UTC range so downloaded staff exports remain identifiable."""
+
+    start = query.start.strftime("%Y%m%dT%H%MZ")
+    end = query.end.strftime("%Y%m%dT%H%MZ")
+    return f"qbet-monitoring-{mode}-{start}-{end}.{export_format}"
 
 
 def _monitoring_query(request: HttpRequest) -> MonitoringQuery:

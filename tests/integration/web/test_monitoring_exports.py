@@ -153,6 +153,14 @@ class MonitoringExportTests(TestCase):
         self.assertIn("match-1", json_export.content.decode())
         self.assertNotIn("match-2", json_export.content.decode())
         self.assertIn("[redacted]", json_export.content.decode())
+        self.assertEqual(
+            csv_export["Content-Disposition"],
+            'attachment; filename="qbet-monitoring-extended-20260907T0900Z-20260907T1100Z.csv"',
+        )
+        self.assertEqual(
+            json_export["Content-Disposition"],
+            'attachment; filename="qbet-monitoring-extended-20260907T0900Z-20260907T1100Z.json"',
+        )
 
     def test_empty_period_returns_clear_page_and_valid_empty_exports(self) -> None:
         self.client.force_login(self.staff)

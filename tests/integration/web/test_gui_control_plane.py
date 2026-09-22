@@ -499,3 +499,5 @@ class GuiControlPlaneTests(TestCase):
         self.assertContains(response, "50,00 USD")
         self.assertNotContains(response, "100,00 EUR")
         self.assertNotContains(response, "100,00 USD")
+        hourly = self.client.get("/reports/?range=1h")
+        self.assertContains(hourly, '<option value="1h" selected>Last hour</option>', html=False)

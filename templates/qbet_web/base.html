@@ -1,6 +1,6 @@
 {% load static %}
 <!doctype html>
-<html lang="en" data-theme="{{ preferences.theme|default:'light' }}">
+<html lang="{{ display_preferences.language|default:'de' }}" data-theme="{{ preferences.theme|default:'light' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="{% static 'qbet_web/phase2_visual.css' %}">
   <style>
     html { min-height: 100%; background: #f3f5f7; }
-    html[data-theme="dark"] { background: #202a32; color-scheme: dark; }
+    html[data-theme="dark"] { background: #181c19; color-scheme: dark; }
     html[data-theme="light"] { color-scheme: light; }
     body { min-height: 100dvh; }
   </style>

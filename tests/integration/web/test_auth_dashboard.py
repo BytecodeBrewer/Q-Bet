@@ -211,6 +211,8 @@ class AuthenticationAndDashboardTests(TestCase):
         )
 
         self.assertRedirects(response, "/settings/presentation/")
+        rendered = self.client.get("/settings/presentation/")
+        self.assertContains(rendered, '<html lang="en"')
         stored = UserDisplayPreference.objects.get(user=owner)
         self.assertEqual(
             (

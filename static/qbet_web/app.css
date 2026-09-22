@@ -4,6 +4,7 @@
   background: #f3f5f7;
   --surface: #fff;
   --surface-subtle: #f7f9fb;
+  --surface-muted: #eef2f5;
   --border: #d9dee3;
   --text: #17212b;
   --muted: #5f6c76;
@@ -20,17 +21,18 @@
 html { scroll-behavior: smooth; }
 body { margin: 0; background: #f3f5f7; color: var(--text); }
 body[data-theme="dark"] {
-  --surface: #29353e;
-  --surface-subtle: #253039;
-  --border: #4b5961;
-  --text: #e8eef2;
-  --muted: #b7c1c8;
-  --primary: #93c8ef;
-  --primary-soft: #263d4d;
-  --admin: #e3b46c;
-  --admin-soft: #332f26;
-  --shadow: 0 14px 34px rgba(0, 0, 0, .16);
-  background: #202a32;
+  --surface: #202522;
+  --surface-subtle: #292f2b;
+  --surface-muted: #303832;
+  --border: #48524b;
+  --text: #eef2ec;
+  --muted: #b6c0b8;
+  --primary: #88c6a2;
+  --primary-soft: #25382d;
+  --admin: #e6bd75;
+  --admin-soft: #3a3023;
+  --shadow: 0 14px 34px rgba(0, 0, 0, .22);
+  background: #181c19;
   color: var(--text);
 }
 body[data-font-size="small"] { font-size: 14px; }
@@ -67,7 +69,7 @@ small { color: var(--muted); }
 .eyebrow, .plane-kicker, .support-label { display: block; margin-bottom: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
 .button-link, button.primary, .warning-button { display: inline-block; border: 0; color: #fff; padding: 10px 15px; border-radius: 7px; text-decoration: none; font: inherit; font-weight: 700; cursor: pointer; }
 .button-link, button.primary { background: #155e9d; }
-body[data-theme="dark"] .button-link, body[data-theme="dark"] button.primary { background: #2575ad; }
+body[data-theme="dark"] .button-link, body[data-theme="dark"] button.primary { background: var(--primary); color: #102016; }
 .warning-button { background: var(--warning); }
 .secondary-link, .compact-link, .section-heading a, .filter-bar a { color: var(--primary); text-decoration: none; font-weight: 700; }
 .compact-link { font-size: 13px; }
@@ -263,7 +265,7 @@ body[data-theme="dark"] .empty-state, body[data-theme="dark"] .message { backgro
 .monitoring-presets a[aria-current="page"] { background: var(--surface-muted); }
 .monitoring-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin: 0 0 20px; }
 .monitoring-summary > div { border: 1px solid var(--border); border-radius: 6px; padding: 12px; background: var(--surface); }
-.monitoring-summary span { display: block; color: var(--text-muted); font-size: .82rem; }
+.monitoring-summary span { display: block; color: var(--muted); font-size: .82rem; }
 .monitoring-summary strong { display: block; margin-top: 5px; font-size: 1.2rem; }
 @media (max-width: 700px) { .monitoring-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
