@@ -34,8 +34,8 @@ class EngineRuntimeControlTests(TestCase):
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
         dashboard = self.client.get("/dashboard/")
-        self.assertContains(dashboard, 'aria-label="Stop BonusEngine execution"')
-        self.assertContains(dashboard, 'title="Active"')
+        self.assertContains(dashboard, 'aria-label="Disable BonusEngine execution"')
+        self.assertContains(dashboard, 'title="Ready"')
 
         stopped = self.client.post("/engines/bonus/execution/stop/")
         self.assertRedirects(stopped, "/dashboard/")
@@ -47,15 +47,15 @@ class EngineRuntimeControlTests(TestCase):
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
         dashboard = self.client.get("/dashboard/")
-        self.assertContains(dashboard, 'aria-label="Start BonusEngine execution"')
+        self.assertContains(dashboard, 'aria-label="Enable BonusEngine execution"')
         self.assertContains(dashboard, 'title="Inactive"')
 
     def test_normal_user_cannot_toggle_execution_runtime_or_see_controls(self) -> None:
         self.client.force_login(self.user)
 
         dashboard = self.client.get("/dashboard/")
-        self.assertNotContains(dashboard, 'aria-label="Start BonusEngine execution"')
-        self.assertNotContains(dashboard, 'aria-label="Stop BonusEngine execution"')
+        self.assertNotContains(dashboard, 'aria-label="Enable BonusEngine execution"')
+        self.assertNotContains(dashboard, 'aria-label="Disable BonusEngine execution"')
 
         response = self.client.post("/engines/bonus/execution/start/")
 
@@ -88,7 +88,7 @@ class EngineRuntimeControlTests(TestCase):
         self.assertTrue(configuration.bonus.simulation)
 
         dashboard = self.client.get("/dashboard/")
-        self.assertContains(dashboard, 'aria-label="Stop BonusEngine simulation"')
+        self.assertContains(dashboard, 'aria-label="Disable BonusEngine simulation"')
         self.assertContains(dashboard, "Deterministic pipeline test")
         self.assertContains(dashboard, "Run pipeline test")
 
