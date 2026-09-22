@@ -96,9 +96,25 @@ class MonitoringExportTests(TestCase):
         self.assertContains(extended, "[redacted]")
         self.assertNotContains(extended, "never-store-this")
 
+    def test_staff_can_submit_local_datetime_filter_values(self) -> None:
+        self.client.force_login(self.staff)
+
+        response = self.client.get(
+            "/monitoring/",
+            {"start": "2026-09-07T09:00", "end": "2026-09-07T11:00"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="datetime-local"')
+        self.assertContains(response, "match-1")
+
     def test_selected_range_and_correlation_survive_view_switch_and_exports(self) -> None:
         self.client.force_login(self.staff)
-        params = {"view": "extended", "correlation": str(self.correlation_id), **self._range_params()}
+        params = {
+            "view": "extended",
+            "correlation": str(self.correlation_id),
+            **self._range_params(),
+        }
         response = self.client.get("/monitoring/", params)
 
         self.assertEqual(response.status_code, 200)
@@ -179,13 +195,14 @@ class MonitoringExportTests(TestCase):
             {"start": "not-a-date", "end": "2026-09-07T11:00:00+00:00"},
             {"start": "2026-09-07T12:00:00+00:00", "end": "2026-09-07T11:00:00+00:00"},
             {"start": "2026-08-01T09:00:00+00:00", "end": "2026-09-07T11:00:00+00:00"},
-            {"start": "2026-09-07T09:00:00", "end": "2026-09-07T11:00:00+00:00"},
             {"correlation": "not-a-uuid", **self._range_params()},
         )
         for query in invalid_queries:
             with self.subTest(query=query):
                 self.assertEqual(self.client.get("/monitoring/", query).status_code, 404)
-                self.assertEqual(self.client.get("/monitoring/export/json/", query).status_code, 404)
+                self.assertEqual(
+                    self.client.get("/monitoring/export/json/", query).status_code, 404
+                )
 
     def test_normal_user_cannot_read_or_export_monitoring(self) -> None:
         self.client.force_login(self.user)

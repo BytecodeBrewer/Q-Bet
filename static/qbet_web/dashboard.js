@@ -118,10 +118,22 @@
 
       handle.addEventListener("pointerup", finishPointerDrag);
       handle.addEventListener("pointercancel", finishPointerDrag);
+      handle.addEventListener("lostpointercapture", finishPointerDrag);
+      window.addEventListener("blur", () => {
+        if (draggedCard && activeHandle === handle && activePointerId !== null) {
+          finishPointerDrag({ pointerId: activePointerId });
+        }
+      });
 
       handle.addEventListener("keydown", (event) => {
         const card = handle.closest("[data-widget-id]");
         if (!card || card.parentElement !== grid) {
+          return;
+        }
+
+        if (event.key === "Escape" && draggedCard && activeHandle === handle && activePointerId !== null) {
+          event.preventDefault();
+          finishPointerDrag({ pointerId: activePointerId });
           return;
         }
 

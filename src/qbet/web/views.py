@@ -565,7 +565,7 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
         run = SIMULATION_CONTROL.start(
             engine=engine,
             starting_capital=form.cleaned_data["starting_capital"],
-            max_duration=timedelta(minutes=form.cleaned_data["max_duration_minutes"]),
+            max_duration=timedelta(minutes=form.cleaned_data["max_duration_minutes"] or 24 * 60),
         )
     except SimulationControlError as error:
         messages.error(request, str(error))
@@ -587,7 +587,7 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
 
     messages.success(
         request,
-        f"Pipeline test {run.run_id} finished with status {run.status}.",
+        f"Simulation {run.run_id} finished with status {run.status}.",
     )
     return redirect("report-detail", run_id=run.report_id)
 
@@ -1023,8 +1023,8 @@ def _query_datetime(value: str | None) -> datetime | None:
     except ValueError as error:
         raise Http404("Monitoring timestamps must be ISO-8601 values.") from error
     if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise Http404("Monitoring timestamps must include a timezone.")
-    return parsed
+        return timezone.make_aware(parsed, timezone.get_current_timezone()).astimezone(UTC)
+    return parsed.astimezone(UTC)
 
 
 def _monitoring_query_parameters(request: HttpRequest) -> str:

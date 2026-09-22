@@ -77,6 +77,29 @@ class DashboardInteractionTests(TestCase):
         )
         self.assertContains(response, "data-drag-handle", count=4)
 
+    def test_dashboard_uses_public_home_and_simulation_hides_internal_duration(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.staff)
+
+        response = self.client.get("/dashboard/")
+        simulation_template = (
+            Path(__file__).parents[3] / "templates/qbet_web/simulation.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertContains(response, 'href="/" aria-label="Q-Bet home"')
+        self.assertContains(response, "Sandbox simulation")
+        self.assertNotContains(response, "Max duration")
+        self.assertNotIn("max_duration_minutes", simulation_template)
+
+    def test_dashboard_drag_script_finishes_on_escape_and_pointer_loss(self) -> None:
+        script = (Path(__file__).parents[3] / "static/qbet_web/dashboard.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('addEventListener("lostpointercapture", finishPointerDrag)', script)
+        self.assertIn('window.addEventListener("blur"', script)
+        self.assertIn('event.key === "Escape"', script)
+
     def test_narrow_viewport_keeps_keyboard_reorder_handles_visible(self) -> None:
         stylesheet = (Path(__file__).parents[3] / "static/qbet_web/app.css").read_text(
             encoding="utf-8"

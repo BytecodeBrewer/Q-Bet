@@ -417,8 +417,9 @@ class SimulationStartForm(forms.Form):
     max_duration_minutes = forms.IntegerField(
         min_value=1,
         max_value=48 * 60,
-        initial=60,
-        help_text="Bounded simulated duration; never more than 48 hours.",
+        initial=24 * 60,
+        required=False,
+        help_text="Internal safety bound; selected automatically by the simulation workflow.",
     )
 
 

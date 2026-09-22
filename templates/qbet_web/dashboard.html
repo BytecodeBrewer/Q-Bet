@@ -104,16 +104,15 @@
       </section>
 
       <section class="simulation-control-panel">
-        <div class="section-heading"><div><span class="eyebrow">Sandbox</span><h3>Deterministic pipeline test</h3></div><span class="tag simulation-tag">Virtual only</span></div>
+        <div class="section-heading"><div><span class="eyebrow">Sandbox</span><h3>Sandbox simulation</h3></div><span class="tag simulation-tag">Virtual only</span></div>
         <form method="post" action="{% url 'simulation-start' %}">
           {% csrf_token %}
           {{ start_form.non_field_errors }}
           <div class="simulation-form-grid">
             <label>Engine {{ start_form.engine }} {{ start_form.engine.errors }}</label>
             <label>Virtual capital {{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</label>
-            <label>Max duration {{ start_form.max_duration_minutes }} {{ start_form.max_duration_minutes.errors }}</label>
           </div>
-          <button class="primary" type="submit">Run pipeline test</button>
+          <button class="primary" type="submit">Start simulation</button>
         </form>
       </section>
 

@@ -11,8 +11,8 @@
     <form method="get" aria-label="Monitoring filters">
       <input type="hidden" name="view" value="{{ monitoring_view }}">
       <input type="hidden" name="range" value="custom">
-      <label>Start (ISO-8601)<input type="text" name="start" value="{% if request.GET.start %}{{ request.GET.start }}{% else %}{{ monitoring_start|date:'c' }}{% endif %}" required></label>
-      <label>End (ISO-8601)<input type="text" name="end" value="{% if request.GET.end %}{{ request.GET.end }}{% else %}{{ monitoring_end|date:'c' }}{% endif %}" required></label>
+      <label>Start<input type="datetime-local" name="start" value="{{ monitoring_start|date:'Y-m-d\\TH:i' }}" required></label>
+      <label>End<input type="datetime-local" name="end" value="{{ monitoring_end|date:'Y-m-d\\TH:i' }}" required></label>
       <label>Correlation (optional)<input type="text" name="correlation" value="{{ request.GET.correlation }}" placeholder="UUID"></label>
       <button type="submit">Apply filters</button>
     </form>
