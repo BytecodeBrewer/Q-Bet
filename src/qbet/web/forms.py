@@ -80,7 +80,11 @@ class NotificationProfileForm(forms.ModelForm):
 
     first_name = forms.CharField(max_length=150)
     last_name = forms.CharField(max_length=150)
-    email = forms.EmailField(max_length=254)
+    email = forms.EmailField(
+        max_length=254,
+        disabled=True,
+        help_text="Verified email changes require a separate verification flow.",
+    )
 
     class Meta:
         model = User
