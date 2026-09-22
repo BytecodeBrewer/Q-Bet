@@ -197,7 +197,7 @@ class MonitoringExportTests(TestCase):
         self.assertIn("monitoring_history_unavailable", csv_body)
         self.assertIn("Monitoring history is temporarily unavailable.", csv_body)
 
-    def test_invalid_monitoring_filters_are_rejected_without_sensitive_detail(self) -> None:
+    def test_invalid_monitoring_filters_render_friendly_feedback_and_reject_exports(self) -> None:
         self.client.force_login(self.staff)
         invalid_queries = (
             {"start": "not-a-date", "end": "2026-09-07T11:00:00+00:00"},
@@ -207,10 +207,13 @@ class MonitoringExportTests(TestCase):
         )
         for query in invalid_queries:
             with self.subTest(query=query):
-                self.assertEqual(self.client.get("/monitoring/", query).status_code, 404)
-                self.assertEqual(
-                    self.client.get("/monitoring/export/json/", query).status_code, 404
-                )
+                page = self.client.get("/monitoring/", query)
+                export = self.client.get("/monitoring/export/json/", query)
+
+                self.assertEqual(page.status_code, 200)
+                self.assertContains(page, "Monitoring filters are invalid")
+                self.assertEqual(export.status_code, 400)
+                self.assertEqual(export.json()["error"], "invalid_monitoring_filter")
 
     def test_normal_user_cannot_read_or_export_monitoring(self) -> None:
         self.client.force_login(self.user)
