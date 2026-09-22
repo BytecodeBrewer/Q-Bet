@@ -38,7 +38,7 @@ class EngineRuntimeControlTests(TestCase):
 
         dashboard = self.client.get("/dashboard/")
         self.assertContains(dashboard, 'aria-label="Disable BonusEngine execution"')
-        self.assertContains(dashboard, 'title="Ready"')
+        self.assertContains(dashboard, 'title="Active"')
 
         stopped = self.client.post("/engines/bonus/execution/stop/")
         self.assertRedirects(stopped, "/dashboard/")
@@ -59,8 +59,8 @@ class EngineRuntimeControlTests(TestCase):
 
         ready = self.client.get("/dashboard/")
         self.assertContains(ready, 'aria-label="Disable BonusEngine execution"')
-        self.assertContains(ready, 'title="Ready"')
-        self.assertContains(ready, "Execution idle")
+        self.assertContains(ready, 'title="Active"')
+        self.assertContains(ready, "Execution active")
         self.assertNotContains(ready, 'title="Running"')
 
         ModeWorkQueueRow.objects.create(
