@@ -10,8 +10,10 @@
     <div class="dashboard-health" aria-label="Execution health summary">
       {% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %}
         <span class="status status-red" aria-hidden="true"></span><strong>Attention required</strong>
-      {% elif execution_layer_active %}
+      {% elif execution_layer_running %}
         <span class="status status-green" aria-hidden="true"></span><strong>Execution running</strong>
+      {% elif execution_layer_active %}
+        <span class="status status-green" aria-hidden="true"></span><strong>Execution active</strong>
       {% else %}
         <span class="status status-gray" aria-hidden="true"></span><strong>Execution idle</strong>
       {% endif %}
@@ -65,7 +67,7 @@
             <div class="card-heading engine-card-heading">
               <div>
                 <span class="engine-state-label">
-                  <span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span>
+                  <span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span>
                 </span>
                 <h3>{{ engine.name }}</h3>
               </div>
@@ -134,7 +136,7 @@
             </div>
             <div class="card-heading engine-card-heading">
               <div>
-                <span class="engine-state-label"><span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span></span>
+                <span class="engine-state-label"><span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span></span>
                 <h3>{{ engine.name }}</h3>
               </div>
               <span class="tag simulation-tag">Simulation</span>
