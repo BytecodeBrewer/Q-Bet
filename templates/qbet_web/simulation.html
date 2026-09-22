@@ -6,10 +6,10 @@
 </section>
 
 <div data-simulation-control>
-  <section class="provider-activity activity-state activity-{{ provider_activity.state }}" aria-live="polite">
+  <section class="provider-activity activity-state activity-{{ provider_activity.state }}" data-provider-activity aria-live="polite">
     <div>
       <span class="eyebrow">Market data</span>
-      <strong>{{ provider_activity.label }}</strong>
+      <strong data-provider-label>{{ provider_activity.label }}</strong>
       {% if provider_activity.occurred_at %}<small>Last activity {{ provider_activity.occurred_at }}</small>{% endif %}
     </div>
     {% if provider_activity.is_working %}<span class="activity-spinner" aria-label="Working"></span>{% elif provider_activity.state == "success" %}<span class="activity-check" aria-label="Success">✓</span>{% endif %}
