@@ -171,8 +171,21 @@ jobs:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       QBET_DJANGO_SECRET_KEY: ${{ secrets.QBET_DJANGO_SECRET_KEY }}
+      EXPECTED_RELEASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact deploy head
+        shell: bash
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          test "$actual_sha" = "$EXPECTED_RELEASE" || {
+            echo "::error::Deployment checkout $actual_sha does not match expected head $EXPECTED_RELEASE"
+            exit 1
+          }
+          echo "Deploying exact head: $actual_sha" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -202,6 +215,7 @@ jobs:
               --env QBET_DJANGO_DEBUG=false \
               --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app \
               --env QBET_DJANGO_SECRET_KEY="$QBET_DJANGO_SECRET_KEY" \
+              --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
               --env QBET_SIMULATION_MODE_ENABLED=false
           )"
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
@@ -219,9 +233,15 @@ jobs:
           )"
           printf 'Hosted readiness: %s\n' "$health"
 
+          if ! printf '%s' "$health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\""; then
+            echo "::error::Hosted release does not match reviewed head $EXPECTED_RELEASE."
+            exit 1
+          fi
+
           if printf '%s' "$health" | grep -q '"status": "ok"' && \
-             printf '%s' "$health" | grep -q '"persistence": "ready"'; then
-            echo "Hosted preview is operationally ready." >> "$GITHUB_STEP_SUMMARY"
+             printf '%s' "$health" | grep -q '"persistence": "ready"' && \
+             printf '%s' "$health" | grep -q '"readiness": "ready"'; then
+            echo "Hosted preview is operationally ready for product acceptance." >> "$GITHUB_STEP_SUMMARY"
           elif printf '%s' "$health" | grep -q '"status": "unavailable"' && \
                printf '%s' "$health" | grep -q '"persistence": "migrations_pending"'; then
             echo "::warning::Hosted preview has pending migrations; validation continues without mutating the shared database."
@@ -229,7 +249,7 @@ jobs:
               echo "### Hosted preview readiness: migrations pending"
               echo
               echo "The deployment succeeded, but its configured shared PostgreSQL schema is behind the deployed code."
-              echo "Validation remains non-blocking for this operator-owned migration state; all other readiness failures remain blocking."
+              echo "Deployment validation remains non-blocking for this operator-owned migration state, but this environment is NOT product-ready until the intended migrations are applied."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::error::Hosted preview is not operationally ready."
@@ -237,7 +257,8 @@ jobs:
           fi
 
           if printf '%s' "$health" | grep -q '"status": "ok"' && \
-             printf '%s' "$health" | grep -q '"persistence": "ready"'; then
+             printf '%s' "$health" | grep -q '"persistence": "ready"' && \
+             printf '%s' "$health" | grep -q '"readiness": "ready"'; then
             home="$(
               vercel curl / \
                 --deployment "$DEPLOYMENT_URL" \
