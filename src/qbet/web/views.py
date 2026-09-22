@@ -143,14 +143,16 @@ def _execution_runtime_activity() -> tuple[dict[str, tuple[int, int]], bool]:
     """Return actual non-terminal Execution work counts per engine."""
 
     try:
-        rows = ModeWorkQueueRow.objects.filter(
-            mode="execution",
-            state__in=(
-                WorkState.PENDING.value,
-                WorkState.PROCESSING.value,
-                WorkState.RECHECK.value,
-            ),
-        ).values("state", "payload")
+        rows = tuple(
+            ModeWorkQueueRow.objects.filter(
+                mode="execution",
+                state__in=(
+                    WorkState.PENDING.value,
+                    WorkState.PROCESSING.value,
+                    WorkState.RECHECK.value,
+                ),
+            ).values("state", "payload")
+        )
     except DatabaseError:
         return {}, False
 
@@ -486,9 +488,11 @@ def dashboard_layout_update(request: HttpRequest) -> JsonResponse:
 @login_required
 def engine_detail(request: HttpRequest, engine_id: str) -> HttpResponse:
     routing_configuration, routing_available = _routing_configuration()
+    execution_activity, execution_activity_available = _execution_runtime_activity()
     snapshot = execution_snapshot(
         routing_configuration,
-        configuration_available=routing_available,
+        configuration_available=routing_available and execution_activity_available,
+        runtime_activity=execution_activity,
     )
     engine = next(
         (candidate for candidate in snapshot.engines if candidate.engine_id == engine_id),
@@ -519,6 +523,7 @@ def simulation(request: HttpRequest) -> HttpResponse:
             monitoring=MONITORING_SERVICE.snapshot(
                 runtime_configuration=routing_configuration,
                 runtime_available=routing_available,
+                runtime_activity=_simulation_runtime_activity(control),
             ),
             simulation_control=control,
             start_form=SimulationStartForm(),
