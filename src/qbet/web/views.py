@@ -79,6 +79,7 @@ from qbet.web.controls import (
 from qbet.web.forms import (
     NotificationPreferencesForm,
     NotificationProfileForm,
+    PipelineDryRunForm,
     PresentationSettingsForm,
     RegistrationForm,
     SimulationAvailabilityForm,
@@ -87,6 +88,7 @@ from qbet.web.forms import (
 )
 from qbet.web.models import AccountVerification, CustomerReportAccess
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
+from qbet.web.provider_activity import ProviderActivitySnapshot, provider_activity_snapshot
 from qbet.web.readiness import deployment_release_id, persistence_readiness
 from qbet.web.simulation_control import (
     SimulationControlError,
@@ -94,12 +96,14 @@ from qbet.web.simulation_control import (
     SimulationDisableBlockedError,
 )
 from qbet.workflow.queue import WorkState
+from qbet.workflow.readiness import Phase2PipelineReadiness
 from qbet.workflow.routing import (
     RoutingConfiguration,
     UserRoutingPreferences,
     V1Engine,
     engine_modes,
 )
+from qbet.workflow import WorkflowMode
 
 _DETAIL_FIELDS = (
     "include_events",
@@ -194,6 +198,18 @@ def _simulation_runtime_activity(
     return {engine: (values[0], values[1]) for engine, values in counts.items()}
 
 
+def _provider_activity() -> ProviderActivitySnapshot:
+    now = datetime.now(UTC)
+    records = WORKFLOW_MONITORING_SERVICE.extended(
+        MonitoringQuery(start=now - timedelta(minutes=10), end=now)
+    )
+    return provider_activity_snapshot(
+        records,
+        now=now,
+        available=records.available,
+    )
+
+
 def _user_routing_preferences(user_id: str) -> tuple[UserRoutingPreferences, bool]:
     try:
         return USER_ROUTING_PREFERENCES.load(user_id), True
@@ -260,6 +276,7 @@ def _dashboard_context(
         "execution_layer_running": execution.summary.running_engines > 0,
         "dashboard_layout": layout,
         "routing_available": routing_available,
+        "provider_activity": _provider_activity(),
         "simulation_enabled": False,
     }
     if _is_staff(request.user) and _simulation_enabled():
@@ -515,6 +532,7 @@ def simulation(request: HttpRequest) -> HttpResponse:
     if not control.availability.enabled:
         raise Http404("Simulation visibility is disabled.")
     routing_configuration, routing_available = _routing_configuration()
+    auto_run = request.GET.get("autostart", "")
     return render(
         request,
         "qbet_web/simulation.html",
@@ -527,6 +545,10 @@ def simulation(request: HttpRequest) -> HttpResponse:
             ),
             simulation_control=control,
             start_form=SimulationStartForm(),
+            pipeline_dry_run_form=PipelineDryRunForm(),
+            pipeline_dry_run=request.session.pop("pipeline_dry_run", None),
+            provider_activity=_provider_activity(),
+            auto_run_id=auto_run,
             simulation_enabled=True,
         ),
     )
@@ -562,34 +584,106 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
         return redirect("dashboard")
 
     try:
-        run = SIMULATION_CONTROL.start(
+        run = SIMULATION_CONTROL.begin(
             engine=engine,
             starting_capital=form.cleaned_data["starting_capital"],
-            max_duration=timedelta(minutes=form.cleaned_data["max_duration_minutes"] or 24 * 60),
         )
     except SimulationControlError as error:
         messages.error(request, str(error))
         return redirect("dashboard")
 
-    if run.report_id is None:
-        messages.error(request, "Simulation completed but its report is unavailable.")
-        return redirect("dashboard")
-    try:
-        CustomerReportAccess.objects.get_or_create(
-            report_id=run.report_id,
-            user=request.user,
-        )
-    except DatabaseError:
-        messages.error(
-            request, "Simulation completed but its customer report access is unavailable."
-        )
-        return redirect("dashboard")
+    messages.success(request, f"Simulation {run.run_id} started.")
+    return redirect(f"{reverse('simulation')}?autostart={run.run_id}")
 
+
+@login_required
+@require_POST
+def simulation_run(request: HttpRequest, run_id: UUID) -> HttpResponse:
+    _require_staff(request)
+    try:
+        run = SIMULATION_CONTROL.run(run_id)
+    except SimulationControlError as error:
+        return JsonResponse(
+            {"status": "error", "message": str(error)},
+            status=409,
+        )
+
+    report_url = None
+    if run.report_id is not None:
+        try:
+            CustomerReportAccess.objects.get_or_create(
+                report_id=run.report_id,
+                user=request.user,
+            )
+        except DatabaseError:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "Simulation finished but its customer report access is unavailable.",
+                },
+                status=503,
+            )
+        report_url = reverse("report-detail", args=(run.report_id,))
+
+    return JsonResponse(
+        {
+            "status": run.status,
+            "run_id": str(run.run_id),
+            "progress": str(run.progress),
+            "report_url": report_url,
+        }
+    )
+
+
+@login_required
+@require_POST
+def simulation_stop(request: HttpRequest, run_id: UUID) -> HttpResponse:
+    _require_staff(request)
+    try:
+        run = SIMULATION_CONTROL.stop(run_id)
+    except SimulationControlError as error:
+        return JsonResponse(
+            {"status": "error", "message": str(error)},
+            status=409,
+        )
+    return JsonResponse(
+        {
+            "status": run.status,
+            "run_id": str(run.run_id),
+            "progress": str(run.progress),
+        }
+    )
+
+
+@login_required
+@require_POST
+def pipeline_dry_run(request: HttpRequest) -> HttpResponse:
+    _require_staff(request)
+    form = PipelineDryRunForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Choose a valid engine and mode for the pipeline dry-run.")
+        return redirect("simulation")
+
+    engine = cast(V1Engine, str(form.cleaned_data["engine"]))
+    mode = WorkflowMode(str(form.cleaned_data["mode"]))
+    stages = Phase2PipelineReadiness().snapshot(engine, mode)
+    request.session["pipeline_dry_run"] = {
+        "engine": engine,
+        "mode": mode.value,
+        "stages": [
+            {
+                "name": stage.stage.value.replace("_", " ").title(),
+                "ready": stage.ready,
+                "detail": "Ready" if stage.ready else (stage.reason or "Unavailable"),
+            }
+            for stage in stages
+        ],
+    }
     messages.success(
         request,
-        f"Simulation {run.run_id} finished with status {run.status}.",
+        "Pipeline dry-run completed without provider, opportunity, order, or capital side effects.",
     )
-    return redirect("report-detail", run_id=run.report_id)
+    return redirect("simulation")
 
 
 @login_required
@@ -698,19 +792,21 @@ def user_routing_preferences_update(request: HttpRequest) -> HttpResponse:
     return redirect("presentation-settings")
 
 
-@login_required
-def report_history(request: HttpRequest) -> HttpResponse:
+def _report_history_selection(
+    request: HttpRequest,
+) -> tuple[object, str, datetime, datetime]:
     now = datetime.now(UTC)
     visible_report_ids = _visible_customer_report_ids(request)
     preset = request.GET.get("range", "7d")
     start = now - timedelta(hours={"1h": 1, "24h": 24, "7d": 168, "30d": 720}.get(preset, 168))
     if preset == "custom":
         try:
-            start = _query_datetime(request.GET.get("start"))
-            end = _query_datetime(request.GET.get("end"))
-            if start is None or end is None:
+            start_value = _query_datetime(request.GET.get("start"))
+            end_value = _query_datetime(request.GET.get("end"))
+            if start_value is None or end_value is None:
                 raise ValueError("missing report range")
-            now = end
+            start = start_value
+            now = end_value
         except (Http404, ValueError):
             messages.error(request, "Enter a valid start and end date and time.")
             preset = "7d"
@@ -740,19 +836,108 @@ def report_history(request: HttpRequest) -> HttpResponse:
         preset = "7d"
         start = now - timedelta(days=7)
         messages.error(request, "Choose a valid report range up to the supported reporting limit.")
+    return dashboard, preset, start, now
+
+
+@login_required
+def report_history(request: HttpRequest) -> HttpResponse:
+    dashboard, preset, start, end = _report_history_selection(request)
+    reports = getattr(dashboard, "reports", ())
     return render(
         request,
         "qbet_web/report_history.html",
         _context(
             request,
             dashboard=dashboard,
-            reports=dashboard.reports,
+            reports=reports,
             selected_engine=request.GET.get("engine", ""),
             selected_mode=request.GET.get("mode", ""),
             selected_range=preset,
             report_start=start,
-            report_end=now,
+            report_end=end,
         ),
+    )
+
+
+@login_required
+@require_GET
+def report_history_export(request: HttpRequest, export_format: str) -> HttpResponse:
+    if export_format not in {"csv", "json"}:
+        raise Http404("Report export format not found.")
+
+    dashboard, _, start, end = _report_history_selection(request)
+    reports = tuple(getattr(dashboard, "reports", ()))
+    mode = request.GET.get("mode") or "all"
+    filename = (
+        f"qbet-reports-{mode}-{start.strftime('%Y%m%dT%H%MZ')}-"
+        f"{end.strftime('%Y%m%dT%H%MZ')}.{export_format}"
+    )
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    if not reports:
+        headers["X-QBet-Export-State"] = "no-data"
+
+    if export_format == "json":
+        payload = [
+            {
+                "report_id": str(report.report_id),
+                "mode": report.mode,
+                "match": report.match,
+                "provider": report.provider,
+                "counterparty_provider": report.counterparty_provider,
+                "engine": report.engine,
+                "strategy": report.strategy,
+                "invested_capital": str(report.invested_capital),
+                "result_state": report.result_state,
+                "profit_loss": str(report.profit_loss),
+                "current_capital": str(report.current_capital),
+                "currency": report.currency,
+                "completed_at": report.completed_at.isoformat(),
+            }
+            for report in reports
+        ]
+        return JsonResponse(payload, safe=False, headers=headers)
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        (
+            "report_id",
+            "mode",
+            "match",
+            "provider",
+            "counterparty_provider",
+            "engine",
+            "strategy",
+            "invested_capital",
+            "result_state",
+            "profit_loss",
+            "current_capital",
+            "currency",
+            "completed_at",
+        )
+    )
+    writer.writerows(
+        (
+            str(report.report_id),
+            report.mode,
+            report.match,
+            report.provider,
+            report.counterparty_provider,
+            report.engine,
+            report.strategy,
+            str(report.invested_capital),
+            report.result_state,
+            str(report.profit_loss),
+            str(report.current_capital),
+            report.currency,
+            report.completed_at.isoformat(),
+        )
+        for report in reports
+    )
+    return HttpResponse(
+        output.getvalue(),
+        content_type="text/csv; charset=utf-8",
+        headers=headers,
     )
 
 
@@ -871,7 +1056,12 @@ def _visible_customer_report_ids(request: HttpRequest) -> set[UUID] | None:
 @user_passes_test(_is_staff, login_url="login")
 @require_GET
 def monitoring(request: HttpRequest) -> HttpResponse:
-    query = _monitoring_query(request)
+    try:
+        query = _monitoring_query(request)
+    except Http404 as error:
+        messages.error(request, f"Monitoring filters are invalid: {error}.")
+        end = datetime.now(UTC)
+        query = MonitoringQuery(start=end - timedelta(days=1), end=end)
     mode = request.GET.get("view", "compact")
     if mode not in {"compact", "extended"}:
         raise Http404("Monitoring view not found.")
@@ -905,6 +1095,7 @@ def monitoring(request: HttpRequest) -> HttpResponse:
             ),
             simulation_runtime=simulation_runtime,
             routing_available=routing_available,
+            provider_activity=_provider_activity(),
             monitoring_view=mode,
             monitoring_records=records,
             monitoring_start=query.start,
@@ -926,7 +1117,13 @@ def monitoring(request: HttpRequest) -> HttpResponse:
 @user_passes_test(_is_staff, login_url="login")
 @require_GET
 def monitoring_export(request: HttpRequest, export_format: str) -> HttpResponse:
-    query = _monitoring_query(request)
+    try:
+        query = _monitoring_query(request)
+    except Http404 as error:
+        message = f"Monitoring filters are invalid: {error}."
+        if export_format == "json":
+            return JsonResponse({"error": "invalid_monitoring_filter", "message": message}, status=400)
+        return HttpResponse(message, content_type="text/plain; charset=utf-8", status=400)
     mode = request.GET.get("view", "compact")
     if mode not in {"compact", "extended"} or export_format not in {"csv", "json"}:
         raise Http404("Monitoring export not found.")
