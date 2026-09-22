@@ -188,7 +188,7 @@ class GuiControlPlaneTests(TestCase):
         self.assertEqual(content.count('data-engine-widget="sports_capital"'), 1)
         self.assertContains(response, "Execution idle")
         self.assertContains(response, "No known issues")
-        self.assertNotContains(response, 'aria-label="Start BonusEngine execution"')
+        self.assertNotContains(response, 'aria-label="Enable BonusEngine execution"')
         self.assertNotContains(response, "Simulation reports")
         self.assertNotContains(response, "BaseEngine")
         self.assertNotContains(response, "YieldEngine")
@@ -223,8 +223,10 @@ class GuiControlPlaneTests(TestCase):
         active_bonus = next(engine for engine in active.engines if engine.engine_id == "bonus")
 
         self.assertEqual(active_bonus.status, "green")
-        self.assertEqual(active_bonus.live_state, "ready")
-        self.assertEqual(active_bonus.detail, "Ready.")
+        self.assertTrue(active_bonus.enabled)
+        self.assertTrue(active_bonus.active)
+        self.assertEqual(active_bonus.live_state, "active")
+        self.assertEqual(active_bonus.detail, "Active.")
         self.assertEqual(active_bonus.warning_count, 1)
         self.assertEqual(active_bonus.error_count, 1)
         self.assertTrue(active_bonus.workflow_stages)
@@ -269,7 +271,8 @@ class GuiControlPlaneTests(TestCase):
         snapshot = service.snapshot(
             runtime_configuration=RoutingConfiguration(
                 bonus=EngineModes(simulation=True)
-            )
+            ),
+            runtime_activity={"bonus": (1, 0)},
         )
         bonus = next(engine for engine in snapshot.engines if engine.engine_id == "bonus")
         risk = next(stage for stage in bonus.workflow_stages if stage.name == "Domain risk")
@@ -283,7 +286,8 @@ class GuiControlPlaneTests(TestCase):
         snapshot = self.service.snapshot(
             runtime_configuration=RoutingConfiguration(
                 bonus=EngineModes(simulation=True)
-            )
+            ),
+            runtime_activity={"bonus": (1, 0)},
         )
         bonus = next(engine for engine in snapshot.engines if engine.engine_id == "bonus")
 

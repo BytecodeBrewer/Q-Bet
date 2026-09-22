@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from collections.abc import Mapping
 from typing import Final, cast
 from uuid import UUID
 
@@ -49,6 +50,8 @@ class MonitoringEngineStatus:
     detail: str
     engine_id: str = ""
     active: bool = False
+    enabled: bool = False
+    running: bool = False
     mode: str = "unavailable"
     live_state: str = "unavailable"
     running_matches: int = 0
@@ -87,6 +90,7 @@ class MonitoringSummary:
     warning_count: int = 0
     error_count: int = 0
     active_engines: int = 0
+    running_engines: int = 0
 
 
 @dataclass(frozen=True)
@@ -151,13 +155,18 @@ def execution_snapshot(
     configuration: RoutingConfiguration | None = None,
     *,
     configuration_available: bool = True,
+    runtime_activity: Mapping[str, tuple[int, int]] | None = None,
 ) -> MonitoringSnapshot:
-    """Return current execution runtime readiness without inventing live market activity."""
+    """Return execution readiness separately from actual queued/running work."""
 
+    activity = runtime_activity or {}
     engines: list[MonitoringEngineStatus] = []
     for name, engine_id in _V1_ENGINES:
+        running_matches, pending_matches = activity.get(engine_id, (0, 0))
         if configuration is None:
+            enabled = False
             active = False
+            running = False
             status = "gray"
             detail = "No live execution activity is connected yet."
             live_state = "unavailable"
@@ -170,28 +179,40 @@ def execution_snapshot(
                 for _, stage_name in _WORKFLOW_STAGES
             )
         else:
-            active = configuration_available and engine_modes(
+            enabled = configuration_available and engine_modes(
                 configuration, cast(V1Engine, engine_id)
             ).execution
-            status = "red" if not configuration_available else "green" if active else "gray"
+            active = enabled
+            running = enabled and running_matches > 0
+            status = (
+                "red"
+                if not configuration_available
+                else "green"
+                if enabled
+                else "gray"
+            )
             detail = (
                 "Control unavailable."
                 if not configuration_available
-                else "Ready."
+                else "Running."
+                if running
+                else "Active."
                 if active
                 else "Inactive."
             )
             live_state = (
                 "error"
                 if not configuration_available
-                else "ready"
+                else "running"
+                if running
+                else "active"
                 if active
                 else "inactive"
             )
             stages = _runtime_stages(
                 engine_id,
                 WorkflowMode.EXECUTION,
-                active=active,
+                active=enabled,
                 available=configuration_available,
             )
         engines.append(
@@ -201,8 +222,12 @@ def execution_snapshot(
                 status=status,
                 detail=detail,
                 active=active,
+                enabled=enabled,
+                running=running,
                 mode="execution" if configuration is not None else "live",
                 live_state=live_state,
+                running_matches=running_matches,
+                pending_matches=pending_matches,
                 workflow_stages=stages,
             )
         )
@@ -211,7 +236,12 @@ def execution_snapshot(
         reports=(),
         latest_alert=None,
         history_available=False,
-        summary=MonitoringSummary(active_engines=sum(engine.active for engine in engines)),
+        summary=MonitoringSummary(
+            active_matches=sum(engine.running_matches for engine in engines),
+            pending_matches=sum(engine.pending_matches for engine in engines),
+            active_engines=sum(engine.active for engine in engines),
+            running_engines=sum(engine.running for engine in engines),
+        ),
         capital_coverage=MonitoringCapitalCoverage(
             status="gray",
             amount=None,
@@ -231,6 +261,7 @@ class MonitoringService:
         *,
         runtime_configuration: RoutingConfiguration | None = None,
         runtime_available: bool = True,
+        runtime_activity: Mapping[str, tuple[int, int]] | None = None,
     ) -> MonitoringSnapshot:
         reports, history_available = self._recent_reports()
         records_by_run = self._records_by_run(reports) if history_available else {}
@@ -240,6 +271,7 @@ class MonitoringService:
             history_available,
             runtime_configuration=runtime_configuration,
             runtime_available=runtime_available,
+            runtime_activity=runtime_activity,
         )
         summaries = tuple(self._summary_from_report(report) for report in reports)
         summary = MonitoringSummary(
@@ -259,6 +291,7 @@ class MonitoringService:
             warning_count=sum(engine.warning_count for engine in engines),
             error_count=sum(engine.error_count for engine in engines),
             active_engines=sum(engine.active for engine in engines),
+            running_engines=sum(engine.running for engine in engines),
         )
         return MonitoringSnapshot(
             engines=engines,
@@ -348,8 +381,10 @@ class MonitoringService:
         *,
         runtime_configuration: RoutingConfiguration | None,
         runtime_available: bool,
+        runtime_activity: Mapping[str, tuple[int, int]] | None,
     ) -> tuple[MonitoringEngineStatus, ...]:
         statuses: list[MonitoringEngineStatus] = []
+        activity = runtime_activity or {}
         for name, engine_id in _V1_ENGINES:
             engine_reports = tuple(report for report in reports if str(report.engine) == engine_id)
             latest = engine_reports[0] if engine_reports else None
@@ -379,33 +414,38 @@ class MonitoringService:
                 record.record_type is SimulationLogRecordType.ERROR for record in current_records
             )
 
+            running_matches, pending_matches = activity.get(engine_id, (0, 0))
             if runtime_configuration is None:
+                enabled = False
                 status, detail = MonitoringService._status_for(
                     latest, history_available=history_available
                 )
-                active = latest is not None and latest.status is SimulationStatus.RUNNING
-                live_state = "unavailable"
+                running = latest is not None and latest.status is SimulationStatus.RUNNING
+                active = running
+                live_state = "running" if running else "unavailable"
                 workflow_stages = MonitoringService._workflow_stages(engine_records)
             else:
-                active = runtime_available and engine_modes(
+                enabled = runtime_available and engine_modes(
                     runtime_configuration, cast(V1Engine, engine_id)
                 ).simulation
+                active = enabled
+                running = enabled and running_matches > 0
                 if not runtime_available:
                     status, detail, live_state = "red", "Control unavailable.", "error"
                 elif not active:
                     status, detail, live_state = "gray", "Inactive.", "inactive"
-                elif current_error_count:
+                elif running and current_error_count:
                     status, detail, live_state = "red", "Current run error.", "error"
-                elif current_warning_count:
+                elif running and current_warning_count:
                     status, detail, live_state = "amber", "Current run warning.", "warning"
-                elif latest is not None and latest.status is SimulationStatus.RUNNING:
-                    status, detail, live_state = "green", "Running.", "ready"
+                elif running:
+                    status, detail, live_state = "green", "Running.", "running"
                 else:
-                    status, detail, live_state = "green", "Ready.", "ready"
+                    status, detail, live_state = "green", "Active.", "active"
                 workflow_stages = MonitoringService._workflow_stages(
                     current_records,
                     engine_id=engine_id,
-                    runtime_active=active,
+                    runtime_active=enabled,
                     runtime_available=runtime_available,
                 )
 
@@ -416,12 +456,18 @@ class MonitoringService:
                     detail=detail,
                     engine_id=engine_id,
                     active=active,
+                    enabled=enabled,
+                    running=running,
                     mode="simulation",
                     live_state=live_state,
-                    running_matches=sum(
+                    running_matches=running_matches
+                    if runtime_configuration is not None
+                    else sum(
                         report.status is SimulationStatus.RUNNING for report in engine_reports
                     ),
-                    pending_matches=sum(
+                    pending_matches=pending_matches
+                    if runtime_configuration is not None
+                    else sum(
                         report.status is SimulationStatus.PENDING for report in engine_reports
                     ),
                     total_activity=len(engine_reports),

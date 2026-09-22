@@ -55,7 +55,7 @@ def engine_runtime_control(
         messages.error(request, "Engine control is temporarily unavailable.")
         return redirect("dashboard")
 
-    state = "started" if action == "start" else "stopped"
+    state = "enabled" if action == "start" else "disabled"
     messages.success(request, f"{engine_id} {workflow_mode.value} {state}.")
     return redirect("dashboard")
 
@@ -81,6 +81,6 @@ def sandbox_execution_control(
     except RoutingConfigurationPersistenceError:
         messages.error(request, "Sandbox execution control is temporarily unavailable.")
         return redirect("dashboard")
-    state = "started" if action == "start" else "stopped"
+    state = "enabled" if action == "start" else "disabled"
     messages.success(request, f"{engine_id} sandbox execution {state}.")
     return redirect("dashboard")

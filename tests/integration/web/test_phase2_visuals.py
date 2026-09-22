@@ -101,7 +101,7 @@ class Phase2VisualIntegrationTests(TestCase):
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        runtime_control = 'aria-label="Start BonusEngine execution"'
+        runtime_control = 'aria-label="Enable BonusEngine execution"'
         drag_handle = 'aria-label="Move BonusEngine"'
         self.assertIn(runtime_control, content)
         self.assertIn(drag_handle, content)

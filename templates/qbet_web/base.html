@@ -14,53 +14,88 @@
     body { min-height: 100dvh; }
   </style>
   <script src="{% static 'qbet_web/dashboard.js' %}" defer></script>
+  <script src="{% static 'qbet_web/navigation.js' %}" defer></script>
 </head>
 <body data-theme="{{ preferences.theme|default:'light' }}" data-font-size="{{ preferences.font_size|default:'medium' }}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
-  <header class="site-header">
-    <div class="site-header-inner">
-      <a class="brand" href="{% url 'home' %}" aria-label="Q-Bet home">
-        <span class="brand-mark" aria-hidden="true">Q</span>
-        <span>Q-Bet</span>
+  {% if user.is_authenticated %}
+    <header class="app-topbar">
+      <button class="sidebar-toggle" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true">
+        <span aria-hidden="true">☰</span><span class="visually-hidden">Toggle navigation</span>
+      </button>
+      <a class="brand" href="{% url 'dashboard' %}" aria-label="Q-Bet dashboard">
+        <span class="brand-mark" aria-hidden="true">Q</span><span>Q-Bet</span>
       </a>
-      <nav class="site-nav" aria-label="Main navigation">
-        <div class="nav-group" aria-label="Product navigation">
-          <a class="nav-link" href="{% url 'home' %}"{% if request.resolver_match.url_name == 'home' %} aria-current="page"{% endif %}>Home</a>
-          {% if user.is_authenticated %}
-            <a class="nav-link" href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'engine-detail' %} aria-current="page"{% endif %}>Dashboard</a>
-            <a class="nav-link" href="{% url 'execution-approvals' %}"{% if request.resolver_match.url_name == 'execution-approvals' or request.resolver_match.url_name == 'execution-approval-decision' %} aria-current="page"{% endif %}>Approvals{% if approval_count_available and approval_count %} ({{ approval_count }}){% endif %}</a>
-            {% if user.is_staff %}
-              <a class="nav-link" href="{% url 'report-history' %}"{% if request.resolver_match.url_name == 'report-history' or request.resolver_match.url_name == 'report-detail' %} aria-current="page"{% endif %}>Reports</a>
-            {% endif %}
-            <a class="nav-link" href="{% url 'notification-inbox' %}"{% if request.resolver_match.url_name == 'notification-inbox' %} aria-current="page"{% endif %}>Notifications</a>
-            <a class="nav-link" href="{% url 'presentation-settings' %}"{% if request.resolver_match.url_name == 'presentation-settings' %} aria-current="page"{% endif %}>Settings</a>
-            <a class="nav-link" href="{% url 'profile' %}"{% if request.resolver_match.url_name == 'profile' %} aria-current="page"{% endif %}>Profile</a>
-          {% endif %}
-        </div>
-
-        {% if user.is_authenticated and user.is_staff %}
-          <div class="nav-group nav-group-admin" aria-label="Administration navigation">
-            <span class="nav-group-label">Admin</span>
-            <a class="nav-link admin-nav-link" href="{% url 'monitoring' %}"{% if request.resolver_match.url_name == 'monitoring' %} aria-current="page"{% endif %}>Monitoring</a>
-            <a class="nav-link admin-nav-link" href="{% url 'admin-area' %}"{% if request.resolver_match.url_name == 'admin-area' %} aria-current="page"{% endif %}>Q-Bet Admin</a>
-            <a class="nav-link admin-nav-link" href="{% url 'admin:index' %}">Django Admin</a>
-          </div>
-        {% endif %}
-
-        <div class="nav-group nav-group-account" aria-label="Account navigation">
-          {% if user.is_authenticated %}
-            <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button nav-account-action" type="submit">Sign out</button></form>
-          {% else %}
-            <a class="nav-link" href="{% url 'login' %}"{% if request.resolver_match.url_name == 'login' %} aria-current="page"{% endif %}>Sign in</a>
-            <a class="nav-link nav-register" href="{% url 'register' %}"{% if request.resolver_match.url_name == 'register' %} aria-current="page"{% endif %}>Register</a>
-          {% endif %}
-        </div>
+      <nav class="topbar-actions" aria-label="Work actions">
+        <a class="topbar-action" href="{% url 'notification-inbox' %}"{% if request.resolver_match.url_name == 'notification-inbox' %} aria-current="page"{% endif %}>
+          Notifications{% if notification_unread_count %}<span class="nav-count">{{ notification_unread_count }}</span>{% endif %}
+        </a>
+        <a class="topbar-action" href="{% url 'execution-approvals' %}"{% if request.resolver_match.url_name == 'execution-approvals' or request.resolver_match.url_name == 'execution-approval-decision' %} aria-current="page"{% endif %}>
+          Approvals{% if approval_count_available and approval_count %}<span class="nav-count">{{ approval_count }}</span>{% endif %}
+        </a>
       </nav>
-    </div>
-  </header>
-  <main id="main-content">
-    {% for message in messages %}<p class="message" role="status">{{ message }}</p>{% endfor %}
-    {% block content %}{% endblock %}
-  </main>
+      <div class="topbar-account"><span>{{ user.get_username }}</span><a href="{% url 'profile' %}">Profile</a></div>
+    </header>
+
+    <div class="app-shell">
+      <aside id="app-sidebar" class="app-sidebar">
+        <nav aria-label="Application navigation">
+          <a class="sidebar-link" href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>Main Dashboard</a>
+
+          <details class="sidebar-group" open>
+            <summary>Execution Engine</summary>
+            <a class="sidebar-link sidebar-sublink" href="{% url 'engine-detail' 'bonus' %}"{% if request.resolver_match.url_name == 'engine-detail' and request.resolver_match.kwargs.engine_id == 'bonus' %} aria-current="page"{% endif %}>BonusEngine</a>
+            <a class="sidebar-link sidebar-sublink" href="{% url 'engine-detail' 'sports_capital' %}"{% if request.resolver_match.url_name == 'engine-detail' and request.resolver_match.kwargs.engine_id == 'sports_capital' %} aria-current="page"{% endif %}>SportsCapitalEngine</a>
+            <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=execution"{% if request.resolver_match.url_name == 'report-history' and request.GET.mode != 'simulation' %} aria-current="page"{% endif %}>Reports</a>
+          </details>
+
+          {% if user.is_staff %}
+            <details class="sidebar-group" open>
+              <summary>Simulation</summary>
+              {% if simulation_enabled %}
+                <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}"{% if request.resolver_match.url_name == 'simulation' %} aria-current="page"{% endif %}>Simulation Dashboard</a>
+                <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}#simulation-bonus">BonusEngine Simulation</a>
+                <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}#simulation-sports_capital">SportsCapitalEngine Simulation</a>
+                <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=simulation"{% if request.resolver_match.url_name == 'report-history' and request.GET.mode == 'simulation' %} aria-current="page"{% endif %}>Simulation Reports</a>
+              {% else %}
+                <span class="sidebar-unavailable">Simulation unavailable</span>
+              {% endif %}
+            </details>
+          {% endif %}
+
+          <a class="sidebar-link" href="{% url 'presentation-settings' %}"{% if request.resolver_match.url_name == 'presentation-settings' %} aria-current="page"{% endif %}>Settings</a>
+
+          {% if user.is_staff %}
+            <details class="sidebar-group">
+              <summary>Staff tools</summary>
+              <a class="sidebar-link sidebar-sublink" href="{% url 'monitoring' %}"{% if request.resolver_match.url_name == 'monitoring' %} aria-current="page"{% endif %}>Monitoring</a>
+              <a class="sidebar-link sidebar-sublink" href="{% url 'admin-area' %}"{% if request.resolver_match.url_name == 'admin-area' %} aria-current="page"{% endif %}>Q-Bet Admin</a>
+              <a class="sidebar-link sidebar-sublink" href="{% url 'admin:index' %}">Django Admin</a>
+            </details>
+          {% endif %}
+        </nav>
+        <div class="sidebar-account">
+          <a class="sidebar-link" href="{% url 'profile' %}"{% if request.resolver_match.url_name == 'profile' %} aria-current="page"{% endif %}>Profile &amp; account</a>
+          <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button sidebar-signout" type="submit">Sign out</button></form>
+        </div>
+      </aside>
+
+      <main id="main-content" class="app-main">
+  {% else %}
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="brand" href="{% url 'home' %}" aria-label="Q-Bet home"><span class="brand-mark" aria-hidden="true">Q</span><span>Q-Bet</span></a>
+        <nav class="site-nav" aria-label="Account navigation">
+          <a class="nav-link" href="{% url 'login' %}">Sign in</a>
+          <a class="nav-link nav-register" href="{% url 'register' %}">Register</a>
+        </nav>
+      </div>
+    </header>
+    <main id="main-content">
+  {% endif %}
+      {% for message in messages %}<p class="message" role="status">{{ message }}</p>{% endfor %}
+      {% block content %}{% endblock %}
+    </main>
+  {% if user.is_authenticated %}</div>{% endif %}
 </body>
 </html>

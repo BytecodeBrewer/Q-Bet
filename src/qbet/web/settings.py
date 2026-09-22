@@ -111,6 +111,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "qbet.web.account_security.ExpiredUnverifiedAccountCleanupMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -191,11 +192,20 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "home"
 
-EMAIL_BACKEND = os.environ.get(
-    "QBET_EMAIL_BACKEND",
-    "django.core.mail.backends.console.EmailBackend",
+_DEFAULT_EMAIL_BACKEND = (
+    "django.core.mail.backends.smtp.EmailBackend"
+    if QBET_HOSTED_PREVIEW
+    else "django.core.mail.backends.locmem.EmailBackend"
 )
+EMAIL_BACKEND = os.environ.get("QBET_EMAIL_BACKEND", _DEFAULT_EMAIL_BACKEND)
 DEFAULT_FROM_EMAIL = os.environ.get("QBET_DEFAULT_FROM_EMAIL", "qbet@localhost")
+EMAIL_HOST = os.environ.get("QBET_EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.environ.get("QBET_EMAIL_PORT", "25"))
+EMAIL_HOST_USER = os.environ.get("QBET_EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("QBET_EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = _environment_flag("QBET_EMAIL_USE_TLS")
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
+QBET_EMAIL_VERIFICATION_TIMEOUT = 60 * 60 * 24
 
 LOGGING = {
     "version": 1,
@@ -203,13 +213,25 @@ LOGGING = {
     "formatters": {
         "request_json": {"()": "qbet.web.logging.SafeRequestJSONFormatter"},
     },
+    "filters": {
+        "redact_account_tokens": {"()": "qbet.web.logging.AccountTokenRedactionFilter"},
+    },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "request_json"},
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "request_json",
+            "filters": ["redact_account_tokens"],
+        },
     },
     "loggers": {
         "qbet.web.request": {
             "handlers": ["console"],
             "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
             "propagate": False,
         },
     },

@@ -97,3 +97,18 @@ class UserDisplayPreference(models.Model):
 
     class Meta:
         db_table = "qbet_user_display_preferences"
+
+
+class AccountVerification(models.Model):
+    """Verification state for newly registered accounts."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_account_verification",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "qbet_account_verification"

@@ -1,0 +1,97 @@
+name: Hosted database migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub environment that owns the target database
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      release_sha:
+        description: Exact 40-character Git SHA whose migrations should be applied
+        required: true
+        type: string
+      confirmation:
+        description: Type MIGRATE to confirm this operator-owned schema change
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: Apply hosted PostgreSQL migrations
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 15
+    env:
+      QBET_DATABASE_URL: ${{ secrets.QBET_MIGRATION_DATABASE_URL }}
+      QBET_DJANGO_SECRET_KEY: ${{ secrets.QBET_DJANGO_SECRET_KEY }}
+      QBET_DJANGO_DEBUG: "false"
+      QBET_RELEASE_SHA: ${{ inputs.release_sha }}
+    steps:
+      - name: Validate operator confirmation
+        shell: bash
+        run: |
+          test "${{ inputs.confirmation }}" = "MIGRATE" || {
+            echo "::error::Migration confirmation must be exactly MIGRATE."
+            exit 1
+          }
+          test -n "$QBET_DATABASE_URL" || {
+            echo "::error::Missing QBET_MIGRATION_DATABASE_URL in the selected GitHub environment."
+            exit 1
+          }
+          test -n "$QBET_DJANGO_SECRET_KEY" || {
+            echo "::error::Missing QBET_DJANGO_SECRET_KEY in the selected GitHub environment."
+            exit 1
+          }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.release_sha }}
+
+      - name: Verify exact migration release
+        shell: bash
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          test "$actual_sha" = "${{ inputs.release_sha }}" || {
+            echo "::error::Checked out $actual_sha instead of requested release ${{ inputs.release_sha }}"
+            exit 1
+          }
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install migration runtime
+        run: python -m pip install . -r requirements-dev.txt
+
+      - name: Show migration plan
+        run: python manage.py migrate --plan
+
+      - name: Apply intended migrations
+        run: python manage.py migrate --noinput
+
+      - name: Verify schema is current
+        run: python manage.py migrate --check
+
+      - name: Verify Django configuration
+        run: python manage.py check
+
+      - name: Record operator result
+        shell: bash
+        run: |
+          {
+            echo "### Hosted PostgreSQL migration completed"
+            echo
+            echo "- Environment: ${{ inputs.environment }}"
+            echo "- Release: ${{ inputs.release_sha }}"
+            echo "- Final migration check: current"
+            echo
+            echo "Re-check the deployed /health/ endpoint before product acceptance."
+          } >> "$GITHUB_STEP_SUMMARY"
