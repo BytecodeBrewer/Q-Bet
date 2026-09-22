@@ -138,8 +138,8 @@ def currency_preference_notice(source_currency: str, preferences: DisplayPrefere
     """Explain the stored conversion preference without mislabeling source amounts."""
 
     if source_currency == preferences.currency:
-        return f"Amounts are recorded in {source_currency}."
+        return f"Preferred report currency {preferences.currency} matches the recorded amount."
     return (
-        f"Preferred conversion currency: {preferences.currency}. "
-        f"Amounts are recorded in {source_currency}; conversion is unavailable."
+        f"Preferred report currency: {preferences.currency}. "
+        f"This amount remains recorded and displayed in {source_currency}; no FX conversion is applied."
     )
