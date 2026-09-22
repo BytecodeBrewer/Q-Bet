@@ -441,7 +441,7 @@ class MonitoringService:
                 elif running:
                     status, detail, live_state = "green", "Running.", "running"
                 else:
-                    status, detail, live_state = "green", "Active.", "active"
+                    status, detail, live_state = "gray", "Ready; no work running.", "active"
                 workflow_stages = MonitoringService._workflow_stages(
                     current_records,
                     engine_id=engine_id,

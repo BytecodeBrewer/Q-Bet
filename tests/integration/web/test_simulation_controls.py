@@ -307,7 +307,7 @@ class SimulationGuiControlTests(TestCase):
             runtime_configuration=restored_routing
         )
         bonus = next(engine for engine in monitoring.engines if engine.engine_id == "bonus")
-        self.assertEqual(bonus.status, "green")
+        self.assertEqual(bonus.status, "gray")
         self.assertEqual(bonus.live_state, "active")
         self.assertEqual(bonus.total_activity, 1)
 

@@ -222,11 +222,11 @@ class GuiControlPlaneTests(TestCase):
         active = service.snapshot(runtime_configuration=active_configuration)
         active_bonus = next(engine for engine in active.engines if engine.engine_id == "bonus")
 
-        self.assertEqual(active_bonus.status, "green")
+        self.assertEqual(active_bonus.status, "gray")
         self.assertTrue(active_bonus.enabled)
         self.assertTrue(active_bonus.active)
         self.assertEqual(active_bonus.live_state, "active")
-        self.assertEqual(active_bonus.detail, "Active.")
+        self.assertEqual(active_bonus.detail, "Ready; no work running.")
         self.assertEqual(active_bonus.warning_count, 1)
         self.assertEqual(active_bonus.error_count, 1)
         self.assertTrue(active_bonus.workflow_stages)
