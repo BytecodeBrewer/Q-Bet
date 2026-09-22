@@ -5,6 +5,17 @@
   const csrfToken = container.querySelector("input[name='csrfmiddlewaretoken']")?.value;
   const status = container.querySelector("[data-simulation-client-status]");
   const autoRun = container.querySelector("[data-auto-run-url]");
+  const providerActivity = container.querySelector("[data-provider-activity]");
+  const providerLabel = container.querySelector("[data-provider-label]");
+
+  const setProviderState = (state, label) => {
+    if (!providerActivity || !providerLabel) return;
+    Array.from(providerActivity.classList)
+      .filter((name) => name.startsWith("activity-") && name !== "activity-state")
+      .forEach((name) => providerActivity.classList.remove(name));
+    providerActivity.classList.add("activity-" + state);
+    providerLabel.textContent = label;
+  };
 
   const setStatus = (message, state = "") => {
     if (!status) return;
@@ -48,6 +59,7 @@
   const url = autoRun.dataset.autoRunUrl;
   window.history.replaceState({}, "", window.location.pathname);
   setStatus("Simulation is running. Progress is persisted after every safe step.", "working");
+  setProviderState("working", "Market data is updating.");
 
   post(url)
     .then((payload) => {
@@ -60,6 +72,7 @@
     })
     .catch((error) => {
       setStatus(error.message, "error");
+      setProviderState("error", "Market data update failed.");
       autoRun.removeAttribute("data-auto-run-url");
     });
 })();
