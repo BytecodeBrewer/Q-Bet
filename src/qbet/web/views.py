@@ -90,6 +90,7 @@ from qbet.web.models import AccountVerification, CustomerReportAccess
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.provider_activity import ProviderActivitySnapshot, provider_activity_snapshot
 from qbet.web.readiness import deployment_release_id, persistence_readiness
+from qbet.web.ui_copy import ui_copy
 from qbet.web.simulation_control import (
     SimulationControlError,
     SimulationControlService,
@@ -229,12 +230,11 @@ def _require_staff(request: HttpRequest) -> None:
 def _context(request: HttpRequest, **values: object) -> dict[str, object]:
     values.setdefault("preferences", presentation_preferences(request.session))
     if request.user.is_authenticated:
-        values.setdefault(
-            "display_preferences",
-            DISPLAY_PREFERENCES.load(cast(User, request.user)),
-        )
+        display_preferences = DISPLAY_PREFERENCES.load(cast(User, request.user))
     else:
-        values.setdefault("display_preferences", DisplayPreferences())
+        display_preferences = DisplayPreferences()
+    values.setdefault("display_preferences", display_preferences)
+    values.setdefault("ui", ui_copy(display_preferences.language))
     if "simulation_enabled" not in values:
         values["simulation_enabled"] = bool(
             request.user.is_authenticated and _is_staff(request.user) and _simulation_enabled()
