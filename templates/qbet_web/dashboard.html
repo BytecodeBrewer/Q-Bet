@@ -11,7 +11,7 @@
       {% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %}
         <span class="status status-red" aria-hidden="true"></span><strong>Attention required</strong>
       {% elif execution_layer_active %}
-        <span class="status status-green" aria-hidden="true"></span><strong>Execution ready</strong>
+        <span class="status status-green" aria-hidden="true"></span><strong>Execution running</strong>
       {% else %}
         <span class="status status-gray" aria-hidden="true"></span><strong>Execution idle</strong>
       {% endif %}
