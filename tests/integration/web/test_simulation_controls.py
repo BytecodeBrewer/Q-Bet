@@ -22,6 +22,7 @@ from qbet.simulation.opportunity_source import (
     TheOddsApiSportsSimulationOpportunitySource,
 )
 from qbet.storage.ledger import PortfolioLedgerRepository, RoutingConfigurationRepository
+from qbet.storage.models import ModeWorkQueueRow
 from qbet.storage.postgres import PostgresSimulationReportReader
 from qbet.web.models import SimulationAvailability, SimulationRunState
 from qbet.web.monitoring import MonitoringService
@@ -213,7 +214,7 @@ class SimulationGuiControlTests(TestCase):
         self.assertEqual(SimulationRunState.objects.count(), 1)
         self.assertTrue(SimulationRunState.objects.filter(pk=active_run.run_id).exists())
 
-    def test_gui_pipeline_test_requires_started_engine_and_persists_report_and_records(self) -> None:
+    def test_gui_simulation_exposes_running_state_then_persists_report_and_records(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         reader = PostgresSimulationReportReader()
         monitoring = MonitoringService(reader)
@@ -224,7 +225,6 @@ class SimulationGuiControlTests(TestCase):
             {
                 "engine": SimulationEngine.BONUS.value,
                 "starting_capital": "100.00",
-                "max_duration_minutes": "60",
             },
             follow=True,
         )
@@ -235,18 +235,26 @@ class SimulationGuiControlTests(TestCase):
             RoutingConfiguration(bonus=EngineModes(simulation=True))
         )
 
-        with patch("qbet.web.views.MONITORING_SERVICE", monitoring):
-            response = self.client.post(
-                "/simulation/start/",
-                {
-                    "engine": SimulationEngine.BONUS.value,
-                    "starting_capital": "100.00",
-                    "max_duration_minutes": "60",
-                },
-                follow=True,
-            )
+        started = self.client.post(
+            "/simulation/start/",
+            {
+                "engine": SimulationEngine.BONUS.value,
+                "starting_capital": "100.00",
+            },
+        )
+        run = SimulationRunState.objects.get()
+        self.assertEqual(run.status, SimulationRunState.Status.RUNNING)
+        self.assertRedirects(
+            started,
+            f"/simulation/?autostart={run.run_id}",
+            fetch_redirect_response=False,
+        )
 
-            run = SimulationRunState.objects.get()
+        with patch("qbet.web.views.MONITORING_SERVICE", monitoring):
+            running_page = self.client.get(f"/simulation/?autostart={run.run_id}")
+            response = self.client.post(f"/simulation/{run.run_id}/run/")
+            run.refresh_from_db()
+
             self.assertIsNotNone(run.report_id)
             assert run.report_id is not None
             report = reader.load_report(run.report_id)
@@ -255,13 +263,15 @@ class SimulationGuiControlTests(TestCase):
             json_export = self.client.get(f"/reports/{run.report_id}/export/json/")
             csv_export = self.client.get(f"/reports/{run.report_id}/export/csv/")
 
+        self.assertContains(running_page, "Run is active.")
+        self.assertContains(running_page, "Stop simulation")
+        self.assertContains(running_page, f'/simulation/{run.run_id}/run/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], SimulationRunState.Status.COMPLETED)
         self.assertEqual(run.status, SimulationRunState.Status.COMPLETED)
         self.assertEqual(run.run_id, run.report_id)
         self.assertEqual(report.run_id, run.run_id)
         self.assertEqual(report.engine, SimulationEngine.BONUS.value)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, str(run.run_id))
-        self.assertContains(response, "completed")
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(json_export.status_code, 200)
         self.assertEqual(csv_export.status_code, 200)
@@ -275,6 +285,50 @@ class SimulationGuiControlTests(TestCase):
         self.assertIn(WorkflowStage.LIQUIDITY_CHECK.value, workflow_stages)
         self.assertTrue(
             any(record.record_type is SimulationLogRecordType.RUN_FINISHED for record in records)
+        )
+
+    def test_gui_stop_transitions_active_run_without_running_work(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(bonus=EngineModes(simulation=True))
+        )
+        self.client.force_login(self.staff)
+
+        self.client.post(
+            "/simulation/start/",
+            {"engine": SimulationEngine.BONUS.value, "starting_capital": "100.00"},
+        )
+        run = SimulationRunState.objects.get()
+
+        stopped = self.client.post(f"/simulation/{run.run_id}/stop/")
+        run.refresh_from_db()
+
+        self.assertEqual(stopped.status_code, 200)
+        self.assertEqual(stopped.json()["status"], SimulationRunState.Status.STOPPED)
+        self.assertEqual(run.status, SimulationRunState.Status.STOPPED)
+        self.assertIsNone(run.report_id)
+
+    def test_pipeline_dry_run_is_separate_and_has_no_business_side_effects(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            "/simulation/pipeline-dry-run/",
+            {"engine": SimulationEngine.BONUS.value, "mode": "simulation"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pipeline dry-run")
+        self.assertContains(response, "Readiness only")
+        self.assertContains(
+            response,
+            "without provider, opportunity, order, or capital side effects",
+        )
+        self.assertFalse(SimulationRunState.objects.exists())
+        self.assertFalse(ModeWorkQueueRow.objects.exists())
+        self.assertIsNone(
+            PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
         )
 
     def test_routing_and_simulation_state_survive_service_recreation(self) -> None:
