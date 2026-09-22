@@ -1,17 +1,90 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
 {% load display_preferences %}
-<section class="page-heading"><h1>Report history</h1><p>Completed business result reports, newest first.</p><p class="muted">Preferred conversion currency: {{ display_preferences.currency }}. Amounts retain their recorded currencies.</p></section>
+<section class="page-heading">
+  {% if display_preferences.language == "de" %}
+    <h1>Berichte</h1><p>Abgeschlossene Ergebnisberichte, neueste zuerst.</p>
+    <p class="muted">Bevorzugte Berichtswährung: {{ display_preferences.currency }}. Autoritative Beträge behalten ihre aufgezeichnete Währung.</p>
+  {% else %}
+    <h1>Report history</h1><p>Completed business result reports, newest first.</p>
+    <p class="muted">Preferred report currency: {{ display_preferences.currency }}. Authoritative amounts retain their recorded currency.</p>
+  {% endif %}
+</section>
+
 <form class="filter-bar" method="get">
-  <label>Range <select name="range"><option value="1h" {% if selected_range == "1h" %}selected{% endif %}>Last hour</option><option value="24h" {% if selected_range == "24h" %}selected{% endif %}>Last 24 hours</option><option value="7d" {% if selected_range == "7d" %}selected{% endif %}>Last 7 days</option><option value="30d" {% if selected_range == "30d" %}selected{% endif %}>Last 30 days</option><option value="custom" {% if selected_range == "custom" %}selected{% endif %}>Custom range</option></select></label>
-  <label>From <input type="datetime-local" name="start" value="{{ report_start|date:'Y-m-d\\TH:i' }}"></label><label>To <input type="datetime-local" name="end" value="{{ report_end|date:'Y-m-d\\TH:i' }}"></label><label>Engine <select name="engine"><option value="">All engines</option><option value="bonus" {% if selected_engine == "bonus" %}selected{% endif %}>BonusEngine</option><option value="sports_capital" {% if selected_engine == "sports_capital" %}selected{% endif %}>SportsCapitalEngine</option></select></label>
-  <label>Mode <select name="mode"><option value="">All modes</option><option value="simulation" {% if selected_mode == "simulation" %}selected{% endif %}>Simulation</option></select></label>
+  <label>Range
+    <select name="range">
+      <option value="1h" {% if selected_range == "1h" %}selected{% endif %}>Last hour</option>
+      <option value="24h" {% if selected_range == "24h" %}selected{% endif %}>Last 24 hours</option>
+      <option value="7d" {% if selected_range == "7d" %}selected{% endif %}>Last 7 days</option>
+      <option value="30d" {% if selected_range == "30d" %}selected{% endif %}>Last 30 days</option>
+      <option value="custom" {% if selected_range == "custom" %}selected{% endif %}>Custom range</option>
+    </select>
+  </label>
+  <label>From <input type="datetime-local" name="start" value="{{ report_start|date:'Y-m-d\TH:i' }}"></label>
+  <label>To <input type="datetime-local" name="end" value="{{ report_end|date:'Y-m-d\TH:i' }}"></label>
+  <label>Engine
+    <select name="engine">
+      <option value="">All engines</option>
+      <option value="bonus" {% if selected_engine == "bonus" %}selected{% endif %}>BonusEngine</option>
+      <option value="sports_capital" {% if selected_engine == "sports_capital" %}selected{% endif %}>SportsCapitalEngine</option>
+    </select>
+  </label>
+  <label>Mode
+    <select name="mode">
+      <option value="">All modes</option>
+      <option value="execution" {% if selected_mode == "execution" %}selected{% endif %}>Execution</option>
+      <option value="simulation" {% if selected_mode == "simulation" %}selected{% endif %}>Simulation</option>
+    </select>
+  </label>
   <button type="submit">Apply</button>
 </form>
+
+<nav class="report-export-actions" aria-label="Filtered report exports">
+  <a class="button-link" data-download-feedback href="{% url 'report-history-export' 'csv' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">CSV export</a>
+  <a class="button-link" data-download-feedback href="{% url 'report-history-export' 'json' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">JSON export</a>
+</nav>
+<p class="download-status" data-download-status role="status"></p>
+
 {% if dashboard.available %}
-<section class="content-section"><h2>Business summary</h2><dl><dt>Completed results</dt><dd>{{ reports|length }}</dd></dl>{% if dashboard.currency_summaries %}{% for summary in dashboard.currency_summaries %}<section class="currency-summary"><h3>{{ summary.currency }}</h3><dl><dt>Invested capital</dt><dd>{% localized_money summary.invested_capital summary.currency display_preferences %}</dd><dt>Profit/loss</dt><dd>{% localized_money summary.profit_loss summary.currency display_preferences %}</dd><dt>ROI</dt><dd>{% if summary.roi is not None %}{{ summary.roi }}%{% else %}Unavailable{% endif %}</dd></dl></section>{% endfor %}{% else %}<p class="empty-state">No monetary totals are available for this selection.</p>{% endif %}</section>
+<section class="content-section">
+  <h2>Business summary</h2>
+  <dl><dt>Completed results</dt><dd>{{ reports|length }}</dd></dl>
+  {% if dashboard.currency_summaries %}
+    {% for summary in dashboard.currency_summaries %}
+      <section class="currency-summary{% if summary.currency == display_preferences.currency %} is-preferred-currency{% endif %}">
+        <h3>{{ summary.currency }}{% if summary.currency == display_preferences.currency %} <span class="preference-badge">Preferred display currency</span>{% endif %}</h3>
+        <dl>
+          <dt>Invested capital</dt><dd>{% localized_money summary.invested_capital summary.currency display_preferences %}</dd>
+          <dt>Profit/loss</dt><dd>{% localized_money summary.profit_loss summary.currency display_preferences %}</dd>
+          <dt>ROI</dt><dd>{% if summary.roi is not None %}{{ summary.roi }}%{% else %}Unavailable{% endif %}</dd>
+        </dl>
+      </section>
+    {% endfor %}
+  {% else %}
+    <p class="empty-state">No monetary totals are available for this selection.</p>
+  {% endif %}
+</section>
 {% if reports %}
-<table><thead><tr><th>Match</th><th>Providers</th><th>Engine</th><th>Strategy</th><th>Profit/loss</th><th>Completed</th></tr></thead><tbody>{% for report in reports %}<tr><td><a href="{% url 'report-detail' report.report_id %}">{{ report.match }}</a></td><td>{{ report.provider }} / {{ report.counterparty_provider }}</td><td>{{ report.engine }}</td><td>{{ report.strategy }}</td><td>{% localized_money report.profit_loss report.currency display_preferences %}</td><td>{% localized_datetime report.completed_at display_preferences %}</td></tr>{% endfor %}</tbody></table>
-{% else %}<p class="empty-state">No completed customer reports are available for this selection.</p>{% endif %}
-{% else %}<p class="empty-state">Report history is unavailable.</p>{% endif %}
+<table>
+  <thead><tr><th>Match</th><th>Providers</th><th>Engine</th><th>Strategy</th><th>Profit/loss</th><th>Completed</th></tr></thead>
+  <tbody>
+    {% for report in reports %}
+      <tr>
+        <td><a href="{% url 'report-detail' report.report_id %}">{{ report.match }}</a></td>
+        <td>{{ report.provider }} / {{ report.counterparty_provider }}</td>
+        <td>{{ report.engine }}</td>
+        <td>{{ report.strategy }}</td>
+        <td>{% localized_money report.profit_loss report.currency display_preferences %}</td>
+        <td>{% localized_datetime report.completed_at display_preferences %}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-state">No completed customer reports are available for this selection.</p>
+{% endif %}
+{% else %}
+<p class="empty-state">Report history is unavailable.</p>
+{% endif %}
 {% endblock %}
