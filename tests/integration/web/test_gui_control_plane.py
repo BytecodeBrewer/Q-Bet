@@ -224,9 +224,9 @@ class GuiControlPlaneTests(TestCase):
 
         self.assertEqual(active_bonus.status, "green")
         self.assertTrue(active_bonus.enabled)
-        self.assertFalse(active_bonus.active)
-        self.assertEqual(active_bonus.live_state, "ready")
-        self.assertEqual(active_bonus.detail, "Ready.")
+        self.assertTrue(active_bonus.active)
+        self.assertEqual(active_bonus.live_state, "active")
+        self.assertEqual(active_bonus.detail, "Active.")
         self.assertEqual(active_bonus.warning_count, 1)
         self.assertEqual(active_bonus.error_count, 1)
         self.assertTrue(active_bonus.workflow_stages)
