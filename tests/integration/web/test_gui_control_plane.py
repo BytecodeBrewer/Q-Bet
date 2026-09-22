@@ -286,7 +286,8 @@ class GuiControlPlaneTests(TestCase):
         snapshot = self.service.snapshot(
             runtime_configuration=RoutingConfiguration(
                 bonus=EngineModes(simulation=True)
-            )
+            ),
+            runtime_activity={"bonus": (1, 0)},
         )
         bonus = next(engine for engine in snapshot.engines if engine.engine_id == "bonus")
 
