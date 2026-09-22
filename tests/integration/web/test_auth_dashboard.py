@@ -213,6 +213,9 @@ class AuthenticationAndDashboardTests(TestCase):
         self.assertRedirects(response, "/settings/presentation/")
         rendered = self.client.get("/settings/presentation/")
         self.assertContains(rendered, '<html lang="en"')
+        self.assertContains(rendered, ">Notifications<", html=False)
+        self.assertContains(rendered, 'title="Preferred report currency">USD</span>', html=False)
+        self.assertNotContains(rendered, "Benachrichtigungen / Notifications")
         stored = UserDisplayPreference.objects.get(user=owner)
         self.assertEqual(
             (
@@ -246,3 +249,4 @@ class AuthenticationAndDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'value="de" selected')
         self.assertContains(response, 'value="Europe/Berlin" selected')
+        self.assertContains(response, "Benachrichtigungen / Notifications")
