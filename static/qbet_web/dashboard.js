@@ -123,7 +123,12 @@
         grid.classList.remove("is-reordering");
 
         const after = dnd.order(grid);
-        const shouldPersist = dragStarted && commit && dnd.orderChanged(before, after);
+        const shouldPersist = dnd.shouldPersist({
+          dragStarted,
+          commit,
+          before,
+          after,
+        });
 
         draggedCard = null;
         activeHandle = null;
