@@ -288,7 +288,7 @@ class SimulationGuiControlTests(TestCase):
         )
         bonus = next(engine for engine in monitoring.engines if engine.engine_id == "bonus")
         self.assertEqual(bonus.status, "green")
-        self.assertEqual(bonus.live_state, "ready")
+        self.assertEqual(bonus.live_state, "active")
         self.assertEqual(bonus.total_activity, 1)
 
     def test_control_service_supports_both_current_v1_engines(self) -> None:
