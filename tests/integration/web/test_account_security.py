@@ -92,6 +92,42 @@ class AccountSecurityTests(TestCase):
         self.assertRedirects(response, "/verification/pending/")
         self.assertFalse(User.objects.filter(pk=user.pk).exists())
 
+    def test_verified_email_cannot_be_replaced_from_profile_without_reverification(self) -> None:
+        user = User.objects.create_user(
+            "verified-profile-user",
+            first_name="Verified",
+            last_name="User",
+            email="verified@example.com",
+            password="Valid-pass-12345",
+        )
+        AccountVerification.objects.create(user=user, verified_at=timezone.now())
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/profile/",
+            {
+                "first_name": "Updated",
+                "last_name": "User",
+                "email": "replacement@example.com",
+                "email_enabled": "on",
+                "inbox_enabled": "on",
+            },
+        )
+
+        self.assertRedirects(response, "/profile/")
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, "Updated")
+        self.assertEqual(user.email, "verified@example.com")
+
+        profile = self.client.get("/profile/")
+        self.assertTrue(profile.context["form"].fields["email"].disabled)
+        self.assertContains(profile, "Email verified")
+
+        settings = self.client.get("/settings/presentation/")
+        self.assertContains(settings, "verified@example.com")
+        self.assertContains(settings, "Verified")
+        self.assertNotContains(settings, "replacement@example.com")
+
     def test_authenticated_user_can_change_password(self) -> None:
         user = User.objects.create_user(
             "password-user",
