@@ -112,6 +112,26 @@ class SimulationGuiControlTests(TestCase):
         self.assertFalse(SimulationAvailability.objects.get(pk=1).enabled)
         self.assertContains(allowed, "Simulation availability disabled.")
 
+    def test_simulation_page_uses_persisted_running_state(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(bonus=EngineModes(simulation=True))
+        )
+        SimulationRunState.objects.create(
+            run_id=uuid4(),
+            engine=SimulationEngine.BONUS.value,
+            status=SimulationRunState.Status.RUNNING,
+            progress=Decimal("0.25"),
+            current_capital=Decimal("100"),
+        )
+        self.client.force_login(self.staff)
+
+        response = self.client.get("/simulation/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<dt>Status</dt><dd>Running.</dd>", html=True)
+        self.assertContains(response, "<dt>Active / pending</dt><dd>1 / 0</dd>", html=True)
+
     def test_normal_user_cannot_change_global_simulation_availability(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=False)
         self.client.force_login(self.user)
