@@ -474,6 +474,50 @@ class GuiControlPlaneTests(TestCase):
         self.assertEqual(pdf_export["Content-Type"], "application/pdf")
         self.assertTrue(pdf_export.content.startswith(b"%PDF-1.4"))
 
+    def test_filtered_report_history_exports_match_active_selection(self) -> None:
+        self.client.force_login(self.staff)
+
+        params = {
+            "range": "30d",
+            "engine": "sports_capital",
+            "mode": "simulation",
+        }
+        page = self.client.get("/reports/", params)
+        json_export = self.client.get("/reports/export/json/", params)
+        csv_export = self.client.get("/reports/export/csv/", params)
+
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, '<option value="execution" >Execution</option>', html=False)
+        self.assertContains(page, "data-download-feedback")
+        self.assertEqual(json_export.status_code, 200)
+        payload = json_export.json()
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["engine"], "sports_capital")
+        self.assertEqual(payload[0]["mode"], "simulation")
+        self.assertNotIn("workflow-secret", json_export.content.decode())
+        self.assertEqual(csv_export.status_code, 200)
+        self.assertIn("Northbridge v Riverside", csv_export.content.decode())
+        self.assertIn("qbet-reports-simulation-", csv_export["Content-Disposition"])
+
+    def test_execution_report_filter_is_visible_and_empty_export_is_explicit(self) -> None:
+        self.client.force_login(self.staff)
+
+        page = self.client.get("/reports/", {"range": "30d", "mode": "execution"})
+        export = self.client.get(
+            "/reports/export/json/",
+            {"range": "30d", "mode": "execution"},
+        )
+
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(
+            page,
+            '<option value="execution" selected>Execution</option>',
+            html=False,
+        )
+        self.assertEqual(export.status_code, 200)
+        self.assertEqual(export.json(), [])
+        self.assertEqual(export["X-QBet-Export-State"], "no-data")
+
     def test_missing_simulation_report_has_safe_admin_state(self) -> None:
         self.client.force_login(self.staff)
 
@@ -493,8 +537,9 @@ class GuiControlPlaneTests(TestCase):
             response = self.client.get("/reports/?range=30d")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<h3>EUR</h3>", html=False)
+        self.assertContains(response, "<h3>EUR", html=False)
         self.assertContains(response, "<h3>USD</h3>", html=False)
+        self.assertContains(response, "Preferred display currency")
         self.assertContains(response, "50,00 EUR")
         self.assertContains(response, "50,00 USD")
         self.assertNotContains(response, "100,00 EUR")
