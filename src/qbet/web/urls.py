@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from django.urls import path
+from django.urls import path, reverse_lazy
 
 from qbet.web import views
 from qbet.web.engine_runtime import engine_runtime_control, sandbox_execution_control
@@ -13,6 +13,8 @@ urlpatterns = [
     path("health/", views.health, name="health"),
     path("metrics/", views.metrics, name="metrics"),
     path("register/", views.register, name="register"),
+    path("verification/pending/", views.verification_pending, name="verification-pending"),
+    path("verify-email/<str:uidb64>/<str:token>/", views.verify_email, name="verify-email"),
     path("profile/", views.profile, name="profile"),
     path("notifications/", views.notification_inbox, name="notification-inbox"),
     path(
@@ -69,5 +71,52 @@ urlpatterns = [
     path("account/", views.account_boundary, name="account-boundary"),
     path("accounts/login/", auth_views.LoginView.as_view(), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path(
+        "accounts/password/change/",
+        auth_views.PasswordChangeView.as_view(
+            template_name="registration/password_change_form.html",
+            success_url=reverse_lazy("password-change-done"),
+        ),
+        name="password-change",
+    ),
+    path(
+        "accounts/password/change/done/",
+        auth_views.PasswordChangeDoneView.as_view(
+            template_name="registration/password_change_done.html"
+        ),
+        name="password-change-done",
+    ),
+    path(
+        "accounts/password/reset/",
+        auth_views.PasswordResetView.as_view(
+            template_name="registration/password_reset_form.html",
+            email_template_name="registration/password_reset_email.txt",
+            subject_template_name="registration/password_reset_subject.txt",
+            success_url=reverse_lazy("password-reset-done"),
+        ),
+        name="password-reset",
+    ),
+    path(
+        "accounts/password/reset/done/",
+        auth_views.PasswordResetDoneView.as_view(
+            template_name="registration/password_reset_done.html"
+        ),
+        name="password-reset-done",
+    ),
+    path(
+        "accounts/password/reset/<uidb64>/<token>/",
+        auth_views.PasswordResetConfirmView.as_view(
+            template_name="registration/password_reset_confirm.html",
+            success_url=reverse_lazy("password-reset-complete"),
+        ),
+        name="password-reset-confirm",
+    ),
+    path(
+        "accounts/password/reset/complete/",
+        auth_views.PasswordResetCompleteView.as_view(
+            template_name="registration/password_reset_complete.html"
+        ),
+        name="password-reset-complete",
+    ),
     path("admin/", admin.site.urls),
 ]

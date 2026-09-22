@@ -18,6 +18,7 @@ from qbet.data.polling import (
 from qbet.notifications import notification_recipient_status
 from qbet.notifications.preferences import NOTIFICATION_CATEGORIES
 from qbet.simulation import SimulationEngine
+from qbet.web.models import AccountVerification
 from qbet.workflow.routing import (
     EngineModes,
     RoutingConfiguration,
@@ -46,6 +47,12 @@ class NotificationReadyUserCreationForm(UserCreationForm):
     class Meta:
         model = User
         fields = ("username", "first_name", "last_name", "email", "password1", "password2")
+
+    def clean_email(self) -> str:
+        email = str(self.cleaned_data["email"]).strip()
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError("Registration details were not accepted.")
+        return email
 
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean() or {}
@@ -79,6 +86,20 @@ class NotificationProfileForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ("first_name", "last_name", "email")
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        if (
+            self.instance.pk
+            and AccountVerification.objects.filter(
+                user=self.instance,
+                verified_at__isnull=False,
+            ).exists()
+        ):
+            self.fields["email"].disabled = True
+            self.fields["email"].help_text = (
+                "Verified email changes require a separate verification flow."
+            )
 
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean() or {}

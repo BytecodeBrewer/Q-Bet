@@ -12,6 +12,20 @@ from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger("qbet.web.request")
 _correlation_id_pattern = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,35}$")
+_secret_path_patterns = (
+    re.compile(r"^/verify-email/[^/]+/[^/]+/?$"),
+    re.compile(r"^/accounts/password/reset/[^/]+/[^/]+/?$"),
+)
+
+
+def safe_request_path(path: str) -> str:
+    """Redact one-time account tokens before structured request logging."""
+
+    if _secret_path_patterns[0].match(path):
+        return "/verify-email/<redacted>/"
+    if _secret_path_patterns[1].match(path):
+        return "/accounts/password/reset/<redacted>/"
+    return path
 
 
 class RequestCorrelationMiddleware:
@@ -37,7 +51,7 @@ class RequestCorrelationMiddleware:
             "request.completed",
             extra={
                 "method": request.method,
-                "path": request.path,
+                "path": safe_request_path(request.path),
                 "status": response.status_code,
                 "duration_ms": round((perf_counter() - started_at) * 1000, 3),
                 "user_id": user_id,
