@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from time import perf_counter
 from typing import Protocol
 from uuid import UUID
 
@@ -35,6 +36,7 @@ from qbet.data.sports_match_builder import (
 from qbet.domain.models import DomainModel, Identifier, PositiveDecimal
 from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
+from qbet.monitoring import MonitoringLevel, MonitoringRecord
 from qbet.reporting import CustomerReportAmount, CustomerReportInput
 from qbet.simulation.models import SimulationEngine, SimulationRunConfig
 
@@ -43,6 +45,10 @@ SimulationOpportunity = BonusEngineRequest | SportsCapitalEngineRequest
 
 class SimulationMarketCollector(Protocol):
     def collect(self, request: DataCollectionRequest) -> NormalizedMarketSnapshot: ...
+
+
+class SimulationMonitoringWriter(Protocol):
+    def append(self, record: MonitoringRecord) -> MonitoringRecord: ...
 
 
 class SimulationOpportunitySource(Protocol):
@@ -193,11 +199,13 @@ class TheOddsApiSportsSimulationOpportunitySource:
         config: TheOddsApiSportsSimulationConfig,
         *,
         collector: SimulationMarketCollector | None = None,
+        monitoring_writer: SimulationMonitoringWriter | None = None,
     ) -> None:
         self._config = config
         self._collector = collector or TheOddsApiAdapter(
             available_stake=config.assumed_liquidity
         )
+        self._monitoring_writer = monitoring_writer
 
     def build(
         self,
@@ -227,38 +235,94 @@ class TheOddsApiSportsSimulationOpportunitySource:
             event_id=self._config.event_id,
             market=self._config.market,
         )
+        started = perf_counter()
+        self._record_provider_activity(
+            request,
+            status="working",
+            reason_code=None,
+            level=MonitoringLevel.INFO,
+        )
         try:
             snapshot = self._collector.collect(request)
         except TheOddsApiAuthenticationError:
+            self._record_provider_activity(
+                request,
+                status="error",
+                reason_code="simulation_odds_auth_failed",
+                level=MonitoringLevel.ERROR,
+                duration_ms=_elapsed_ms(started),
+            )
             raise _source_error(
                 "simulation_odds_auth_failed",
                 "Connected sports data authentication failed.",
             ) from None
         except TheOddsApiRateLimitError:
+            self._record_provider_activity(
+                request,
+                status="delayed",
+                reason_code="simulation_odds_rate_limited",
+                level=MonitoringLevel.WARNING,
+                duration_ms=_elapsed_ms(started),
+            )
             raise _source_error(
                 "simulation_odds_rate_limited",
                 "Connected sports data is temporarily rate limited.",
             ) from None
         except TheOddsApiConfigurationError:
+            self._record_provider_activity(
+                request,
+                status="error",
+                reason_code="simulation_odds_configuration_invalid",
+                level=MonitoringLevel.ERROR,
+                duration_ms=_elapsed_ms(started),
+            )
             raise _source_error(
                 "simulation_odds_configuration_invalid",
                 "Connected sports data is not configured correctly.",
             ) from None
         except TheOddsApiPayloadError:
+            self._record_provider_activity(
+                request,
+                status="error",
+                reason_code="simulation_odds_invalid_payload",
+                level=MonitoringLevel.ERROR,
+                duration_ms=_elapsed_ms(started),
+            )
             raise _source_error(
                 "simulation_odds_invalid_payload",
                 "Connected sports data could not be validated.",
             ) from None
         except TheOddsApiTransportError:
+            self._record_provider_activity(
+                request,
+                status="unavailable",
+                reason_code="simulation_odds_provider_unavailable",
+                level=MonitoringLevel.ERROR,
+                duration_ms=_elapsed_ms(started),
+            )
             raise _source_error(
                 "simulation_odds_provider_unavailable",
                 "Connected sports data is temporarily unavailable.",
             ) from None
         except TheOddsApiError:
+            self._record_provider_activity(
+                request,
+                status="unavailable",
+                reason_code="simulation_odds_provider_unavailable",
+                level=MonitoringLevel.ERROR,
+                duration_ms=_elapsed_ms(started),
+            )
             raise _source_error(
                 "simulation_odds_provider_unavailable",
                 "Connected sports data is temporarily unavailable.",
             ) from None
+        self._record_provider_activity(
+            request,
+            status="success",
+            reason_code=None,
+            level=MonitoringLevel.INFO,
+            duration_ms=_elapsed_ms(started),
+        )
 
         first_offer, second_offer = _select_two_way_offers(
             snapshot,
@@ -313,6 +377,41 @@ class TheOddsApiSportsSimulationOpportunitySource:
         )
 
 
+    def _record_provider_activity(
+        self,
+        request: DataCollectionRequest,
+        *,
+        status: str,
+        reason_code: str | None,
+        level: MonitoringLevel,
+        duration_ms: int | None = None,
+    ) -> None:
+        if self._monitoring_writer is None:
+            return
+        try:
+            self._monitoring_writer.append(
+                MonitoringRecord(
+                    correlation_id=request.correlation_id,
+                    occurred_at=datetime.now(UTC),
+                    engine=SimulationEngine.SPORTS_CAPITAL.value,
+                    mode="simulation",
+                    stage="data_aggregation",
+                    event_type="provider_query",
+                    status=status,
+                    reason_code=reason_code,
+                    level=level,
+                    duration_ms=duration_ms,
+                    references={
+                        "provider_id": request.source.provider_id,
+                        "source_id": request.source.source_id,
+                    },
+                )
+            )
+        except OSError:
+            # Monitoring is observational and must never break Simulation.
+            return
+
+
 def _select_two_way_offers(
     snapshot: NormalizedMarketSnapshot,
     *,
@@ -355,3 +454,6 @@ def _source_error(
     user_message: str,
 ) -> SimulationOpportunitySourceError:
     return SimulationOpportunitySourceError(reason_code, user_message)
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, int((perf_counter() - started) * 1000))
