@@ -1,5 +1,8 @@
+from uuid import uuid4
+
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.utils import timezone
 
 from qbet.storage.ledger import RoutingConfigurationRepository
 from qbet.storage.models import ExecutionRecordRow, ModeWorkQueueRow, PortfolioLedgerRow
@@ -49,6 +52,30 @@ class EngineRuntimeControlTests(TestCase):
         dashboard = self.client.get("/dashboard/")
         self.assertContains(dashboard, 'aria-label="Enable BonusEngine execution"')
         self.assertContains(dashboard, 'title="Inactive"')
+
+    def test_enabled_execution_is_ready_until_durable_work_is_processing(self) -> None:
+        self.client.force_login(self.staff)
+        self.client.post("/engines/bonus/execution/start/")
+
+        ready = self.client.get("/dashboard/")
+        self.assertContains(ready, 'aria-label="Disable BonusEngine execution"')
+        self.assertContains(ready, 'title="Ready"')
+        self.assertContains(ready, "Execution idle")
+        self.assertNotContains(ready, 'title="Running"')
+
+        ModeWorkQueueRow.objects.create(
+            work_id=uuid4(),
+            correlation_id=uuid4(),
+            mode="execution",
+            state="processing",
+            scheduled_for=timezone.now(),
+            payload={"work": {"engine": "bonus"}},
+        )
+
+        running = self.client.get("/dashboard/")
+        self.assertContains(running, 'title="Running"')
+        self.assertContains(running, "Execution running")
+        self.assertContains(running, "State <strong>running</strong>", html=False)
 
     def test_normal_user_cannot_toggle_execution_runtime_or_see_controls(self) -> None:
         self.client.force_login(self.user)
