@@ -77,6 +77,37 @@ class MonitoringExportTests(TestCase):
         parser.feed(response.content.decode())
         return [(urlsplit(href).path, parse_qs(urlsplit(href).query)) for href in parser.hrefs]
 
+    def test_provider_activity_is_customer_safe_on_dashboard_and_detailed_for_staff(self) -> None:
+        now = datetime.now(UTC)
+        PostgresMonitoringRepository().append(
+            MonitoringRecord(
+                correlation_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                occurred_at=now,
+                engine="sports_capital",
+                mode="simulation",
+                stage="data_aggregation",
+                event_type="provider_query",
+                status="success",
+                duration_ms=42,
+                references={
+                    "provider_id": "the-odds-api",
+                    "source_id": "simulation-the-odds-api",
+                },
+            )
+        )
+
+        self.client.force_login(self.user)
+        dashboard = self.client.get("/dashboard/")
+        self.assertContains(dashboard, "Market data updated successfully.")
+        self.assertNotContains(dashboard, "the-odds-api")
+        self.assertNotContains(dashboard, "42 ms")
+
+        self.client.force_login(self.staff)
+        monitoring = self.client.get("/monitoring/")
+        self.assertContains(monitoring, "Market data updated successfully.")
+        self.assertContains(monitoring, "the-odds-api")
+        self.assertContains(monitoring, "42 ms")
+
     def test_staff_can_view_compact_and_extended_monitoring_with_diagnostics(self) -> None:
         self.client.force_login(self.staff)
         compact = self.client.get("/monitoring/", self._range_params())
