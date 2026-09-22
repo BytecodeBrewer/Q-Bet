@@ -81,7 +81,7 @@ class EngineRuntimeControlTests(TestCase):
 
     def test_execution_activity_database_failure_is_fail_closed(self) -> None:
         class LazyDatabaseFailure:
-            def values(self, *args: str) -> LazyDatabaseFailure:
+            def values(self, *args: str):
                 return self
 
             def __iter__(self):
