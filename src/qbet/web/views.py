@@ -86,7 +86,7 @@ from qbet.web.forms import (
 )
 from qbet.web.models import AccountVerification, CustomerReportAccess
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
-from qbet.web.readiness import persistence_readiness
+from qbet.web.readiness import deployment_release_id, persistence_readiness
 from qbet.web.simulation_control import (
     SimulationControlError,
     SimulationControlService,
@@ -227,7 +227,10 @@ def health(_: HttpRequest) -> JsonResponse:
         {
             "status": "ok" if readiness.ready else "unavailable",
             "service": "q-bet-web",
-            "persistence": readiness.code.value,
+            "persistence": readiness.persistence,
+            "readiness": readiness.code.value,
+            "runtime": readiness.runtime,
+            "release": deployment_release_id(),
         },
         status=200 if readiness.ready else 503,
     )
