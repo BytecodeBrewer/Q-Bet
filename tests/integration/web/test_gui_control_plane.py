@@ -209,8 +209,8 @@ class GuiControlPlaneTests(TestCase):
         self.assertIn("<span>Recorded runs</span><strong>2</strong>", content)
         self.assertContains(response, "Customer plane")
         self.assertContains(response, "Admin only")
-        self.assertContains(response, "Deterministic pipeline test")
-        self.assertContains(response, "Run pipeline test")
+        self.assertContains(response, "Sandbox simulation")
+        self.assertContains(response, "Start simulation")
 
     def test_historical_incidents_do_not_poison_current_runtime_state(self) -> None:
         report = _report(SimulationEngine.BONUS)
@@ -335,18 +335,18 @@ class GuiControlPlaneTests(TestCase):
         SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.user)
         self.assertEqual(self.client.get("/simulation/").status_code, 404)
-        self.assertNotContains(self.client.get("/dashboard/"), "Run pipeline test")
+        self.assertNotContains(self.client.get("/dashboard/"), "Start simulation")
 
         self.client.force_login(self.staff)
         simulation = self.client.get("/simulation/")
         dashboard = self.client.get("/dashboard/")
         self.assertEqual(simulation.status_code, 200)
         self.assertEqual(simulation.content.decode().count("data-simulation-engine="), 2)
-        self.assertContains(dashboard, "Run pipeline test")
+        self.assertContains(dashboard, "Start simulation")
 
         SimulationAvailability.objects.filter(pk=1).update(enabled=False)
         self.assertEqual(self.client.get("/simulation/").status_code, 404)
-        self.assertNotContains(self.client.get("/dashboard/"), "Run pipeline test")
+        self.assertNotContains(self.client.get("/dashboard/"), "Start simulation")
 
     def test_settings_show_admin_area_only_to_staff(self) -> None:
         self.client.force_login(self.user)

@@ -159,8 +159,8 @@ class EngineRuntimeControlTests(TestCase):
 
         dashboard = self.client.get("/dashboard/")
         self.assertContains(dashboard, 'aria-label="Disable BonusEngine simulation"')
-        self.assertContains(dashboard, "Deterministic pipeline test")
-        self.assertContains(dashboard, "Run pipeline test")
+        self.assertContains(dashboard, "Sandbox simulation")
+        self.assertContains(dashboard, "Start simulation")
 
         monitoring = self.client.get("/monitoring/")
         self.assertContains(monitoring, 'id="runtime-readiness-heading"')

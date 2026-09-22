@@ -558,7 +558,7 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
         routing_configuration,
         cast(V1Engine, engine.value),
     ).simulation:
-        messages.error(request, "Start this engine in Simulation before running a pipeline test.")
+        messages.error(request, "Enable this engine for Simulation before starting a simulation.")
         return redirect("dashboard")
 
     try:

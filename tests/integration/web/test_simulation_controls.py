@@ -228,7 +228,7 @@ class SimulationGuiControlTests(TestCase):
             },
             follow=True,
         )
-        self.assertContains(blocked, "Start this engine in Simulation before running a pipeline test.")
+        self.assertContains(blocked, "Enable this engine for Simulation before starting a simulation.")
         self.assertFalse(SimulationRunState.objects.exists())
 
         RoutingConfigurationRepository().save(
