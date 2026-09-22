@@ -1,6 +1,8 @@
+from unittest.mock import patch
 from uuid import uuid4
 
 from django.contrib.auth.models import User
+from django.db import DatabaseError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -76,6 +78,47 @@ class EngineRuntimeControlTests(TestCase):
         self.assertContains(running, 'title="Running"')
         self.assertContains(running, "Execution running")
         self.assertContains(running, "State <strong>running</strong>", html=False)
+
+    def test_execution_activity_database_failure_is_fail_closed(self) -> None:
+        class LazyDatabaseFailure:
+            def values(self, *args: str) -> LazyDatabaseFailure:
+                return self
+
+            def __iter__(self):
+                raise DatabaseError("work queue unavailable")
+
+        self.client.force_login(self.staff)
+        self.client.post("/engines/bonus/execution/start/")
+
+        with patch(
+            "qbet.web.views.ModeWorkQueueRow.objects.filter",
+            return_value=LazyDatabaseFailure(),
+        ):
+            response = self.client.get("/dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Control unavailable.")
+        self.assertContains(response, 'title="Error"')
+        self.assertNotContains(response, "Execution running")
+
+    def test_engine_detail_uses_durable_execution_running_state(self) -> None:
+        self.client.force_login(self.staff)
+        self.client.post("/engines/bonus/execution/start/")
+        ModeWorkQueueRow.objects.create(
+            work_id=uuid4(),
+            correlation_id=uuid4(),
+            mode="execution",
+            state="processing",
+            scheduled_for=timezone.now(),
+            payload={"work": {"engine": "bonus"}},
+        )
+
+        response = self.client.get("/engines/bonus/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<dt>Operational state</dt><dd>Running</dd>", html=True)
+        self.assertContains(response, "<dt>Running matches</dt><dd>1</dd>", html=True)
+        self.assertContains(response, "Running.")
 
     def test_normal_user_cannot_toggle_execution_runtime_or_see_controls(self) -> None:
         self.client.force_login(self.user)
