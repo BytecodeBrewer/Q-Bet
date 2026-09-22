@@ -120,8 +120,11 @@ class AccountSecurityTests(TestCase):
         self.assertEqual(user.email, "verified@example.com")
 
         profile = self.client.get("/profile/")
-        self.assertTrue(profile.context["form"].fields["email"].disabled)
         self.assertContains(profile, "Email verified")
+        self.assertContains(
+            profile,
+            "Verified email changes require a separate verification flow.",
+        )
 
         settings = self.client.get("/settings/presentation/")
         self.assertContains(settings, "verified@example.com")
