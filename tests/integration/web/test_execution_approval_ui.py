@@ -15,7 +15,7 @@ from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
 )
-from qbet.web.display_preferences import DisplayPreferences, format_money
+from qbet.web.display_preferences import DisplayPreferences, format_datetime, format_money
 from qbet.web.models import UserDisplayPreference
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
@@ -121,9 +121,10 @@ class ExecutionApprovalWebTests(TestCase):
         self.assertEqual(queue.state, WorkState.PENDING)
 
     def test_execution_approval_uses_persisted_display_preferences(self) -> None:
+        observed_at = datetime.now(UTC)
         execution_id = self._stage_execution(
-            now=NOW,
-            expires_at=NOW + timedelta(minutes=5),
+            now=observed_at,
+            expires_at=observed_at + timedelta(minutes=5),
         )
         UserDisplayPreference.objects.create(
             user=self.user,
@@ -135,7 +136,7 @@ class ExecutionApprovalWebTests(TestCase):
         )
         expected = ExecutionApprovalService().pending_for(
             self.user.get_username(),
-            now=NOW,
+            now=observed_at,
         )[0]
         display = DisplayPreferences(
             language="de",
@@ -153,7 +154,7 @@ class ExecutionApprovalWebTests(TestCase):
             response,
             format_money(expected.capital_required, expected.currency, display),
         )
-        self.assertContains(response, "10.09.2026 14:05")
+        self.assertContains(response, format_datetime(expected.expires_at, display))
         self.assertContains(response, "Preferred report currency: USD.")
         self.assertContains(response, "no FX conversion is applied.")
         self.assertContains(response, str(execution_id))
