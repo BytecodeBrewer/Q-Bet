@@ -86,7 +86,7 @@
             <div class="engine-priority-metrics" aria-label="{{ engine.name }} key metrics">
               <div><span>Running</span><strong>{{ engine.running_matches }}</strong></div>
               <div><span>Pending</span><strong>{{ engine.pending_matches }}</strong></div>
-              <div><span>Capital</span><strong>{% if engine.involved_capital is not None %}{% localized_money engine.involved_capital "EUR" display_preferences %}{% else %}—{% endif %}</strong></div>
+              <div><span>Capital</span><strong>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}—{% endif %}</strong></div>
             </div>
             {% if engine.warning_count or engine.error_count %}
               <div class="issue-badges" aria-label="{{ engine.name }} warnings and errors">
@@ -154,7 +154,7 @@
             <div class="engine-priority-metrics">
               <div><span>Running</span><strong>{{ engine.running_matches }}</strong></div>
               <div><span>Pending</span><strong>{{ engine.pending_matches }}</strong></div>
-              <div><span>Virtual capital</span><strong>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}—{% endif %}</strong></div>
+              <div><span>Virtual capital</span><strong>{% if engine.involved_capital is not None %}{% localized_money engine.involved_capital "EUR" display_preferences %}{% else %}—{% endif %}</strong></div>
             </div>
             {% if engine.warning_count or engine.error_count %}
               <div class="issue-badges" aria-label="{{ engine.name }} recorded simulation warnings and errors" title="Recorded incidents from recent simulation history">
