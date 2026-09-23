@@ -108,6 +108,52 @@ class MonitoringExportTests(TestCase):
         self.assertContains(monitoring, "the-odds-api")
         self.assertContains(monitoring, "42 ms")
 
+    def test_provider_activity_endpoint_is_correlation_scoped_and_role_safe(self) -> None:
+        now = datetime.now(UTC)
+        correlation = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        PostgresMonitoringRepository().append(
+            MonitoringRecord(
+                correlation_id=correlation,
+                occurred_at=now,
+                engine="sports_capital",
+                mode="simulation",
+                stage="data_aggregation",
+                event_type="provider_query",
+                status="working",
+                references={
+                    "provider_id": "the-odds-api",
+                    "source_id": "simulation-the-odds-api",
+                },
+            )
+        )
+
+        self.client.force_login(self.user)
+        customer = self.client.get(
+            "/activity/provider/",
+            {"correlation": str(correlation)},
+        )
+        self.assertEqual(customer.status_code, 200)
+        self.assertEqual(customer.json()["state"], "working")
+        self.assertNotIn("provider", customer.json())
+        self.assertNotIn("duration_ms", customer.json())
+        self.assertNotIn("reason_code", customer.json())
+
+        self.client.force_login(self.staff)
+        staff = self.client.get(
+            "/activity/provider/",
+            {"correlation": str(correlation)},
+        )
+        self.assertEqual(staff.status_code, 200)
+        self.assertEqual(staff.json()["state"], "working")
+        self.assertEqual(staff.json()["provider"], "the-odds-api")
+
+        missing = self.client.get(
+            "/activity/provider/",
+            {"correlation": str(UUID("cccccccc-cccc-cccc-cccc-cccccccccccc"))},
+        )
+        self.assertEqual(missing.status_code, 200)
+        self.assertEqual(missing.json()["state"], "ready")
+
     def test_staff_can_view_compact_and_extended_monitoring_with_diagnostics(self) -> None:
         self.client.force_login(self.staff)
         compact = self.client.get("/monitoring/", self._range_params())
