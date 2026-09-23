@@ -38,6 +38,41 @@ def seed_catalog(apps, schema_editor) -> None:  # noqa: ARG001
         )
 
 
+_TABLES = (
+    "qbet_sportsbook_providers",
+    "qbet_sportsbook_provider_domains",
+    "qbet_sportsbook_external_identities",
+)
+
+
+def harden_catalog_tables(apps, schema_editor) -> None:  # noqa: ARG001
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    for table in _TABLES:
+        schema_editor.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
+        schema_editor.execute(
+            f"""
+            DO $
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+                    EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE public.{table} FROM anon';
+                END IF;
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+                    EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE public.{table} FROM authenticated';
+                END IF;
+            END
+            $;
+            """
+        )
+
+
+def unharden_catalog_tables(apps, schema_editor) -> None:  # noqa: ARG001
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    for table in _TABLES:
+        schema_editor.execute(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY')
+
+
 class Migration(migrations.Migration):
     dependencies = [("storage", "0012_harden_operational_rls")]
 
@@ -97,4 +132,5 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.RunPython(seed_catalog, migrations.RunPython.noop),
+        migrations.RunPython(harden_catalog_tables, unharden_catalog_tables),
     ]
