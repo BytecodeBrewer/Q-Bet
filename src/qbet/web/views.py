@@ -98,6 +98,7 @@ from qbet.workflow.routing import (
     RoutingConfiguration,
     UserRoutingPreferences,
     V1Engine,
+    connected_product_routing_configuration,
     engine_modes,
 )
 
@@ -134,7 +135,8 @@ def _simulation_enabled() -> bool:
 
 def _routing_configuration() -> tuple[RoutingConfiguration, bool]:
     try:
-        return RoutingConfigurationRepository().load() or RoutingConfiguration(), True
+        stored = RoutingConfigurationRepository().load()
+        return connected_product_routing_configuration(stored) or RoutingConfiguration(), True
     except RoutingConfigurationPersistenceError:
         return RoutingConfiguration(), False
 

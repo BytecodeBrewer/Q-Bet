@@ -29,6 +29,8 @@ class BonusStrategy(str):
 
 
 class BonusEngineRequest(DomainModel):
+    """Legacy exchange-hedged request retained for deterministic regression tests."""
+
     opportunity_id: Identifier
     inputs: QualifyingBetInput | FreeBetInput
     currency: Currency
@@ -67,6 +69,8 @@ class BonusEngineEvaluation(DomainModel):
 
 
 class BonusEngine(StrategyEngine[BonusEngineRequest, BonusEngineEvaluation]):
+    """Evaluate retained exchange-hedged calculation primitives."""
+
     def evaluate(self, request):
         result = (
             calculate_qualifying_bet(request.inputs)

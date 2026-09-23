@@ -34,7 +34,7 @@ The central success criterion is not the number of available components. The com
 | Area | Current state | Main Phase 3 gap |
 | --- | --- | --- |
 | Internal workflow | The first connected SportsCapital Phase 3 E2E gate composes real adapter boundaries, calculation/risk/liquidity, isolated modes, sandbox capital feedback, post-event settlement, persistence, Monitoring and Reporting; regression ownership is documented in `docs/test-strategy.md` | no remaining core Phase 3 test-ownership gap; extend focused coverage only when new connected behavior is added |
-| Market data | The Odds API feeds GUI-started SportsCapital Simulation through normalized snapshots and the Sports Match Builder | broaden connected data composition only when another engine/provider requires it |
+| Market data | The Odds API feeds GUI-started SportsCapital Simulation through fixed-odds sportsbook snapshots and the Sports Match Builder | BonusEngine still needs promotion/account metadata plus a fixed-odds sportsbook hedge-preparation path |
 | RequestHandler | targeted pre-execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | no remaining core Phase 3 gap; post-event result collection is a separate settlement boundary |
 | Smart Polling | persisted provider/target/engine strategies, quota/cost metadata and staff configuration are implemented | multi-provider source selection can be added when another source is introduced |
 | Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback composed from completed Simulation work into Portfolio Ledger | no remaining core Phase 3 gap; broaden only when another bank/account flow requires it |
@@ -50,8 +50,9 @@ The central success criterion is not the number of available components. The com
 
 Data Ingestion retrieves and normalizes external data. Preparation is optional and engine-specific; the architecture must not invent a Match Builder or extra stage where the engine can already consume the normalized data directly.
 
-- Sports betting requires match/market identity matching and additional preparation.
-- Betting exchanges can require matching/order-book preparation.
+- BonusEngine and SportsCapitalEngine use fixed-odds sportsbook match/market preparation.
+- BonusEngine additionally requires explicit promotion/account metadata, which is separate from quotation data.
+- Betting exchanges belong to the separate planned SportsExchangeEngine and can require exchange market/order-book preparation.
 - Ticket arbitrage is expected to need less or no comparable Match Builder.
 - Crypto is expected to consume normalized exchange/market data without a sports-style Match Builder.
 - Engines receive usable typed inputs and own their calculation/transformation logic.
@@ -188,14 +189,18 @@ A simple footer can provide contact/social placeholders. Do not expose a GitHub 
 
 Support language, region, timezone/time format and currency as separate preferences. Region may provide defaults but must not permanently bind currency or display format. Public/unauthenticated surfaces can later infer reasonable defaults while still allowing override.
 
+## Phase 3 Sportsbook Browser Seam
+
+Where a sportsbook exposes no supported API for promotion/account metadata, Phase 3 may add a provider-specific read-only browser adapter for the user's own configured account. It may read promotion/account terms required for BonusEngine preparation, but it must not scrape quotations or place bets. Sessions remain isolated by provider integration and must use intended provider authentication/verification flows.
+
 ## Phase 4 Boundary
 
 Phase 3 assumes a primary operator/user and central pipeline. The following remain Phase 4 architecture work unless a Phase 3 prerequisite explicitly requires a small seam now:
 
 - multi-user pipeline/account/capital isolation;
 - broader live-capital execution;
-- per-user browser sessions and provider identities;
-- higher-automation browser execution where permitted;
+- higher-authority sportsbook browser execution where permitted;
+- SportsExchangeEngine live execution and exchange-specific order lifecycle;
 - broader production cloud orchestration and high-availability concerns;
 - detailed Betting Exchange / later-engine execution architecture;
 - graceful live drain/shutdown of already-dispatched work.

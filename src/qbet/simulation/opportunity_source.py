@@ -85,7 +85,7 @@ class SimulationOpportunityBundle:
 
 
 class DeterministicSimulationOpportunitySource:
-    """Keep the established fixture path available for offline/local Simulation."""
+    """Keep deterministic offline/regression fixtures outside the connected product path."""
 
     def __init__(self, *, clock: Callable[[], datetime] | None = None) -> None:
         self._clock = clock or (lambda: datetime.now(UTC))
@@ -118,7 +118,7 @@ class DeterministicSimulationOpportunitySource:
                 for index in range(1, 3)
             )
             report = CustomerReportInput(
-                match="Deterministic bonus fixture",
+                match="Legacy exchange-hedged bonus fixture",
                 provider="Fixture sportsbook",
                 counterparty_provider="Fixture exchange",
                 strategy="Qualifying bet",

@@ -45,7 +45,7 @@ class RoutingSettingsTests(TestCase):
         self.assertContains(response, "Inactive", count=4)
         self.assertContains(response, "safe inactive defaults are active")
 
-    def test_staff_save_persists_reloadable_configuration_without_dispatching(self) -> None:
+    def test_staff_save_rejects_bonus_activation_until_provider_path_exists(self) -> None:
         self.client.force_login(self.staff)
 
         response = self.client.post(
@@ -53,12 +53,30 @@ class RoutingSettingsTests(TestCase):
             {"bonus": "both", "sports_capital": "simulation"},
         )
 
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(
+            response,
+            "BonusEngine provider path is not connected yet.",
+            status_code=400,
+        )
+        self.assertIsNone(RoutingConfigurationRepository().load())
+        self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
+        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
+        self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
+
+    def test_staff_can_persist_sports_capital_without_bonus_activation(self) -> None:
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            "/admin-area/gui-settings/",
+            {"bonus": "inactive", "sports_capital": "simulation"},
+        )
+
         self.assertRedirects(response, "/admin-area/gui-settings/")
-        reloaded = RoutingConfigurationRepository().load()
         self.assertEqual(
-            reloaded,
+            RoutingConfigurationRepository().load(),
             RoutingConfiguration(
-                bonus=EngineModes(simulation=True, execution=True),
+                bonus=EngineModes(),
                 sports_capital=EngineModes(simulation=True),
             ),
         )
@@ -66,10 +84,6 @@ class RoutingSettingsTests(TestCase):
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
-        page = self.client.get("/admin-area/gui-settings/")
-        self.assertContains(page, "Simulation and Execution")
-        self.assertContains(page, "Simulation only")
-        self.assertContains(page, "Persisted override")
 
     def test_invalid_mode_or_unknown_engine_does_not_change_saved_configuration(self) -> None:
         repository = RoutingConfigurationRepository()
@@ -125,7 +139,7 @@ class RoutingSettingsTests(TestCase):
         ):
             response = self.client.post(
                 "/admin-area/gui-settings/",
-                {"bonus": "both", "sports_capital": "both"},
+                {"bonus": "inactive", "sports_capital": "both"},
             )
 
         self.assertEqual(response.status_code, 503)

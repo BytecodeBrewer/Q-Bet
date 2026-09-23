@@ -97,6 +97,16 @@ def routing_settings(request: HttpRequest) -> HttpResponse:
                 status=400,
             )
         candidate = form.to_configuration()
+        if candidate.bonus.simulation or candidate.bonus.execution:
+            messages.error(request, "BonusEngine provider path is not connected yet.")
+            return _render_settings(
+                request,
+                configuration=current,
+                form=form,
+                persisted=persisted,
+                available=True,
+                status=400,
+            )
         try:
             repository.save(candidate)
         except RoutingConfigurationPersistenceError:
