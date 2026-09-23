@@ -18,7 +18,7 @@ from qbet.reporting import (
     SimulationReport,
 )
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
-from qbet.web.models import CustomerReportAccess, SimulationAvailability
+from qbet.web.models import CustomerReportAccess, SimulationAvailability, UserDisplayPreference
 from qbet.web.monitoring import MonitoringService
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
@@ -531,6 +531,14 @@ class GuiControlPlaneTests(TestCase):
         reporting_service = CustomerReportingService(
             _ReportStore((self.sports_report, dollar_report), ())
         )
+        UserDisplayPreference.objects.create(
+            user=self.staff,
+            language="de",
+            region="DE",
+            timezone_name="Europe/Berlin",
+            time_format="24h",
+            currency="USD",
+        )
         self.client.force_login(self.staff)
 
         with patch("qbet.web.views.CUSTOMER_REPORTING_SERVICE", reporting_service):
@@ -545,6 +553,6 @@ class GuiControlPlaneTests(TestCase):
         self.assertNotContains(response, "100,00 EUR")
         self.assertNotContains(response, "100,00 USD")
         content = response.content.decode()
-        self.assertLess(content.index("<h3>EUR"), content.index("<h3>USD"))
+        self.assertLess(content.index("<h3>USD"), content.index("<h3>EUR"))
         hourly = self.client.get("/reports/?range=1h")
         self.assertContains(hourly, '<option value="1h" selected>Last hour</option>', html=False)
