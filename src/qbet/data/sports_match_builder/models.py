@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import Field
 
 from qbet.calculations import DutchingTargetMode, FreeBetStakeReturn
+from qbet.data.models import NormalizedOffer
 from qbet.domain.models import (
     DomainModel,
     Identifier,
@@ -38,7 +39,15 @@ class BuiltSportsCapitalMatch(DomainModel):
     context: SportsMatchContext
 
 
+class PreparedBonusSportsbookOffers(DomainModel):
+    """Canonical fixed-odds sportsbook preparation boundary for BonusEngine."""
+
+    offers: tuple[NormalizedOffer, ...] = Field(min_length=2)
+    context: SportsMatchContext
+
+
 class QualifyingBetMatchMetadata(DomainModel):
+    """Legacy exchange-hedged qualifying-bet fixture metadata."""
     back_offer_id: Identifier
     lay_offer_id: Identifier
     back_stake: PositiveDecimal
@@ -49,6 +58,7 @@ class QualifyingBetMatchMetadata(DomainModel):
 
 
 class FreeBetMatchMetadata(DomainModel):
+    """Legacy exchange-hedged free-bet fixture metadata."""
     back_offer_id: Identifier
     lay_offer_id: Identifier
     free_bet_amount: PositiveDecimal
