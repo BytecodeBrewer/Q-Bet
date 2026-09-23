@@ -26,7 +26,7 @@
   <div>
     <span class="eyebrow">Market data</span>
     <strong>{{ provider_activity.label }}</strong>
-    {% if provider_activity.occurred_at %}<small>Last activity {{ provider_activity.occurred_at }}</small>{% endif %}
+    {% if provider_activity.occurred_at %}<small>Last activity {% localized_datetime provider_activity.occurred_at display_preferences %}</small>{% endif %}
   </div>
   {% if provider_activity.is_working %}<span class="activity-spinner" aria-label="Working"></span>{% elif provider_activity.state == "success" %}<span class="activity-check" aria-label="Success">✓</span>{% endif %}
 </section>
