@@ -199,16 +199,47 @@ def _simulation_runtime_activity(
     return {engine: (values[0], values[1]) for engine, values in counts.items()}
 
 
-def _provider_activity() -> ProviderActivitySnapshot:
+def _provider_activity(correlation_id: UUID | None = None) -> ProviderActivitySnapshot:
     now = datetime.now(UTC)
     records = WORKFLOW_MONITORING_SERVICE.extended(
-        MonitoringQuery(start=now - timedelta(minutes=10), end=now)
+        MonitoringQuery(
+            start=now - timedelta(minutes=10),
+            end=now,
+            correlation_id=correlation_id,
+        )
     )
     return provider_activity_snapshot(
         records,
         now=now,
         available=records.available,
     )
+
+
+@login_required
+@require_GET
+def provider_activity(request: HttpRequest) -> JsonResponse:
+    correlation = request.GET.get("correlation")
+    try:
+        correlation_id = UUID(correlation) if correlation else None
+    except ValueError:
+        return JsonResponse(
+            {"state": "error", "label": "Provider activity filter is invalid."},
+            status=400,
+        )
+
+    activity = _provider_activity(correlation_id)
+    payload: dict[str, object] = {
+        "state": activity.state,
+        "label": activity.label,
+        "occurred_at": activity.occurred_at.isoformat() if activity.occurred_at else None,
+    }
+    if _is_staff(request.user):
+        payload.update(
+            provider=activity.provider,
+            duration_ms=activity.duration_ms,
+            reason_code=activity.reason_code,
+        )
+    return JsonResponse(payload)
 
 
 def _user_routing_preferences(user_id: str) -> tuple[UserRoutingPreferences, bool]:
