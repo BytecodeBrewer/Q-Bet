@@ -37,7 +37,7 @@ class SportsbookCatalogRepositoryTests(TestCase):
         expected = load_german_sportsbook_catalog()
 
         assert_catalog_equal(catalog, expected)
-        self.assertEqual(SportsbookProviderRow.objects.count(), 25)
+        self.assertEqual(SportsbookProviderRow.objects.count(), 26)
         self.assertEqual(ProviderStateRow.objects.count(), 0)
 
     def test_catalog_survives_repository_recreation(self) -> None:
