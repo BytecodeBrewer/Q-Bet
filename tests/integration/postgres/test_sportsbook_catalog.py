@@ -4,16 +4,39 @@ from django.apps import apps
 from django.db import connection
 from django.test import TestCase
 
-from qbet.providers import load_german_sportsbook_catalog
+from qbet.providers import SportsbookCatalog, load_german_sportsbook_catalog
 from qbet.storage.models import ProviderStateRow, SportsbookProviderRow
 from qbet.storage.providers import PostgresSportsbookCatalogRepository
 
 
-class SportsbookCatalogRepositoryTests(TestCase):
-    def test_seeded_catalog_is_durable_and_separate_from_operational_provider_state(self) -> None:
-        catalog = PostgresSportsbookCatalogRepository().load()
+def assert_catalog_equal(actual: SportsbookCatalog, expected: SportsbookCatalog) -> None:
+    actual_providers = {
+        provider.provider_id: provider.model_dump(mode="json") for provider in actual.providers
+    }
+    expected_providers = {
+        provider.provider_id: provider.model_dump(mode="json") for provider in expected.providers
+    }
+    assert actual_providers == expected_providers
+    assert {
+        (mapping.source_id, mapping.external_key, mapping.provider_id)
+        for mapping in actual.mappings
+    } == {
+        (mapping.source_id, mapping.external_key, mapping.provider_id)
+        for mapping in expected.mappings
+    }
 
-        self.assertEqual(catalog, load_german_sportsbook_catalog())
+
+class SportsbookCatalogRepositoryTests(TestCase):
+    def test_seed_migration_populates_durable_catalog_separate_from_provider_state(self) -> None:
+        migration = import_module(
+            "qbet.storage.migrations.0013_sportsbook_provider_catalog"
+        )
+        migration.seed_catalog(apps, None)
+
+        catalog = PostgresSportsbookCatalogRepository().load()
+        expected = load_german_sportsbook_catalog()
+
+        assert_catalog_equal(catalog, expected)
         self.assertEqual(SportsbookProviderRow.objects.count(), 24)
         self.assertEqual(ProviderStateRow.objects.count(), 0)
 
@@ -23,7 +46,7 @@ class SportsbookCatalogRepositoryTests(TestCase):
 
         restored = PostgresSportsbookCatalogRepository().load()
 
-        self.assertEqual(restored, expected)
+        assert_catalog_equal(restored, expected)
         self.assertTrue(
             restored.resolve(
                 source_id="the_odds_api",
