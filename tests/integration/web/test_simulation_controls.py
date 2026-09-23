@@ -131,7 +131,7 @@ class SimulationGuiControlTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "<dt>Status</dt><dd>Running.</dd>", html=True)
-        self.assertContains(response, "<dt>Active / pending</dt><dd>1 / 0</dd>", html=True)
+        self.assertContains(response, "<dt>Running / pending</dt><dd>1 / 0</dd>", html=True)
 
     def test_simulation_surface_uses_display_preferences_without_fx_relabeling(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
