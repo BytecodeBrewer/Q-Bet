@@ -91,7 +91,9 @@ def prepare_german_bonus_sportsbook_offers(
 ) -> PreparedBonusSportsbookOffers:
     """Resolve German sportsbook identity before canonical Bonus preparation."""
 
-    canonical = canonicalize_german_bonus_snapshot(snapshot, catalog)
+    selected_offers = tuple(_offer_by_id(snapshot, identifier) for identifier in offer_ids)
+    selected_snapshot = snapshot.model_copy(update={"offers": selected_offers})
+    canonical = canonicalize_german_bonus_snapshot(selected_snapshot, catalog)
     return prepare_bonus_sportsbook_offers(canonical, offer_ids)
 
 
