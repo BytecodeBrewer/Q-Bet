@@ -17,11 +17,54 @@
       "status": "active"
     },
     {
+      "provider_id": "admiralbet",
+      "legal_name": "Greentube Betting Malta Limited",
+      "display_name": "AdmiralBet",
+      "domains": [
+        "admiralbet.de"
+      ],
+      "jurisdiction": "DE",
+      "sports_betting": true,
+      "online": true,
+      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
+      "whitelist_snapshot_date": "2026-09-07",
+      "status": "active"
+    },
+    {
       "provider_id": "bet-at-home",
       "legal_name": "Bet-at-home.com Internet Limited",
       "display_name": "bet-at-home",
       "domains": [
         "bet-at-home.de"
+      ],
+      "jurisdiction": "DE",
+      "sports_betting": true,
+      "online": true,
+      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
+      "whitelist_snapshot_date": "2026-09-07",
+      "status": "active"
+    },
+    {
+      "provider_id": "bet3000-wettarena",
+      "legal_name": "I.B.C. Sportsbetting Limited",
+      "display_name": "BET3000 / Wettarena",
+      "domains": [
+        "wettarena.de",
+        "bet3000.de"
+      ],
+      "jurisdiction": "DE",
+      "sports_betting": true,
+      "online": true,
+      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
+      "whitelist_snapshot_date": "2026-09-07",
+      "status": "active"
+    },
+    {
+      "provider_id": "bet365",
+      "legal_name": "Hillside (Europe) ENC",
+      "display_name": "bet365",
+      "domains": [
+        "bet365.de"
       ],
       "jurisdiction": "DE",
       "sports_betting": true,
@@ -59,11 +102,11 @@
       "status": "active"
     },
     {
-      "provider_id": "bwin",
-      "legal_name": "bwin (Deutschland) Limited",
-      "display_name": "bwin",
+      "provider_id": "bpremium",
+      "legal_name": "Ladbrokes (Deutschland) Limited",
+      "display_name": "Bpremium",
       "domains": [
-        "bwin.de"
+        "bpremium.de"
       ],
       "jurisdiction": "DE",
       "sports_betting": true,
@@ -73,11 +116,11 @@
       "status": "active"
     },
     {
-      "provider_id": "pokerstars-sports",
-      "legal_name": "Cyan Blue International Limited",
-      "display_name": "PokerStars Sports",
+      "provider_id": "bwin",
+      "legal_name": "bwin (Deutschland) Limited",
+      "display_name": "bwin",
       "domains": [
-        "pokerstars.de/sports"
+        "bwin.de"
       ],
       "jurisdiction": "DE",
       "sports_betting": true,
@@ -101,54 +144,11 @@
       "status": "active"
     },
     {
-      "provider_id": "admiralbet",
-      "legal_name": "Greentube Betting Malta Limited",
-      "display_name": "AdmiralBet",
+      "provider_id": "intertops",
+      "legal_name": "ITSP Services GmbH",
+      "display_name": "Intertops",
       "domains": [
-        "admiralbet.de"
-      ],
-      "jurisdiction": "DE",
-      "sports_betting": true,
-      "online": true,
-      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
-      "whitelist_snapshot_date": "2026-09-07",
-      "status": "active"
-    },
-    {
-      "provider_id": "neobet",
-      "legal_name": "Greenvest Betting Limited",
-      "display_name": "Neo.bet",
-      "domains": [
-        "neobet.de"
-      ],
-      "jurisdiction": "DE",
-      "sports_betting": true,
-      "online": true,
-      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
-      "whitelist_snapshot_date": "2026-09-07",
-      "status": "active"
-    },
-    {
-      "provider_id": "bet365",
-      "legal_name": "Hillside (Europe) ENC",
-      "display_name": "bet365",
-      "domains": [
-        "bet365.de"
-      ],
-      "jurisdiction": "DE",
-      "sports_betting": true,
-      "online": true,
-      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
-      "whitelist_snapshot_date": "2026-09-07",
-      "status": "active"
-    },
-    {
-      "provider_id": "bet3000-wettarena",
-      "legal_name": "I.B.C. Sportsbetting Limited",
-      "display_name": "BET3000 / Wettarena",
-      "domains": [
-        "wettarena.de",
-        "bet3000.de"
+        "intertops.de"
       ],
       "jurisdiction": "DE",
       "sports_betting": true,
@@ -172,39 +172,25 @@
       "status": "active"
     },
     {
-      "provider_id": "intertops",
-      "legal_name": "ITSP Services GmbH",
-      "display_name": "Intertops",
-      "domains": [
-        "intertops.de"
-      ],
-      "jurisdiction": "DE",
-      "sports_betting": true,
-      "online": true,
-      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
-      "whitelist_snapshot_date": "2026-09-07",
-      "status": "active"
-    },
-    {
-      "provider_id": "bpremium",
-      "legal_name": "Ladbrokes (Deutschland) Limited",
-      "display_name": "Bpremium",
-      "domains": [
-        "bpremium.de"
-      ],
-      "jurisdiction": "DE",
-      "sports_betting": true,
-      "online": true,
-      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
-      "whitelist_snapshot_date": "2026-09-07",
-      "status": "active"
-    },
-    {
       "provider_id": "leovegas",
       "legal_name": "LVSports Limited",
       "display_name": "LeoVegas",
       "domains": [
         "leovegas.de"
+      ],
+      "jurisdiction": "DE",
+      "sports_betting": true,
+      "online": true,
+      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
+      "whitelist_snapshot_date": "2026-09-07",
+      "status": "active"
+    },
+    {
+      "provider_id": "letsbet",
+      "legal_name": "Starlet Entertainment Limited",
+      "display_name": "LetsBet",
+      "domains": [
+        "letsbet.de"
       ],
       "jurisdiction": "DE",
       "sports_betting": true,
@@ -222,6 +208,20 @@
         "xtip.de",
         "merkurbets.de",
         "merkurslots.de"
+      ],
+      "jurisdiction": "DE",
+      "sports_betting": true,
+      "online": true,
+      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
+      "whitelist_snapshot_date": "2026-09-07",
+      "status": "active"
+    },
+    {
+      "provider_id": "neobet",
+      "legal_name": "Greenvest Betting Limited",
+      "display_name": "Neo.bet",
+      "domains": [
+        "neobet.de"
       ],
       "jurisdiction": "DE",
       "sports_betting": true,
@@ -262,11 +262,11 @@
       "status": "active"
     },
     {
-      "provider_id": "sportingbet",
-      "legal_name": "Sportingbet (Deutschland) Limited",
-      "display_name": "Sportingbet",
+      "provider_id": "original-wetten",
+      "legal_name": "Tipico Karlsruhe Limited",
+      "display_name": "Original Wetten",
       "domains": [
-        "sportingbet.de"
+        "original-wetten.de"
       ],
       "jurisdiction": "DE",
       "sports_betting": true,
@@ -276,11 +276,25 @@
       "status": "active"
     },
     {
-      "provider_id": "letsbet",
-      "legal_name": "Starlet Entertainment Limited",
-      "display_name": "LetsBet",
+      "provider_id": "pokerstars-sports",
+      "legal_name": "Cyan Blue International Limited",
+      "display_name": "PokerStars Sports",
       "domains": [
-        "letsbet.de"
+        "pokerstars.de/sports"
+      ],
+      "jurisdiction": "DE",
+      "sports_betting": true,
+      "online": true,
+      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
+      "whitelist_snapshot_date": "2026-09-07",
+      "status": "active"
+    },
+    {
+      "provider_id": "sportingbet",
+      "legal_name": "Sportingbet (Deutschland) Limited",
+      "display_name": "Sportingbet",
+      "domains": [
+        "sportingbet.de"
       ],
       "jurisdiction": "DE",
       "sports_betting": true,
@@ -304,11 +318,11 @@
       "status": "active"
     },
     {
-      "provider_id": "original-wetten",
-      "legal_name": "Tipico Karlsruhe Limited",
-      "display_name": "Original Wetten",
+      "provider_id": "tiptorro",
+      "legal_name": "Torro Tec Limited",
+      "display_name": "Tiptorro",
       "domains": [
-        "original-wetten.de"
+        "tiptorro.de"
       ],
       "jurisdiction": "DE",
       "sports_betting": true,
@@ -332,11 +346,11 @@
       "status": "active"
     },
     {
-      "provider_id": "tiptorro",
-      "legal_name": "Torro Tec Limited",
-      "display_name": "Tiptorro",
+      "provider_id": "vbet",
+      "legal_name": "SCGO Limited",
+      "display_name": "VBET",
       "domains": [
-        "tiptorro.de"
+        "vbet.de"
       ],
       "jurisdiction": "DE",
       "sports_betting": true,
