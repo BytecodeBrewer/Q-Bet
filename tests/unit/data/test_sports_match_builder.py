@@ -28,8 +28,9 @@ from qbet.data.sports_match_builder import (
     QualifyingBetMatchMetadata,
     TwoWayArbitrageMatchMetadata,
     build_dutching_match,
-    build_free_bet_match,
-    build_qualifying_bet_match,
+    build_legacy_exchange_hedged_free_bet_match,
+    build_legacy_exchange_hedged_qualifying_bet_match,
+    prepare_bonus_sportsbook_offers,
     build_two_way_arbitrage_match,
 )
 from qbet.domain import OfferSide
@@ -100,14 +101,14 @@ def test_build_qualifying_bet_match_preserves_context_and_is_deterministic() -> 
         minimum_lay_available_stake=Decimal(10),
     )
 
-    prepared = build_qualifying_bet_match(value, metadata)
+    prepared = build_legacy_exchange_hedged_qualifying_bet_match(value, metadata)
 
     assert isinstance(prepared.request, BonusEngineRequest)
     assert isinstance(prepared.request.inputs, QualifyingBetInput)
     assert prepared.request.execution_offer_ids == ("back", "lay")
     assert prepared.context.correlation_id == value.correlation_id
     assert prepared.context.provider_id == "book-a"
-    assert build_qualifying_bet_match(value, metadata).request.inputs == prepared.request.inputs
+    assert build_legacy_exchange_hedged_qualifying_bet_match(value, metadata).request.inputs == prepared.request.inputs
 
 
 def test_build_free_bet_match_requires_explicit_promotion_rule() -> None:
@@ -128,7 +129,7 @@ def test_build_free_bet_match_requires_explicit_promotion_rule() -> None:
         stake_return_rule=FreeBetStakeReturn.STAKE_NOT_RETURNED,
     )
 
-    prepared = build_free_bet_match(value, metadata)
+    prepared = build_legacy_exchange_hedged_free_bet_match(value, metadata)
 
     assert isinstance(prepared.request.inputs, FreeBetInput)
     assert prepared.request.inputs.stake_return_rule is FreeBetStakeReturn.STAKE_NOT_RETURNED
@@ -153,7 +154,56 @@ def test_build_free_bet_match_rejects_mismatched_selection() -> None:
     )
 
     with pytest.raises(ValueError, match="same outcome"):
-        build_free_bet_match(value, metadata)
+        build_legacy_exchange_hedged_free_bet_match(value, metadata)
+
+
+def test_prepare_bonus_sportsbook_offers_requires_fixed_odds_sportsbooks() -> None:
+    value = snapshot(
+        DataTarget.BONUS,
+        (
+            offer("promo", "home", "2.4", provider="book-a"),
+            offer("hedge", "away", "2.5", provider="book-b"),
+        ),
+    )
+
+    prepared = prepare_bonus_sportsbook_offers(value, ("promo", "hedge"))
+
+    assert tuple(item.provider for item in prepared.offers) == ("book-a", "book-b")
+    assert all(item.side is OfferSide.BACK for item in prepared.offers)
+    assert prepared.context.event_id == "event-1"
+
+
+def test_prepare_bonus_sportsbook_offers_rejects_exchange_lay_dependency() -> None:
+    value = snapshot(
+        DataTarget.BONUS,
+        (
+            offer("promo", "home", "2.4", provider="book-a"),
+            offer("lay", "away", "2.5", provider="exchange-a", side=OfferSide.LAY),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="fixed-odds sportsbook back offers"):
+        prepare_bonus_sportsbook_offers(value, ("promo", "lay"))
+
+
+def test_build_two_way_arbitrage_rejects_exchange_lay_offer() -> None:
+    value = snapshot(
+        DataTarget.SPORTS_CAPITAL,
+        (
+            offer("home", "home", "2.2", provider="book-a"),
+            offer("away", "away", "2.3", provider="exchange-a", side=OfferSide.LAY),
+        ),
+    )
+    metadata = TwoWayArbitrageMatchMetadata(
+        first_offer_id="home",
+        second_offer_id="away",
+        requested_total_stake=Decimal(50),
+        first_stake_precision=Decimal("0.01"),
+        second_stake_precision=Decimal("0.01"),
+    )
+
+    with pytest.raises(ValueError, match="fixed-odds sportsbook back offers"):
+        build_two_way_arbitrage_match(value, metadata)
 
 
 def test_build_two_way_arbitrage_match_creates_existing_engine_request() -> None:
@@ -288,7 +338,7 @@ def test_sports_match_builder_rejects_unready_snapshots(
     value = snapshot(DataTarget.BONUS, **values)
 
     with pytest.raises(ValueError, match=message):
-        build_qualifying_bet_match(value, metadata)
+        build_legacy_exchange_hedged_qualifying_bet_match(value, metadata)
 
 
 def test_sports_match_builder_rejects_incompatible_selection_currency_and_liquidity() -> None:
@@ -309,7 +359,7 @@ def test_sports_match_builder_rejects_incompatible_selection_currency_and_liquid
         minimum_lay_available_stake=Decimal(10),
     )
     with pytest.raises(ValueError, match="same outcome"):
-        build_qualifying_bet_match(bonus, metadata)
+        build_legacy_exchange_hedged_qualifying_bet_match(bonus, metadata)
 
     same_side = snapshot(
         DataTarget.BONUS,
@@ -317,7 +367,7 @@ def test_sports_match_builder_rejects_incompatible_selection_currency_and_liquid
     )
     same_side_metadata = metadata.model_copy(update={"lay_offer_id": "other"})
     with pytest.raises(ValueError, match="bookmaker back and exchange lay pair"):
-        build_qualifying_bet_match(same_side, same_side_metadata)
+        build_legacy_exchange_hedged_qualifying_bet_match(same_side, same_side_metadata)
 
     same_provider = snapshot(
         DataTarget.BONUS,
@@ -327,7 +377,7 @@ def test_sports_match_builder_rejects_incompatible_selection_currency_and_liquid
         ),
     )
     with pytest.raises(ValueError, match="distinct providers"):
-        build_qualifying_bet_match(same_provider, metadata)
+        build_legacy_exchange_hedged_qualifying_bet_match(same_provider, metadata)
     sports = snapshot(
         DataTarget.SPORTS_CAPITAL,
         (

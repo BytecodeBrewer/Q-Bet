@@ -222,7 +222,7 @@ class SimulationGuiControlTests(TestCase):
         blocked = self.client.post(
             "/simulation/start/",
             {
-                "engine": SimulationEngine.BONUS.value,
+                "engine": SimulationEngine.SPORTS_CAPITAL.value,
                 "starting_capital": "100.00",
                 "max_duration_minutes": "60",
             },
@@ -232,14 +232,14 @@ class SimulationGuiControlTests(TestCase):
         self.assertFalse(SimulationRunState.objects.exists())
 
         RoutingConfigurationRepository().save(
-            RoutingConfiguration(bonus=EngineModes(simulation=True))
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True))
         )
 
         with patch("qbet.web.views.MONITORING_SERVICE", monitoring):
             response = self.client.post(
                 "/simulation/start/",
                 {
-                    "engine": SimulationEngine.BONUS.value,
+                    "engine": SimulationEngine.SPORTS_CAPITAL.value,
                     "starting_capital": "100.00",
                     "max_duration_minutes": "60",
                 },
@@ -258,7 +258,7 @@ class SimulationGuiControlTests(TestCase):
         self.assertEqual(run.status, SimulationRunState.Status.COMPLETED)
         self.assertEqual(run.run_id, run.report_id)
         self.assertEqual(report.run_id, run.run_id)
-        self.assertEqual(report.engine, SimulationEngine.BONUS.value)
+        self.assertEqual(report.engine, SimulationEngine.SPORTS_CAPITAL.value)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(run.run_id))
         self.assertContains(response, "completed")
@@ -280,12 +280,12 @@ class SimulationGuiControlTests(TestCase):
     def test_routing_and_simulation_state_survive_service_recreation(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         expected_routing = RoutingConfiguration(
-            bonus=EngineModes(simulation=True)
+            sports_capital=EngineModes(simulation=True)
         )
         RoutingConfigurationRepository().save(expected_routing)
 
         run = SimulationControlService().start(
-            engine=SimulationEngine.BONUS,
+            engine=SimulationEngine.SPORTS_CAPITAL,
             starting_capital=Decimal("100"),
             max_duration=timedelta(minutes=60),
         )
@@ -306,34 +306,45 @@ class SimulationGuiControlTests(TestCase):
         monitoring = MonitoringService(reader).snapshot(
             runtime_configuration=restored_routing
         )
-        bonus = next(engine for engine in monitoring.engines if engine.engine_id == "bonus")
-        self.assertEqual(bonus.status, "green")
-        self.assertEqual(bonus.live_state, "active")
-        self.assertEqual(bonus.total_activity, 1)
+        sports = next(
+            engine for engine in monitoring.engines
+            if engine.engine_id == "sports_capital"
+        )
+        self.assertEqual(sports.status, "green")
+        self.assertEqual(sports.live_state, "active")
+        self.assertEqual(sports.total_activity, 1)
 
-    def test_control_service_supports_both_current_v1_engines(self) -> None:
+    def test_default_bonus_simulation_fails_closed_until_provider_path_exists(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         service = SimulationControlService()
 
-        bonus = service.start(
-            engine=SimulationEngine.BONUS,
-            starting_capital=Decimal("100"),
-            max_duration=timedelta(minutes=60),
+        with self.assertRaises(SimulationControlError) as raised:
+            service.start(
+                engine=SimulationEngine.BONUS,
+                starting_capital=Decimal("100"),
+                max_duration=timedelta(minutes=60),
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "bonus_provider_path_not_connected",
         )
-        sports = service.start(
+        run = SimulationRunState.objects.get()
+        self.assertEqual(run.status, SimulationRunState.Status.FAILED)
+        self.assertEqual(run.error_message, "bonus_provider_path_not_connected")
+
+    def test_control_service_runs_current_sports_capital_engine(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        run = SimulationControlService().start(
             engine=SimulationEngine.SPORTS_CAPITAL,
             starting_capital=Decimal("100"),
             max_duration=timedelta(minutes=60),
         )
 
-        self.assertEqual(bonus.status, SimulationRunState.Status.COMPLETED)
-        self.assertEqual(sports.status, SimulationRunState.Status.COMPLETED)
+        self.assertEqual(run.status, SimulationRunState.Status.COMPLETED)
         self.assertEqual(
             set(SimulationRunState.objects.values_list("engine", flat=True)),
-            {
-                SimulationEngine.BONUS.value,
-                SimulationEngine.SPORTS_CAPITAL.value,
-            },
+            {SimulationEngine.SPORTS_CAPITAL.value},
         )
 
     def test_connected_sports_simulation_reads_one_market_and_persists_run_correlation(self) -> None:

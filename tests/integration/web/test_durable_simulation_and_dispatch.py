@@ -47,14 +47,14 @@ class DurableSimulationAndDispatchTests(TestCase):
         )
         SimulationAvailability.objects.create(pk=1, enabled=True)
         RoutingConfigurationRepository().save(
-            RoutingConfiguration(bonus=EngineModes(simulation=True))
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True))
         )
         self.client.force_login(staff)
 
         response = self.client.post(
             "/simulation/start/",
             {
-                "engine": SimulationEngine.BONUS.value,
+                "engine": SimulationEngine.SPORTS_CAPITAL.value,
                 "starting_capital": "125.00",
                 "max_duration_minutes": "60",
             },
@@ -101,7 +101,7 @@ class DurableSimulationAndDispatchTests(TestCase):
 
         SimulationAvailability.objects.create(pk=1, enabled=True)
         RoutingConfigurationRepository().save(
-            RoutingConfiguration(bonus=EngineModes(simulation=True))
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True))
         )
         staff = User.objects.create_user(
             "simulation-review-staff",
@@ -113,7 +113,7 @@ class DurableSimulationAndDispatchTests(TestCase):
         response = self.client.post(
             "/simulation/start/",
             {
-                "engine": SimulationEngine.BONUS.value,
+                "engine": SimulationEngine.SPORTS_CAPITAL.value,
                 "starting_capital": "125.00",
                 "max_duration_minutes": "60",
             },
@@ -208,7 +208,7 @@ class DurableSimulationAndDispatchTests(TestCase):
     def test_routed_simulation_runs_directly_with_durable_merge(self) -> None:
         opportunity_id = "direct-routed-simulation"
         coordinator = ModeDispatchCoordinator(
-            RoutingConfiguration(bonus=EngineModes(simulation=True)),
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True)),
             queue_repository=ModeWorkQueueRepository(),
             mode_request_handlers=_handlers(opportunity_id),
         )
