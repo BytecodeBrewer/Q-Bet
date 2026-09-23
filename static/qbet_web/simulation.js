@@ -7,6 +7,7 @@
   const autoRun = container.querySelector("[data-auto-run-url]");
   const providerActivity = container.querySelector("[data-provider-activity]");
   const providerLabel = container.querySelector("[data-provider-label]");
+  const providerActivityUrl = autoRun?.dataset.providerActivityUrl || "";
 
   const setProviderState = (state, label) => {
     if (!providerActivity || !providerLabel) return;
@@ -21,6 +22,21 @@
     if (!status) return;
     status.textContent = message;
     status.dataset.state = state;
+  };
+
+  const refreshProviderActivity = async () => {
+    if (!providerActivityUrl) return;
+    try {
+      const response = await fetch(providerActivityUrl, {
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      setProviderState(payload.state, payload.label);
+    } catch (_error) {
+      // Provider activity is observational; a polling failure must not affect Simulation.
+    }
   };
 
   const post = async (url) => {
@@ -59,10 +75,13 @@
   const url = autoRun.dataset.autoRunUrl;
   window.history.replaceState({}, "", window.location.pathname);
   setStatus("Simulation is running. Progress is persisted after every safe step.", "working");
-  setProviderState("working", "Market data is updating.");
+  void refreshProviderActivity();
+  const providerPoll = window.setInterval(refreshProviderActivity, 500);
 
   post(url)
-    .then((payload) => {
+    .then(async (payload) => {
+      window.clearInterval(providerPoll);
+      await refreshProviderActivity();
       setStatus("Simulation " + payload.status + ".", payload.status);
       if (payload.report_url) {
         window.location.assign(payload.report_url);
@@ -70,9 +89,10 @@
         window.location.reload();
       }
     })
-    .catch((error) => {
+    .catch(async (error) => {
+      window.clearInterval(providerPoll);
+      await refreshProviderActivity();
       setStatus(error.message, "error");
-      setProviderState("error", "Market data update failed.");
       autoRun.removeAttribute("data-auto-run-url");
     });
 })();
