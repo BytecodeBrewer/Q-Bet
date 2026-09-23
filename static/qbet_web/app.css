@@ -335,6 +335,9 @@ body.sidebar-collapsed .app-sidebar { display: none; }
 .activity-working { border-left-color: var(--primary); }
 .activity-spinner { width: 22px; height: 22px; flex: 0 0 22px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: qbet-spin .8s linear infinite; }
 .activity-check { display: inline-grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; background: var(--success); color: #fff; font-weight: 800; }
+.provider-working-indicator, .provider-success-indicator { display: none; }
+.provider-activity.activity-working .provider-working-indicator { display: inline-block; }
+.provider-activity.activity-success .provider-success-indicator { display: inline-grid; }
 .simulation-client-status, .download-status { min-height: 22px; color: var(--muted); }
 .simulation-client-status[data-state="error"], .download-status[data-state="error"] { color: var(--danger); }
 .simulation-client-status[data-state="working"], .download-status[data-state="working"] { color: var(--primary); }
