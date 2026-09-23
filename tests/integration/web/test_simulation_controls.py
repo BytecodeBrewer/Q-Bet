@@ -129,8 +129,12 @@ class SimulationGuiControlTests(TestCase):
         response = self.client.get("/simulation/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<dt>Status</dt><dd>Running.</dd>", html=True)
+        self.assertContains(response, "<dt>Status</dt><dd>Inactive.</dd>", html=True)
         self.assertContains(response, "<dt>Active / pending</dt><dd>1 / 0</dd>", html=True)
+        self.assertContains(
+            response,
+            "BonusEngine remains unavailable until its promotion-aware fixed-odds sportsbook provider path is connected.",
+        )
 
     def test_normal_user_cannot_change_global_simulation_availability(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=False)

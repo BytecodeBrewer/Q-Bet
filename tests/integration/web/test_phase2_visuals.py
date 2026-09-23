@@ -101,11 +101,12 @@ class Phase2VisualIntegrationTests(TestCase):
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        runtime_control = 'aria-label="Enable BonusEngine execution"'
+        unavailable = 'title="Provider path unavailable"'
         drag_handle = 'aria-label="Move BonusEngine"'
-        self.assertIn(runtime_control, content)
+        self.assertIn(unavailable, content)
         self.assertIn(drag_handle, content)
-        self.assertLess(content.index(runtime_control), content.index(drag_handle))
+        self.assertLess(content.index(unavailable), content.index(drag_handle))
+        self.assertNotIn('aria-label="Enable BonusEngine execution"', content)
         self.assertNotIn('draggable="true"', content)
         self.assertIn("data-drag-handle", content)
 
