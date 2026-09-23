@@ -18,7 +18,7 @@ _COPY: Final = {
         "sign_out": "Sign out",
         "staff_tools": "Staff tools",
         "monitoring": "Monitoring",
-        "preferred_currency": "Preferred report currency",
+        "preferred_currency": "Preferred recorded currency",
     },
     "de": {
         "dashboard": "Übersicht / Main Dashboard",
@@ -33,7 +33,7 @@ _COPY: Final = {
         "sign_out": "Abmelden / Sign out",
         "staff_tools": "Admin-Werkzeuge / Staff tools",
         "monitoring": "Monitoring",
-        "preferred_currency": "Bevorzugte Berichtswährung",
+        "preferred_currency": "Bevorzugte aufgezeichnete Währung",
     },
 }
 
