@@ -86,7 +86,7 @@
             <div class="engine-priority-metrics" aria-label="{{ engine.name }} key metrics">
               <div><span>Running</span><strong>{{ engine.running_matches }}</strong></div>
               <div><span>Pending</span><strong>{{ engine.pending_matches }}</strong></div>
-              <div><span>Capital</span><strong>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}—{% endif %}</strong></div>
+              <div><span>Capital</span><strong>{% if engine.involved_capital is not None %}{% localized_money engine.involved_capital "EUR" display_preferences %}{% else %}—{% endif %}</strong></div>
             </div>
             {% if engine.warning_count or engine.error_count %}
               <div class="issue-badges" aria-label="{{ engine.name }} warnings and errors">
@@ -109,7 +109,7 @@
         <article class="summary-item summary-item-primary"><span>Running matches</span><strong>{{ simulation_monitoring.summary.active_matches }}</strong><small>running now</small></article>
         <article class="summary-item"><span>Pending matches</span><strong>{{ simulation_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
         <article class="summary-item"><span>Recorded runs</span><strong>{{ simulation_monitoring.summary.recorded_activity }}</strong><small>available history</small></article>
-        <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{{ simulation_monitoring.summary.involved_capital }}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>simulation only</small></article>
+        <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{% localized_money simulation_monitoring.summary.involved_capital "EUR" display_preferences %}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>simulation only</small></article>
         <article class="summary-item incident-summary{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %} has-incidents{% endif %}"><span>Recorded warnings / errors</span><strong>{{ simulation_monitoring.summary.warning_count }} / {{ simulation_monitoring.summary.error_count }}</strong><small>{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %}recent run history{% else %}No recorded issues{% endif %}</small></article>
       </section>
 
