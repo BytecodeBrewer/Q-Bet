@@ -843,7 +843,7 @@ def _report_history_selection(
             now = end_value
         except (Http404, ValueError):
             if strict:
-                raise ValueError("Enter a valid start and end date and time.") from None
+                raise ValueError("Enter a valid report start and end date and time.") from None
             messages.error(request, "Enter a valid start and end date and time.")
             preset = "7d"
             start = now - timedelta(days=7)
