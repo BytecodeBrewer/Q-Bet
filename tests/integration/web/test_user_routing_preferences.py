@@ -37,6 +37,7 @@ class UserRoutingPreferenceSettingsTests(TestCase):
             {
                 "bonus_simulation": "on",
                 "bonus_execution": "on",
+                "sports_capital_simulation": "on",
                 "sports_capital_execution": "on",
             },
         )
@@ -44,8 +45,9 @@ class UserRoutingPreferenceSettingsTests(TestCase):
         self.assertRedirects(response, "/settings/presentation/")
         alice = self.preferences.load("alice")
         bob = self.preferences.load("bob")
-        self.assertTrue(alice.bonus.simulation)
-        self.assertTrue(alice.bonus.execution)
+        self.assertFalse(alice.bonus.simulation)
+        self.assertFalse(alice.bonus.execution)
+        self.assertTrue(alice.sports_capital.simulation)
         self.assertFalse(alice.sports_capital.execution)
         self.assertEqual(bob, UserRoutingPreferences())
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)

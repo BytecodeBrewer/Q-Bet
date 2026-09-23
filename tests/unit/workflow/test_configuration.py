@@ -4,7 +4,11 @@ import pytest
 
 from qbet.workflow.models import WorkflowMode
 from qbet.workflow.orchestrator import WorkflowOrchestrator
-from qbet.workflow.routing import EngineModes, RoutingConfiguration
+from qbet.workflow.routing import (
+    EngineModes,
+    RoutingConfiguration,
+    connected_product_routing_configuration,
+)
 
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
 
@@ -50,3 +54,18 @@ def test_static_and_dynamic_routing_configuration_are_mutually_exclusive() -> No
             routing_configuration=RoutingConfiguration(),
             routing_configuration_loader=lambda: RoutingConfiguration(),
         )
+
+
+def test_connected_product_routing_masks_unconnected_bonus_without_mutating_source() -> None:
+    source = RoutingConfiguration(
+        bonus=EngineModes(simulation=True, execution=True),
+        sports_capital=EngineModes(simulation=True),
+    )
+
+    projected = connected_product_routing_configuration(source)
+
+    assert projected is not None
+    assert projected.bonus == EngineModes()
+    assert projected.sports_capital == source.sports_capital
+    assert source.bonus.simulation
+    assert source.bonus.execution

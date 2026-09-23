@@ -45,7 +45,7 @@ The detailed architecture is intentionally split into four Mermaid views in `doc
 - `WorkflowOrchestrator`: pipeline routing, correlation ids, stage transitions, engine activation, throttling, and GUI-originated control.
 - `RequestHandler`: optional side channel for targeted risk, balance, provider, or execution refreshes. It is not the main intake stream.
 - `Data Aggregation`: normalized batch/stream intake from conformant structured APIs.
-- `Sports Match Builder`: validated event, market, bookmaker BACK, exchange LAY, and Dutching coverage preparation.
+- `Sports Match Builder`: validated fixed-odds sportsbook event, market, offer, and Dutching preparation for `BonusEngine` and `SportsCapitalEngine`. Betting-exchange order-book preparation belongs to the separate `SportsExchangeEngine` path.
 - Calculation engines: deterministic strategy evaluation with typed inputs and outputs.
 - `Domain Risk`: engine/domain-specific policy after calculation and before liquidity allocation.
 - `LiquidityChecker`: validates whether an engine proposal may use the required capital, based on availability, allocation priority, exposure, account/provider state, and policy.
@@ -55,7 +55,9 @@ The detailed architecture is intentionally split into four Mermaid views in `doc
 
 ### Engine Paths
 
-- `BonusEngine` and `SportsCapitalEngine`: `Data Aggregation` -> `Sports Match Builder` -> calculation -> `Domain Risk` -> `LiquidityChecker`.
+- `BonusEngine`: `Data Aggregation` plus explicit promotion/account metadata -> `Sports Match Builder` -> promotional fixed-odds sportsbook calculation -> `Domain Risk` -> `LiquidityChecker`.
+- `SportsCapitalEngine`: `Data Aggregation` -> `Sports Match Builder` -> fixed-odds sportsbook arbitrage/dutching calculation -> `Domain Risk` -> `LiquidityChecker`.
+- `SportsExchangeEngine`: planned separate peer-to-peer exchange path using exchange market/order-book preparation and official exchange APIs where permitted.
 - `TicketEngine`: `Data Aggregation` -> `Ticket Preparation` -> `TicketEngine` -> `Domain Risk` where required -> `LiquidityChecker`.
 - `PredictionMarketEngine`: `Data Aggregation` -> optional `Feature / Signal Builder` -> `PredictionMarketEngine` -> optional `Domain Risk` -> `LiquidityChecker`.
 - `CryptoYieldEngine`: streaming `Data Aggregation` -> `Market State Aggregator` -> `CryptoYieldEngine` -> optional `Domain Risk` -> `LiquidityChecker`.
@@ -77,7 +79,7 @@ The detailed architecture is intentionally split into four Mermaid views in `doc
 - Scraping bookmaker pages to harvest quotations is out of scope.
 - Initial odds candidates are `The Odds API` and `Odds-API.io`, subject to a connector research ticket checking coverage, terms, limits, and costs.
 - Initial free or low-cost result-data candidates are `football-data.org` and `OpenLigaDB`. They are settlement candidates, not authoritative assumptions for every sport or league.
-- Exchange and market adapters should prefer official APIs such as the Betfair Exchange Betting/Stream/Accounts APIs, Polymarket CLOB/market-data APIs, and later suitable crypto exchange REST/WebSocket APIs.
+- Exchange and market adapters should prefer official APIs. `SportsExchangeEngine` is the future owner of betting-exchange BACK/LAY and order-book semantics. Betfair Exchange is currently unavailable to customers in Germany and is therefore not an implicit German BonusEngine dependency.
 - Smart Polling performs targeted, provider-efficient requests rather than periodic full-data crawling. A target policy may include baseline discovery, a T-24h candidate check, a T-2h liquidity check, and a final T-15m execution check. Requests should group relevant markets when the provider supports multi-market endpoints and respect provider rate limits, caching rules, and terms.
 - Match settlement uses separate result-data APIs where practical so quotation API budgets are not consumed by settlement.
 - Adapters normalize provider-specific payloads before domain preparation.
@@ -94,8 +96,9 @@ Simulation does not perform live refreshes or send user notifications. It nevert
 
 | Category | Engine | Primary mechanism | Product horizon |
 | --- | --- | --- | --- |
-| Promotional sports | `BonusEngine` | Qualifying bets, SNR/SR free bets, reloads, cashback, promo conversion | Current product |
-| Sports capital | `SportsCapitalEngine` | Arbitrage, odds boosts, real-capital matched betting, dutching | Current product |
+| Promotional sports | `BonusEngine` | Promotion-aware fixed-odds sportsbook workflows and sportsbook-to-sportsbook hedge planning | Current product, provider path pending |
+| Sports capital | `SportsCapitalEngine` | Own-capital fixed-odds sportsbook arbitrage, odds boosts and dutching | Current product |
+| Sports exchange | `SportsExchangeEngine` | Peer-to-peer exchange BACK/LAY, order-book liquidity and exchange commission | Planned later engine |
 | Tickets | `TicketEngine` | Event-driven secondary ticket opportunities | Later engine |
 | Prediction markets | `PredictionMarketEngine` | Market making, order-book arbitrage, supported API strategies | Later engine |
 | Crypto yield | `CryptoYieldEngine` | Delta-neutral spot/perpetual and funding-rate strategies | Later engine |
@@ -107,11 +110,13 @@ Yield and profit figures are simulation hypotheses, never promises. Capital band
 
 All money-sensitive calculations use `Decimal` and deterministic rounding. NumPy may be used for vectorized analysis or simulation only when precision boundaries are explicit.
 
+Legacy exchange-hedged calculation primitives are retained for regression and historical analysis, but they do not define the canonical connected BonusEngine product path:
+
 - Qualifying Bet Lay Stake: `L = (B * O_b) / (O_l - c)`.
 - SNR Free Bet Lay Stake: `L_SNR = (B * (O_b - 1)) / (O_l - c)`.
 - Value Bet EV: compare offered odds with margin-adjusted fair probability, then use fractional Kelly sizing when enabled.
 
-Where `B` is bookmaker back stake, `O_b` is bookmaker back odds, `O_l` is exchange lay odds, and `c` is exchange commission.
+For the retained exchange-hedged primitives, `B` is bookmaker back stake, `O_b` is bookmaker back odds, `O_l` is exchange lay odds, and `c` is exchange commission. New provider-backed BonusEngine preparation must not structurally require an exchange LAY offer.
 
 Calculations explicitly model stake precision, rounding, fees, taxes, commission, liquidity, stake limits, total-stake limits, liability, and capital lock-up.
 
@@ -132,10 +137,11 @@ German market tax modes:
 
 ## Matched-Betting Requirements
 
-The current sports product contains two engines:
+The sports architecture distinguishes three engine families:
 
-- `BonusEngine`: qualifying bets, SNR/SR free bets, reload/cashback offers, bonus-condition tracking, and promo conversion reports.
-- `SportsCapitalEngine`: two-way arbitrage, multi-outcome dutching, odds boosts, real-capital matched-betting opportunities, and later value-betting candidates.
+- `BonusEngine`: promotional fixed-odds sportsbook workflows. Promotion/account metadata is separate from quotation data, and the connected path must not structurally require an exchange LAY offer.
+- `SportsCapitalEngine`: own-capital fixed-odds sportsbook two-way arbitrage, multi-outcome dutching, odds boosts, and later value-betting candidates.
+- `SportsExchangeEngine`: separate planned peer-to-peer exchange trading with exchange-specific BACK/LAY, matched/unmatched order state, liquidity, and commission semantics.
 
 The stack includes qualifying-bet calculation, SNR/SR free-bet calculation, arbitrage detection, two-to-four-outcome dutching, dynamic rounding, stake optimization, tax/fee/commission handling, liquidity and stake limits, liability, execution-plan generation, result reporting, and account-operation warnings.
 
@@ -161,12 +167,14 @@ Execution policy must be transparent, configurable, deterministic where test rep
 
 Browser automation rules:
 
-- The first product approach is API-first and notification-first, without Playwright execution.
+- Quotation and market data remains API-first and notification-first; browser automation is not a quotation-scraping substitute.
+- Phase 3 may later add a provider-specific, read-only browser adapter for the user's own configured sportsbook account where no supported API exposes required promotion/account metadata.
+- Read-only sportsbook browser adapters are session-isolated per provider integration and must not place bets.
 - `qbet.adapters.browser` may later support explicitly permitted, short-lived execution tasks for softbookers or ticket providers where no supported order API exists.
 - Stored session contexts may reduce redundant authentication while remaining encrypted, scoped, and revocable.
-- Browser automation is excluded from quotation scraping.
-- Browser automation must use an ordinary user-controlled browser context. Cloudflare or provider verification is completed through the provider's intended browser flow; Q-Bet must not bypass, defeat, or imitate those controls.
+- Browser automation must use an ordinary user-controlled browser context. Q-Bet must not use fingerprint spoofing, artificial browser diversity, proxy rotation, CAPTCHA bypass, Cloudflare bypass, geolocation bypass, or other mechanisms intended to conceal automation or defeat provider controls.
 - Queue pacing prevents race conditions, duplicate submissions, and local resource overload.
+- Controlled sportsbook browser execution remains a Phase 4 authority increase behind `Approval -> RequestHandler revalidation -> Domain Risk -> LiquidityChecker -> Execution`.
 - Live orders require current risk/liquidity checks and explicit approval.
 
 ### Operational-Risk Blueprint Preserved From The Previous Model

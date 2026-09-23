@@ -20,14 +20,14 @@ class SimulationReportRedirectTests(TestCase):
     def test_successful_gui_start_exposes_running_state_then_returns_report_url(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         RoutingConfigurationRepository().save(
-            RoutingConfiguration(bonus=EngineModes(simulation=True))
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True))
         )
         self.client.force_login(self.staff)
 
         response = self.client.post(
             "/simulation/start/",
             {
-                "engine": SimulationEngine.BONUS.value,
+                "engine": SimulationEngine.SPORTS_CAPITAL.value,
                 "starting_capital": "100.00",
             },
         )

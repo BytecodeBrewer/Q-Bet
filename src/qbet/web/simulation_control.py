@@ -460,7 +460,10 @@ class SimulationControlService:
         engine: SimulationEngine,
     ) -> SimulationOpportunitySource:
         if engine is SimulationEngine.BONUS:
-            return DeterministicSimulationOpportunitySource()
+            raise SimulationControlError(
+                "BonusEngine provider-backed Simulation is not connected yet.",
+                reason_code="bonus_provider_path_not_connected",
+            )
 
         source_mode = str(
             getattr(settings, "QBET_SIMULATION_SPORTS_SOURCE", "fixture")

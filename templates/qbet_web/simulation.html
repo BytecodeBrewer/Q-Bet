@@ -28,7 +28,7 @@
 
   <section class="detail-panel">
     <h2>Start simulation</h2>
-    <p class="muted">Choose the route and virtual starting capital. Capital remains inside the Simulation ledger and sandbox boundary. {% currency_preference_note "EUR" display_preferences %}</p>
+    <p class="muted">SportsCapital can run through the current Simulation source. BonusEngine remains unavailable until its promotion-aware fixed-odds sportsbook provider path is connected. Choose virtual starting capital; it remains inside the Simulation ledger and sandbox boundary. {% currency_preference_note "EUR" display_preferences %}</p>
     <form method="post" action="{% url 'simulation-start' %}">
       {% csrf_token %}
       {{ start_form.non_field_errors }}
