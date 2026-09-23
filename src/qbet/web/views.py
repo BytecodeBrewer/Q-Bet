@@ -874,6 +874,16 @@ def _report_history_selection(
 def report_history(request: HttpRequest) -> HttpResponse:
     dashboard, preset, start, end = _report_history_selection(request)
     reports = getattr(dashboard, "reports", ())
+    display_preferences = DISPLAY_PREFERENCES.load(cast(User, request.user))
+    currency_summaries = tuple(
+        sorted(
+            getattr(dashboard, "currency_summaries", ()),
+            key=lambda summary: (
+                summary.currency != display_preferences.currency,
+                summary.currency,
+            ),
+        )
+    )
     return render(
         request,
         "qbet_web/report_history.html",
@@ -881,6 +891,7 @@ def report_history(request: HttpRequest) -> HttpResponse:
             request,
             dashboard=dashboard,
             reports=reports,
+            report_currency_summaries=currency_summaries,
             selected_engine=request.GET.get("engine", ""),
             selected_mode=request.GET.get("mode", ""),
             selected_range=preset,
