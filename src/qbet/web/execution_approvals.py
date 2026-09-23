@@ -6,6 +6,7 @@ from uuid import UUID
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.db import DatabaseError
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
@@ -14,13 +15,23 @@ from django.views.decorators.http import require_GET, require_POST
 from qbet.execution.models import Lifecycle
 from qbet.storage.ledger import AuthoritativePersistenceError
 from qbet.web.controls import presentation_preferences
+from qbet.web.display_preferences import DisplayPreferenceRepository, DisplayPreferences
+from qbet.web.ui_copy import ui_copy
 from qbet.workflow.approval import ExecutionApprovalService
 
 _EXECUTION_APPROVALS = ExecutionApprovalService()
+_DISPLAY_PREFERENCES = DisplayPreferenceRepository()
 
 
 def _context(request: HttpRequest, **values: object) -> dict[str, object]:
     values.setdefault("preferences", presentation_preferences(request.session))
+    display_preferences = (
+        _DISPLAY_PREFERENCES.load(request.user)
+        if isinstance(request.user, User)
+        else DisplayPreferences()
+    )
+    values.setdefault("display_preferences", display_preferences)
+    values.setdefault("ui", ui_copy(display_preferences.language))
     return values
 
 
