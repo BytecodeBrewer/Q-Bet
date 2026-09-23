@@ -546,7 +546,7 @@ class GuiControlPlaneTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "<h3>EUR", html=False)
-        self.assertContains(response, "<h3>USD</h3>", html=False)
+        self.assertContains(response, "<h3>USD ", html=False)
         self.assertContains(response, "Preferred recorded currency")
         self.assertContains(response, "50,00 EUR")
         self.assertContains(response, "50,00 USD")
