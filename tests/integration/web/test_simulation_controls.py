@@ -192,8 +192,13 @@ class SimulationGuiControlTests(TestCase):
         response = self.client.get("/simulation/")
 
         self.assertEqual(response.status_code, 200)
+        start_form = response.context["start_form"]
+        self.assertEqual(
+            tuple(start_form.fields["engine"].choices),
+            ((SimulationEngine.SPORTS_CAPITAL.value, "SportsCapitalEngine"),),
+        )
         self.assertContains(response, 'value="sports_capital"')
-        self.assertNotContains(response, '<option value="bonus">')
+        self.assertContains(response, "Pipeline dry-run")
         self.assertContains(
             response,
             "BonusEngine remains unavailable until its promotion-aware fixed-odds sportsbook provider path is connected.",
