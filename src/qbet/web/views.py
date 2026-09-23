@@ -14,7 +14,7 @@ from django.core.mail import send_mail
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
 from django.db import DatabaseError, transaction
-from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -90,6 +90,7 @@ from qbet.web.models import AccountVerification, CustomerReportAccess
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.provider_activity import ProviderActivitySnapshot, provider_activity_snapshot
 from qbet.web.readiness import deployment_release_id, persistence_readiness
+from qbet.web.shell_context import shell_context
 from qbet.web.ui_copy import ui_copy
 from qbet.web.simulation_control import (
     SimulationControlError,
@@ -259,13 +260,8 @@ def _require_staff(request: HttpRequest) -> None:
 
 
 def _context(request: HttpRequest, **values: object) -> dict[str, object]:
-    values.setdefault("preferences", presentation_preferences(request.session))
-    if request.user.is_authenticated:
-        display_preferences = DISPLAY_PREFERENCES.load(cast(User, request.user))
-    else:
-        display_preferences = DisplayPreferences()
-    values.setdefault("display_preferences", display_preferences)
-    values.setdefault("ui", ui_copy(display_preferences.language))
+    for key, value in shell_context(request).items():
+        values.setdefault(key, value)
     if "simulation_enabled" not in values:
         values["simulation_enabled"] = bool(
             request.user.is_authenticated and _is_staff(request.user) and _simulation_enabled()
@@ -825,10 +821,17 @@ def user_routing_preferences_update(request: HttpRequest) -> HttpResponse:
 
 def _report_history_selection(
     request: HttpRequest,
+    *,
+    strict: bool = False,
 ) -> tuple[object, str, datetime, datetime]:
     now = datetime.now(UTC)
     visible_report_ids = _visible_customer_report_ids(request)
     preset = request.GET.get("range", "7d")
+    if preset not in {"1h", "24h", "7d", "30d", "custom"}:
+        if strict:
+            raise ValueError("Choose a supported report period.")
+        messages.error(request, "Choose a supported report period.")
+        preset = "7d"
     start = now - timedelta(hours={"1h": 1, "24h": 24, "7d": 168, "30d": 720}.get(preset, 168))
     if preset == "custom":
         try:
@@ -839,6 +842,8 @@ def _report_history_selection(
             start = start_value
             now = end_value
         except (Http404, ValueError):
+            if strict:
+                raise ValueError("Enter a valid start and end date and time.") from None
             messages.error(request, "Enter a valid start and end date and time.")
             preset = "7d"
             start = now - timedelta(days=7)
@@ -854,7 +859,11 @@ def _report_history_selection(
                 ),
             )
         )
-    except ValueError:
+    except ValueError as error:
+        if strict:
+            raise ValueError(
+                "Invalid report filters. Check the period, engine, and mode."
+            ) from error
         dashboard = CUSTOMER_REPORTING_SERVICE.dashboard(
             CustomerReportingQuery(
                 start=now - timedelta(days=7),
@@ -907,7 +916,10 @@ def report_history_export(request: HttpRequest, export_format: str) -> HttpRespo
     if export_format not in {"csv", "json"}:
         raise Http404("Report export format not found.")
 
-    dashboard, _, start, end = _report_history_selection(request)
+    try:
+        dashboard, _, start, end = _report_history_selection(request, strict=True)
+    except ValueError as error:
+        return HttpResponseBadRequest(str(error))
     reports = tuple(getattr(dashboard, "reports", ()))
     mode = request.GET.get("mode") or "all"
     filename = (

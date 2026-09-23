@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from threading import Event, Thread
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -12,12 +13,15 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 import django
 
 from django.contrib.auth.models import User
-from django.test import TestCase, override_settings
+from django.db import close_old_connections
+from django.test import TestCase, TransactionTestCase, override_settings
 
 from qbet.data import TheOddsApiAdapter
 from qbet.layers import SimulationLogRecordType
 from qbet.simulation import SimulationEngine
 from qbet.simulation.opportunity_source import (
+    DeterministicSimulationOpportunitySource,
+    SimulationOpportunityBundle,
     TheOddsApiSportsSimulationConfig,
     TheOddsApiSportsSimulationOpportunitySource,
 )
@@ -541,3 +545,62 @@ class SimulationGuiControlTests(TestCase):
             "simulation_market_configuration_missing",
         )
 
+
+class _BlockingOpportunitySource:
+    def __init__(self) -> None:
+        self.started = Event()
+        self.release = Event()
+        self.calls = 0
+        self.delegate = DeterministicSimulationOpportunitySource()
+
+    def build(self, config, correlation_id) -> SimulationOpportunityBundle:
+        self.calls += 1
+        self.started.set()
+        if not self.release.wait(timeout=10):
+            raise TimeoutError("test did not release blocked simulation source")
+        return self.delegate.build(config, correlation_id)
+
+
+class SimulationRunConcurrencyTests(TransactionTestCase):
+    def test_overlapping_run_requests_claim_and_execute_the_simulation_once(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        source = _BlockingOpportunitySource()
+        service = SimulationControlService(opportunity_source=source)
+        run = service.begin(
+            engine=SimulationEngine.BONUS,
+            starting_capital=Decimal("100"),
+        )
+        worker_errors: list[BaseException] = []
+        worker = Thread(
+            target=self._run_in_thread,
+            args=(service, run.run_id, worker_errors),
+        )
+        worker.start()
+
+        self.assertTrue(source.started.wait(timeout=10))
+        self.assertEqual(
+            SimulationRunState.objects.get(pk=run.run_id).status,
+            SimulationRunState.Status.PROCESSING,
+        )
+        with self.assertRaises(SimulationAlreadyRunningError):
+            service.run(run.run_id)
+
+        source.release.set()
+        worker.join(timeout=15)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(worker_errors, [])
+        self.assertEqual(source.calls, 1)
+        persisted = SimulationRunState.objects.get(pk=run.run_id)
+        self.assertEqual(persisted.status, SimulationRunState.Status.COMPLETED)
+        self.assertIsNotNone(persisted.report_id)
+
+    @staticmethod
+    def _run_in_thread(service, run_id, errors: list[BaseException]) -> None:
+        close_old_connections()
+        try:
+            service.run(run_id)
+        except BaseException as error:
+            errors.append(error)
+        finally:
+            close_old_connections()

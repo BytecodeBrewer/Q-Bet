@@ -23,6 +23,7 @@ class SimulationRunState(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         RUNNING = "running", "Running"
+        PROCESSING = "processing", "Processing"
         COMPLETED = "completed", "Completed"
         STOPPED = "stopped", "Stopped"
         FAILED = "failed", "Failed"
@@ -55,7 +56,7 @@ class SimulationRunState(models.Model):
 
     @property
     def is_active(self) -> bool:
-        return self.status in {self.Status.PENDING, self.Status.RUNNING}
+        return self.status in {self.Status.PENDING, self.Status.RUNNING, self.Status.PROCESSING}
 
 
 class CustomerReportAccess(models.Model):

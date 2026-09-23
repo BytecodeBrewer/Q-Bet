@@ -499,6 +499,31 @@ class GuiControlPlaneTests(TestCase):
         self.assertIn("Northbridge v Riverside", csv_export.content.decode())
         self.assertIn("qbet-reports-simulation-", csv_export["Content-Disposition"])
 
+    def test_invalid_report_history_exports_reject_filters_without_fallback_data(self) -> None:
+        self.client.force_login(self.staff)
+        invalid_filters = (
+            {"range": "invalid"},
+            {"range": "30d", "engine": "unknown"},
+            {"range": "30d", "mode": "live"},
+            {"range": "custom"},
+            {
+                "range": "custom",
+                "start": "2026-09-07T11:00",
+                "end": "2026-09-07T10:00",
+            },
+        )
+
+        for params in invalid_filters:
+            with self.subTest(params=params):
+                response = self.client.get("/reports/export/json/", params)
+                self.assertEqual(response.status_code, 400)
+                self.assertNotIn("Content-Disposition", response.headers)
+                self.assertIn("report", response.content.decode().lower())
+
+        friendly_page = self.client.get("/reports/", {"range": "30d", "mode": "live"})
+        self.assertEqual(friendly_page.status_code, 200)
+        self.assertContains(friendly_page, "Choose a valid report range")
+
     def test_execution_report_filter_is_visible_and_empty_export_is_explicit(self) -> None:
         self.client.force_login(self.staff)
 

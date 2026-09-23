@@ -35,6 +35,11 @@ from qbet.web.models import SimulationAvailability, SimulationRunState
 _ACTIVE_STATUSES = (
     SimulationRunState.Status.PENDING,
     SimulationRunState.Status.RUNNING,
+    SimulationRunState.Status.PROCESSING,
+)
+_RUNNABLE_STATUSES = (
+    SimulationRunState.Status.PENDING,
+    SimulationRunState.Status.RUNNING,
 )
 _SUPPORTED_ENGINES = (
     SimulationEngine.BONUS,
@@ -84,6 +89,7 @@ class SimulationRunSnapshot:
         return self.status in {
             SimulationRunState.Status.PENDING,
             SimulationRunState.Status.RUNNING,
+            SimulationRunState.Status.PROCESSING,
         }
 
 
@@ -213,8 +219,22 @@ class SimulationControlService:
 
         if row.status == SimulationRunState.Status.STOPPED:
             return self._snapshot_from_row(row)
-        if row.status not in _ACTIVE_STATUSES:
+        claimed = SimulationRunState.objects.filter(
+            pk=run_id,
+            status__in=_RUNNABLE_STATUSES,
+        ).update(
+            status=SimulationRunState.Status.PROCESSING,
+            progress=Decimal("0"),
+            updated_at=timezone.now(),
+        )
+        if claimed != 1:
+            row = SimulationRunState.objects.get(pk=run_id)
+            if row.status == SimulationRunState.Status.STOPPED:
+                return self._snapshot_from_row(row)
+            if row.status == SimulationRunState.Status.PROCESSING:
+                raise SimulationAlreadyRunningError("Simulation run is already being processed.")
             raise SimulationControlError("Simulation run is already finished.")
+        row.status = SimulationRunState.Status.PROCESSING
 
         engine = SimulationEngine(row.engine)
         report_store = self._report_store()
@@ -242,7 +262,6 @@ class SimulationControlService:
         )
         self._update_run(
             run_id,
-            status=SimulationRunState.Status.RUNNING,
             progress=Decimal("0"),
             current_capital=simulation_ledger.balance.available,
         )
@@ -265,11 +284,7 @@ class SimulationControlService:
 
             def observe_progress(context: SimulationContext) -> None:
                 stop_requested = self._stop_requested(run_id)
-                self._record_progress(
-                    run_id,
-                    context,
-                    keep_terminal_status=stop_requested,
-                )
+                self._record_progress(run_id, context)
                 if stop_requested:
                     runner.request_stop()
 
@@ -369,7 +384,11 @@ class SimulationControlService:
         return SimulationRunSnapshot(
             run_id=row.run_id,
             engine=row.engine,
-            status=row.status,
+            status=(
+                SimulationRunState.Status.RUNNING
+                if row.status == SimulationRunState.Status.PROCESSING
+                else row.status
+            ),
             progress=row.progress,
             current_capital=row.current_capital,
             report_id=row.report_id,
@@ -388,12 +407,9 @@ class SimulationControlService:
     def _record_progress(
         run_id: UUID,
         context: SimulationContext,
-        *,
-        keep_terminal_status: bool = False,
     ) -> None:
         SimulationControlService._update_run(
             run_id,
-            status=None if keep_terminal_status else SimulationRunState.Status.RUNNING,
             progress=context.progress,
             current_capital=context.current_capital,
         )
