@@ -21,7 +21,7 @@ from qbet.data import (
     THE_ODDS_API_PROVIDER_ID,
 )
 from qbet.domain.models import OfferSide
-from qbet.providers import load_german_sportsbook_catalog
+from qbet.providers import ProviderStatus, load_german_sportsbook_catalog
 from qbet.layers import SimulationLogRecordType
 from qbet.simulation import SimulationEngine, SimulationRunConfig
 from qbet.simulation.opportunity_source import SimulationOpportunitySourceError
@@ -190,6 +190,27 @@ class BonusOfferSimulationTests(TestCase):
         self.assertEqual(len(bundle.opportunities), 1)
         request = bundle.opportunities[0]
         self.assertIsInstance(request.inputs, SportsbookFreeBetInput)
+
+    def test_ineligible_provider_offer_is_unavailable_and_fails_closed(self) -> None:
+        offer = self._qualifying_offer()
+        self.tipico.status = ProviderStatus.INACTIVE.value
+        self.tipico.save(update_fields=("status",))
+
+        offer.refresh_from_db()
+        self.assertFalse(offer.is_preparation_ready)
+        self.assertEqual(offer.status_label, "Unavailable")
+
+        source = _source(self.user, _snapshot())
+        with self.assertRaises(SimulationOpportunitySourceError) as raised:
+            source.build(
+                SimulationRunConfig(
+                    engine=SimulationEngine.BONUS,
+                    starting_capital=Decimal("100"),
+                ),
+                uuid4(),
+            )
+
+        self.assertEqual(raised.exception.reason_code, "bonus_offer_unavailable")
 
     def test_source_never_uses_another_users_offer(self) -> None:
         self._qualifying_offer(self.other)
