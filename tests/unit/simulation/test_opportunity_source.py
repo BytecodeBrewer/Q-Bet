@@ -257,4 +257,4 @@ def test_deterministic_bonus_source_remains_available_offline() -> None:
     )
 
     assert len(bundle.opportunities) == 2
-    assert bundle.customer_report_input.match == "Deterministic bonus fixture"
+    assert bundle.customer_report_input.match == "Legacy exchange-hedged bonus fixture"

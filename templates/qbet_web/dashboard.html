@@ -104,7 +104,8 @@
       </section>
 
       <section class="simulation-control-panel">
-        <div class="section-heading"><div><span class="eyebrow">Sandbox</span><h3>Deterministic pipeline test</h3></div><span class="tag simulation-tag">Virtual only</span></div>
+        <div class="section-heading"><div><span class="eyebrow">Sandbox</span><h3>Pipeline simulation</h3></div><span class="tag simulation-tag">Virtual only</span></div>
+        <p>SportsCapital can use its configured fixture or connected odds source. BonusEngine remains unavailable here until its promotion-aware fixed-odds sportsbook provider path is connected.</p>
         <form method="post" action="{% url 'simulation-start' %}">
           {% csrf_token %}
           {{ start_form.non_field_errors }}

@@ -26,23 +26,23 @@ class EngineRuntimeControlTests(TestCase):
     def test_staff_execution_start_and_stop_only_toggle_requested_engine_mode(self) -> None:
         self.client.force_login(self.staff)
 
-        started = self.client.post("/engines/bonus/execution/start/")
+        started = self.client.post("/engines/sports_capital/execution/start/")
         self.assertRedirects(started, "/dashboard/")
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
-        self.assertTrue(configuration.bonus.execution)
-        self.assertTrue(configuration.bonus.execution_sandbox)
-        self.assertFalse(configuration.bonus.simulation)
+        self.assertTrue(configuration.sports_capital.execution)
+        self.assertTrue(configuration.sports_capital.execution_sandbox)
+        self.assertFalse(configuration.sports_capital.simulation)
         self.assertFalse(configuration.sports_capital.execution)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
         dashboard = self.client.get("/dashboard/")
-        self.assertContains(dashboard, 'aria-label="Disable BonusEngine execution"')
+        self.assertContains(dashboard, 'aria-label="Disable SportsCapitalEngine execution"')
         self.assertContains(dashboard, 'title="Active"')
 
-        stopped = self.client.post("/engines/bonus/execution/stop/")
+        stopped = self.client.post("/engines/sports_capital/execution/stop/")
         self.assertRedirects(stopped, "/dashboard/")
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
@@ -52,15 +52,15 @@ class EngineRuntimeControlTests(TestCase):
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
         dashboard = self.client.get("/dashboard/")
-        self.assertContains(dashboard, 'aria-label="Enable BonusEngine execution"')
+        self.assertContains(dashboard, 'aria-label="Enable SportsCapitalEngine execution"')
         self.assertContains(dashboard, 'title="Inactive"')
 
     def test_enabled_execution_is_ready_until_durable_work_is_processing(self) -> None:
         self.client.force_login(self.staff)
-        self.client.post("/engines/bonus/execution/start/")
+        self.client.post("/engines/sports_capital/execution/start/")
 
         ready = self.client.get("/dashboard/")
-        self.assertContains(ready, 'aria-label="Disable BonusEngine execution"')
+        self.assertContains(ready, 'aria-label="Disable SportsCapitalEngine execution"')
         self.assertContains(ready, 'title="Active"')
         self.assertContains(ready, "Execution active")
         self.assertNotContains(ready, 'title="Running"')
@@ -71,7 +71,7 @@ class EngineRuntimeControlTests(TestCase):
             mode="execution",
             state="processing",
             scheduled_for=timezone.now(),
-            payload={"work": {"engine": "bonus"}},
+            payload={"work": {"engine": "sports_capital"}},
         )
 
         running = self.client.get("/dashboard/")
@@ -88,7 +88,7 @@ class EngineRuntimeControlTests(TestCase):
                 raise DatabaseError("work queue unavailable")
 
         self.client.force_login(self.staff)
-        self.client.post("/engines/bonus/execution/start/")
+        self.client.post("/engines/sports_capital/execution/start/")
 
         with patch(
             "qbet.web.views.ModeWorkQueueRow.objects.filter",
@@ -103,17 +103,17 @@ class EngineRuntimeControlTests(TestCase):
 
     def test_engine_detail_uses_durable_execution_running_state(self) -> None:
         self.client.force_login(self.staff)
-        self.client.post("/engines/bonus/execution/start/")
+        self.client.post("/engines/sports_capital/execution/start/")
         ModeWorkQueueRow.objects.create(
             work_id=uuid4(),
             correlation_id=uuid4(),
             mode="execution",
             state="processing",
             scheduled_for=timezone.now(),
-            payload={"work": {"engine": "bonus"}},
+            payload={"work": {"engine": "sports_capital"}},
         )
 
-        response = self.client.get("/engines/bonus/")
+        response = self.client.get("/engines/sports_capital/")
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "<dt>Operational state</dt><dd>Running</dd>", html=True)
@@ -124,10 +124,10 @@ class EngineRuntimeControlTests(TestCase):
         self.client.force_login(self.user)
 
         dashboard = self.client.get("/dashboard/")
-        self.assertNotContains(dashboard, 'aria-label="Enable BonusEngine execution"')
-        self.assertNotContains(dashboard, 'aria-label="Disable BonusEngine execution"')
+        self.assertNotContains(dashboard, 'aria-label="Enable SportsCapitalEngine execution"')
+        self.assertNotContains(dashboard, 'aria-label="Disable SportsCapitalEngine execution"')
 
-        response = self.client.post("/engines/bonus/execution/start/")
+        response = self.client.post("/engines/sports_capital/execution/start/")
 
         self.assertEqual(response.status_code, 404)
         self.assertIsNone(RoutingConfigurationRepository().load())
@@ -147,41 +147,55 @@ class EngineRuntimeControlTests(TestCase):
     def test_staff_simulation_toggle_preserves_execution_sibling_mode(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.staff)
-        self.client.post("/engines/bonus/execution/start/")
+        self.client.post("/engines/sports_capital/execution/start/")
 
-        started = self.client.post("/engines/bonus/simulation/start/")
+        started = self.client.post("/engines/sports_capital/simulation/start/")
         self.assertRedirects(started, "/dashboard/")
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
-        self.assertTrue(configuration.bonus.execution)
-        self.assertTrue(configuration.bonus.execution_sandbox)
-        self.assertTrue(configuration.bonus.simulation)
+        self.assertTrue(configuration.sports_capital.execution)
+        self.assertTrue(configuration.sports_capital.execution_sandbox)
+        self.assertTrue(configuration.sports_capital.simulation)
 
         dashboard = self.client.get("/dashboard/")
-        self.assertContains(dashboard, 'aria-label="Disable BonusEngine simulation"')
-        self.assertContains(dashboard, "Deterministic pipeline test")
+        self.assertContains(
+            dashboard,
+            'aria-label="Disable SportsCapitalEngine simulation"',
+        )
+        self.assertContains(dashboard, "Pipeline simulation")
         self.assertContains(dashboard, "Run pipeline test")
 
-        monitoring = self.client.get("/monitoring/")
-        self.assertContains(monitoring, 'id="runtime-readiness-heading"')
-        self.assertContains(monitoring, 'data-runtime-engine="execution:bonus"')
-        self.assertContains(monitoring, 'data-runtime-engine="simulation:bonus"')
-        self.assertContains(monitoring, "Data aggregation")
-        self.assertContains(monitoring, "LiquidityChecker")
-
-        stopped = self.client.post("/engines/bonus/simulation/stop/")
+        stopped = self.client.post("/engines/sports_capital/simulation/stop/")
         self.assertRedirects(stopped, "/dashboard/")
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
-        self.assertTrue(configuration.bonus.execution)
-        self.assertTrue(configuration.bonus.execution_sandbox)
-        self.assertFalse(configuration.bonus.simulation)
+        self.assertTrue(configuration.sports_capital.execution)
+        self.assertTrue(configuration.sports_capital.execution_sandbox)
+        self.assertFalse(configuration.sports_capital.simulation)
+
+    def test_staff_cannot_enable_bonus_product_route_until_provider_path_exists(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.staff)
+
+        execution = self.client.post("/engines/bonus/execution/start/", follow=True)
+        simulation = self.client.post("/engines/bonus/simulation/start/", follow=True)
+
+        self.assertContains(execution, "BonusEngine provider path is not connected yet.")
+        self.assertContains(simulation, "BonusEngine provider path is not connected yet.")
+        configuration = RoutingConfigurationRepository().load()
+        self.assertTrue(
+            configuration is None
+            or (
+                not configuration.bonus.execution
+                and not configuration.bonus.simulation
+            )
+        )
 
     def test_staff_cannot_start_simulation_engine_when_simulation_layer_is_disabled(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=False)
         self.client.force_login(self.staff)
 
-        response = self.client.post("/engines/bonus/simulation/start/", follow=True)
+        response = self.client.post("/engines/sports_capital/simulation/start/", follow=True)
 
         self.assertContains(response, "Simulation is disabled.")
         configuration = RoutingConfigurationRepository().load()
@@ -199,12 +213,12 @@ class EngineRuntimeControlTests(TestCase):
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
         self.assertTrue(configuration.bonus.execution)
-        self.assertTrue(configuration.bonus.execution_sandbox)
+        self.assertTrue(configuration.sports_capital.execution_sandbox)
         stopped = self.client.post("/admin-area/sandbox-execution/bonus/stop/")
         self.assertRedirects(stopped, "/dashboard/")
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
         self.assertFalse(configuration.bonus.execution)
-        self.assertFalse(configuration.bonus.execution_sandbox)
+        self.assertFalse(configuration.sports_capital.execution_sandbox)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
