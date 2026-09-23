@@ -104,3 +104,34 @@ def test_german_bonus_preparation_seam_returns_only_canonical_provider_ids() -> 
     )
 
     assert {offer.provider for offer in prepared.offers} == {"tipico", "winamax"}
+
+
+def test_german_bonus_preparation_ignores_unselected_unmapped_bookmakers() -> None:
+    raw = snapshot("tipico_de")
+    selected = raw.model_copy(
+        update={
+            "offers": (
+                raw.offers[0],
+                raw.offers[1].model_copy(update={"provider": "winamax_de"}),
+                raw.offers[0].model_copy(
+                    update={
+                        "id": "book-a:draw",
+                        "selection": "draw",
+                        "provider": "book-a",
+                    }
+                ),
+            )
+        }
+    )
+
+    prepared = prepare_german_bonus_sportsbook_offers(
+        selected,
+        (selected.offers[0].id, selected.offers[1].id),
+        load_german_sportsbook_catalog(),
+    )
+
+    assert tuple(offer.id for offer in prepared.offers) == (
+        selected.offers[0].id,
+        selected.offers[1].id,
+    )
+    assert {offer.provider for offer in prepared.offers} == {"tipico", "winamax"}
