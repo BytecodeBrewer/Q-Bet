@@ -82,6 +82,6 @@ class NotificationDisplayPreferenceTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "21.09.2026 12:00")
-        self.assertContains(response, "Preferred report currency: USD.")
+        self.assertContains(response, "Preferred recorded currency: USD.")
         self.assertContains(response, "authoritative recorded currency")
         self.assertNotContains(response, "Sept.")
