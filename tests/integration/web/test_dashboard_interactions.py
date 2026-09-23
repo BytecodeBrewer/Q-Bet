@@ -96,9 +96,11 @@ class DashboardInteractionTests(TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn('addEventListener("lostpointercapture", finishPointerDrag)', script)
+        self.assertIn('addEventListener("lostpointercapture"', script)
+        self.assertIn('addEventListener("pointercancel"', script)
         self.assertIn('window.addEventListener("blur"', script)
         self.assertIn('event.key === "Escape"', script)
+        self.assertIn("dnd.restoreOrder(grid, before);", script)
 
     def test_narrow_viewport_keeps_keyboard_reorder_handles_visible(self) -> None:
         stylesheet = (Path(__file__).parents[3] / "static/qbet_web/app.css").read_text(
