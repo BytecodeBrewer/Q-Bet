@@ -214,8 +214,11 @@ class AuthenticationAndDashboardTests(TestCase):
         rendered = self.client.get("/settings/presentation/")
         self.assertContains(rendered, '<html lang="en"')
         self.assertContains(rendered, ">Notifications<", html=False)
-        self.assertContains(rendered, 'title="Preferred report currency">USD</span>', html=False)
+        self.assertContains(rendered, 'title="Preferred recorded currency">USD</span>', html=False)
         self.assertNotContains(rendered, "Benachrichtigungen / Notifications")
+        self.assertContains(rendered, "Preferred recorded currency")
+        self.assertContains(rendered, "USD — recorded values only")
+        self.assertContains(rendered, "does not convert amounts between currencies")
         stored = UserDisplayPreference.objects.get(user=owner)
         self.assertEqual(
             (
