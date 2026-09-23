@@ -205,7 +205,7 @@ def execution_snapshot(
                 if not configuration_available
                 else "running"
                 if running
-                else "active"
+                else "ready"
                 if active
                 else "inactive"
             )
@@ -441,7 +441,7 @@ class MonitoringService:
                 elif running:
                     status, detail, live_state = "green", "Running.", "running"
                 else:
-                    status, detail, live_state = "gray", "Ready; no work running.", "active"
+                    status, detail, live_state = "gray", "Ready; no work running.", "ready"
                 workflow_stages = MonitoringService._workflow_stages(
                     current_records,
                     engine_id=engine_id,
