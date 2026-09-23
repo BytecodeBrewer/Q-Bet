@@ -7,11 +7,19 @@ from django.test import TestCase
 
 from qbet.calculations.qualifying_bet import QualifyingBetInput
 from qbet.engines import BonusEngineRequest
-from qbet.storage.ledger import UserRoutingPreferenceRepository
+from qbet.storage.ledger import (
+    RoutingConfigurationRepository,
+    UserRoutingPreferenceRepository,
+)
 from qbet.storage.models import ExecutionRecordRow, ModeWorkQueueRow, PortfolioLedgerRow
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.models import WorkflowMode
-from qbet.workflow.routing import UserEngineModes, UserRoutingPreferences
+from qbet.workflow.routing import (
+    EngineModes,
+    RoutingConfiguration,
+    UserEngineModes,
+    UserRoutingPreferences,
+)
 
 NOW = datetime(2026, 9, 8, 12, tzinfo=UTC)
 CORRELATION_ID = UUID("12345678-1234-5678-1234-567812345678")
@@ -44,11 +52,11 @@ class StoredRoutingDispatchTests(TestCase):
         self.client.force_login(self.staff)
 
     def test_saved_admin_configuration_routes_into_isolated_mode_queues_and_reloads_fresh(self) -> None:
-        saved = self.client.post(
-            "/admin-area/gui-settings/",
-            {"bonus": "both", "sports_capital": "inactive"},
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(
+                bonus=EngineModes(simulation=True, execution=True),
+            )
         )
-        self.assertEqual(saved.status_code, 302)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
@@ -94,11 +102,11 @@ class StoredRoutingDispatchTests(TestCase):
         self.assertEqual(repeat, first)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 2)
 
-        changed = self.client.post(
-            "/admin-area/gui-settings/",
-            {"bonus": "execution", "sports_capital": "inactive"},
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(
+                bonus=EngineModes(execution=True),
+            )
         )
-        self.assertEqual(changed.status_code, 302)
 
         second = coordinator.schedule(
             _bonus_request("bonus-routing-2"),

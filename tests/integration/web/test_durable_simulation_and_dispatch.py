@@ -208,7 +208,7 @@ class DurableSimulationAndDispatchTests(TestCase):
     def test_routed_simulation_runs_directly_with_durable_merge(self) -> None:
         opportunity_id = "direct-routed-simulation"
         coordinator = ModeDispatchCoordinator(
-            RoutingConfiguration(sports_capital=EngineModes(simulation=True)),
+            RoutingConfiguration(bonus=EngineModes(simulation=True)),
             queue_repository=ModeWorkQueueRepository(),
             mode_request_handlers=_handlers(opportunity_id),
         )

@@ -33,7 +33,7 @@ class EngineRuntimeControlTests(TestCase):
         self.assertTrue(configuration.sports_capital.execution)
         self.assertTrue(configuration.sports_capital.execution_sandbox)
         self.assertFalse(configuration.sports_capital.simulation)
-        self.assertFalse(configuration.sports_capital.execution)
+        self.assertFalse(configuration.bonus.execution)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
@@ -46,7 +46,7 @@ class EngineRuntimeControlTests(TestCase):
         self.assertRedirects(stopped, "/dashboard/")
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
-        self.assertFalse(configuration.bonus.execution)
+        self.assertFalse(configuration.sports_capital.execution)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
@@ -199,7 +199,7 @@ class EngineRuntimeControlTests(TestCase):
 
         self.assertContains(response, "Simulation is disabled.")
         configuration = RoutingConfigurationRepository().load()
-        self.assertTrue(configuration is None or not configuration.bonus.simulation)
+        self.assertTrue(configuration is None or not configuration.sports_capital.simulation)
 
     def test_sandbox_execution_control_is_staff_only(self) -> None:
         self.client.force_login(self.user)
@@ -213,12 +213,12 @@ class EngineRuntimeControlTests(TestCase):
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
         self.assertTrue(configuration.bonus.execution)
-        self.assertTrue(configuration.sports_capital.execution_sandbox)
+        self.assertTrue(configuration.bonus.execution_sandbox)
         stopped = self.client.post("/admin-area/sandbox-execution/bonus/stop/")
         self.assertRedirects(stopped, "/dashboard/")
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
         self.assertFalse(configuration.bonus.execution)
-        self.assertFalse(configuration.sports_capital.execution_sandbox)
+        self.assertFalse(configuration.bonus.execution_sandbox)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)

@@ -139,7 +139,7 @@ class RoutingSettingsTests(TestCase):
         ):
             response = self.client.post(
                 "/admin-area/gui-settings/",
-                {"bonus": "both", "sports_capital": "both"},
+                {"bonus": "inactive", "sports_capital": "both"},
             )
 
         self.assertEqual(response.status_code, 503)

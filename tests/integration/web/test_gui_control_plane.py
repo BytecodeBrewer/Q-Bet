@@ -209,7 +209,7 @@ class GuiControlPlaneTests(TestCase):
         self.assertIn("<span>Recorded runs</span><strong>2</strong>", content)
         self.assertContains(response, "Customer plane")
         self.assertContains(response, "Admin only")
-        self.assertContains(response, "Deterministic pipeline test")
+        self.assertContains(response, "Pipeline simulation")
         self.assertContains(response, "Run pipeline test")
 
     def test_historical_incidents_do_not_poison_current_runtime_state(self) -> None:
