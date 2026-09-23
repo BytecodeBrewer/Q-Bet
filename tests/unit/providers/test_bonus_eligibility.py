@@ -16,6 +16,7 @@ from qbet.data.models import (
     OfferAvailability,
     SourceTransport,
 )
+from qbet.data.sports_match_builder import prepare_german_bonus_sportsbook_offers
 from qbet.domain.models import OfferSide
 from qbet.providers import load_german_sportsbook_catalog
 from qbet.providers.bonus import BonusProviderEligibilityError, canonicalize_german_bonus_snapshot
@@ -83,3 +84,23 @@ def test_bonus_snapshot_fails_closed_for_unmapped_or_exchange_identity() -> None
         with pytest.raises(BonusProviderEligibilityError) as raised:
             canonicalize_german_bonus_snapshot(snapshot(external_key), catalog)
         assert raised.value.reason.value == "unmapped_external_identity"
+
+
+def test_german_bonus_preparation_seam_returns_only_canonical_provider_ids() -> None:
+    raw = snapshot("tipico_de")
+    mixed = raw.model_copy(
+        update={
+            "offers": (
+                raw.offers[0],
+                raw.offers[1].model_copy(update={"provider": "winamax_de"}),
+            )
+        }
+    )
+
+    prepared = prepare_german_bonus_sportsbook_offers(
+        mixed,
+        tuple(offer.id for offer in mixed.offers),
+        load_german_sportsbook_catalog(),
+    )
+
+    assert {offer.provider for offer in prepared.offers} == {"tipico", "winamax"}
