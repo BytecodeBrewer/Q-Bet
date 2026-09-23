@@ -77,6 +77,9 @@ def sandbox_execution_control(
         raise Http404("Sandbox execution control is not available.")
     if engine_id not in V1_ENGINES or action not in {"start", "stop"}:
         raise Http404("Sandbox execution control was not found.")
+    if engine_id == "bonus" and action == "start":
+        messages.error(request, "BonusEngine provider path is not connected yet.")
+        return redirect("dashboard")
     try:
         RoutingConfigurationRepository().set_execution_sandbox_active(
             engine=cast(V1Engine, engine_id),

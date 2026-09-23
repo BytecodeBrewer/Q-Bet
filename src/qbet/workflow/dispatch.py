@@ -58,7 +58,16 @@ from qbet.workflow.models import (
 from qbet.workflow.orchestrator import WorkflowOrchestrator
 from qbet.workflow.queue import QueuedWorkItem, WorkState
 from qbet.workflow.readiness import PipelineReadinessProvider, Phase2PipelineReadiness
-from qbet.workflow.routing import RoutingConfiguration, UserRoutingPreferences, V1Engine
+from qbet.workflow.routing import (
+    RoutingConfiguration,
+    UserRoutingPreferences,
+    V1Engine,
+    connected_product_routing_configuration,
+)
+
+
+def _load_connected_product_routing_configuration() -> RoutingConfiguration | None:
+    return connected_product_routing_configuration(RoutingConfigurationRepository().load())
 
 
 class ModeDispatchCoordinator:
@@ -83,7 +92,7 @@ class ModeDispatchCoordinator:
             )
         if configuration is None:
             if routing_configuration_loader is None:
-                routing_configuration_loader = RoutingConfigurationRepository().load
+                routing_configuration_loader = _load_connected_product_routing_configuration
             if user_routing_preferences_loader is None:
                 user_routing_preferences_loader = UserRoutingPreferenceRepository().load
         self._routing_orchestrator = WorkflowOrchestrator(
