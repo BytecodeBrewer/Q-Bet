@@ -102,6 +102,19 @@ class DashboardInteractionTests(TestCase):
         self.assertIn('event.key === "Escape"', script)
         self.assertIn("dnd.restoreOrder(grid, before);", script)
 
+    def test_simulation_client_polls_provider_activity_without_inventing_working_state(self) -> None:
+        script = (Path(__file__).parents[3] / "static/qbet_web/simulation.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("providerActivityUrl", script)
+        self.assertIn("refreshProviderActivity", script)
+        self.assertIn("window.setInterval(refreshProviderActivity, 500)", script)
+        self.assertNotIn(
+            'setProviderState("working", "Market data is updating.")',
+            script,
+        )
+
     def test_narrow_viewport_keeps_keyboard_reorder_handles_visible(self) -> None:
         stylesheet = (Path(__file__).parents[3] / "static/qbet_web/app.css").read_text(
             encoding="utf-8"
