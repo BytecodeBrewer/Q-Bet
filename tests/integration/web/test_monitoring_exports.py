@@ -132,7 +132,7 @@ class MonitoringExportTests(TestCase):
 
         response = self.client.get(
             "/monitoring/",
-            {"start": "2026-09-07T09:00", "end": "2026-09-07T11:00"},
+            {"start": "2026-09-07T11:00", "end": "2026-09-07T13:00"},
         )
 
         self.assertEqual(response.status_code, 200)
