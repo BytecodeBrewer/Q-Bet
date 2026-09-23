@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from uuid import UUID
 
 from django.contrib import messages
@@ -26,8 +27,8 @@ _DISPLAY_PREFERENCES = DisplayPreferenceRepository()
 def _context(request: HttpRequest, **values: object) -> dict[str, object]:
     values.setdefault("preferences", presentation_preferences(request.session))
     display_preferences = (
-        _DISPLAY_PREFERENCES.load(request.user)
-        if isinstance(request.user, User)
+        _DISPLAY_PREFERENCES.load(cast(User, request.user))
+        if request.user.is_authenticated
         else DisplayPreferences()
     )
     values.setdefault("display_preferences", display_preferences)
