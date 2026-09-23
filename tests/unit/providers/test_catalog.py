@@ -35,7 +35,7 @@ def provider(**changes: object) -> SportsbookProvider:
 def test_reviewed_ggl_snapshot_contains_every_reviewed_online_sportsbook() -> None:
     catalog = load_german_sportsbook_catalog()
 
-    assert len(catalog.providers) == 24
+    assert len(catalog.providers) == 25
     assert {item.whitelist_snapshot_date for item in catalog.providers} == {date(2026, 9, 7)}
     assert all(item.source_url == GGL_WHITELIST_URL for item in catalog.providers)
     assert all(item.jurisdiction == "DE" and item.online for item in catalog.providers)
@@ -62,9 +62,14 @@ def test_verified_the_odds_api_mapping_resolves_only_german_identity() -> None:
 
 def test_legal_but_unmapped_provider_remains_listable() -> None:
     catalog = load_german_sportsbook_catalog()
+    provider_ids = {item.provider_id for item in catalog.providers}
+    ready_provider_ids = set(catalog.market_data_ready_provider_ids("the_odds_api"))
 
-    assert any(item.provider_id == "bet365" for item in catalog.providers)
-    assert "bet365" not in catalog.market_data_ready_provider_ids("the_odds_api")
+    assert {"888sport", "bet365"} <= provider_ids
+    assert {"888sport", "bet365"}.isdisjoint(ready_provider_ids)
+    assert catalog.resolve(source_id="domain", domain="888SPORT.DE").provider.provider_id == (
+        "888sport"
+    )
 
 
 @pytest.mark.parametrize(
