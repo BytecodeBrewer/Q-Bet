@@ -52,6 +52,6 @@ def test_different_currency_preference_is_disclosed_without_conversion() -> None
     notice = currency_preference_notice("EUR", DisplayPreferences(language="en", currency="USD"))
 
     assert notice == (
-        "Preferred report currency: USD. "
+        "Preferred recorded currency: USD. "
         "This amount remains recorded and displayed in EUR; no FX conversion is applied."
     )
