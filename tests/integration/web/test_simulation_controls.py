@@ -144,6 +144,40 @@ class SimulationGuiControlTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(SimulationAvailability.objects.get(pk=1).enabled)
 
+    def test_product_simulation_form_exposes_only_connected_sports_capital(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.staff)
+
+        response = self.client.get("/simulation/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'value="sports_capital"')
+        self.assertNotContains(response, '<option value="bonus">')
+        self.assertContains(
+            response,
+            "BonusEngine remains unavailable until its promotion-aware fixed-odds sportsbook provider path is connected.",
+        )
+
+    def test_forged_bonus_gui_start_is_rejected_without_creating_run(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(bonus=EngineModes(simulation=True))
+        )
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            "/simulation/start/",
+            {
+                "engine": SimulationEngine.BONUS.value,
+                "starting_capital": "100.00",
+                "max_duration_minutes": "60",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(SimulationRunState.objects.exists())
+
+
     def test_normal_user_cannot_start_simulation_even_when_enabled(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.user)

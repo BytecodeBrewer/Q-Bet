@@ -68,7 +68,9 @@ class StoredRoutingDispatchTests(TestCase):
             ),
         )
 
-        coordinator = ModeDispatchCoordinator()
+        coordinator = ModeDispatchCoordinator(
+            routing_configuration_loader=RoutingConfigurationRepository().load
+        )
         request = _bonus_request("bonus-routing-1")
         first = coordinator.schedule(
             request,
@@ -120,3 +122,33 @@ class StoredRoutingDispatchTests(TestCase):
         self.assertEqual(ModeWorkQueueRow.objects.count(), 3)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
+
+
+    def test_default_product_coordinator_masks_stale_persisted_bonus_routes(self) -> None:
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(
+                bonus=EngineModes(simulation=True, execution=True),
+                sports_capital=EngineModes(simulation=True),
+            )
+        )
+        UserRoutingPreferenceRepository().save(
+            "owner",
+            UserRoutingPreferences(
+                bonus=UserEngineModes(simulation=True, execution=True)
+            ),
+        )
+
+        scheduled = ModeDispatchCoordinator().schedule(
+            _bonus_request("stale-bonus"),
+            owner="owner",
+            correlation_id=UUID("99999999-9999-9999-9999-999999999999"),
+            scheduled_for=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+        )
+
+        self.assertEqual(scheduled, ())
+        self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
+        persisted = RoutingConfigurationRepository().load()
+        assert persisted is not None
+        self.assertTrue(persisted.bonus.simulation)
+        self.assertTrue(persisted.bonus.execution)

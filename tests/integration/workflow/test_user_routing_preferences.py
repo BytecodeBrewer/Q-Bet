@@ -54,7 +54,9 @@ class UserRoutingPreferencesTests(TestCase):
             ),
         )
 
-        coordinator = ModeDispatchCoordinator()
+        coordinator = ModeDispatchCoordinator(
+            routing_configuration_loader=RoutingConfigurationRepository().load
+        )
         first = coordinator.schedule(
             _request("first"),
             owner="alice",

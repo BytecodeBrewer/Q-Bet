@@ -9,6 +9,7 @@ from django.utils import timezone
 from qbet.storage.ledger import RoutingConfigurationRepository
 from qbet.storage.models import ExecutionRecordRow, ModeWorkQueueRow, PortfolioLedgerRow
 from qbet.web.models import SimulationAvailability
+from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
 
 class EngineRuntimeControlTests(TestCase):
@@ -191,6 +192,19 @@ class EngineRuntimeControlTests(TestCase):
             )
         )
 
+        stale = RoutingConfigurationRepository().save(
+            RoutingConfiguration(
+                bonus=EngineModes(simulation=True, execution=True),
+            )
+        )
+        self.assertTrue(stale.bonus.execution)
+        dashboard = self.client.get("/dashboard/")
+        self.assertContains(dashboard, "Provider path unavailable")
+        self.assertNotContains(dashboard, 'aria-label="Enable BonusEngine execution"')
+        self.assertNotContains(dashboard, 'aria-label="Disable BonusEngine execution"')
+        self.assertNotContains(dashboard, 'aria-label="Enable BonusEngine simulation"')
+        self.assertNotContains(dashboard, 'aria-label="Disable BonusEngine simulation"')
+
     def test_staff_cannot_start_simulation_engine_when_simulation_layer_is_disabled(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=False)
         self.client.force_login(self.staff)
@@ -201,24 +215,36 @@ class EngineRuntimeControlTests(TestCase):
         configuration = RoutingConfigurationRepository().load()
         self.assertTrue(configuration is None or not configuration.sports_capital.simulation)
 
-    def test_sandbox_execution_control_is_staff_only(self) -> None:
+    def test_sandbox_execution_control_is_staff_only_and_bonus_fails_closed(self) -> None:
         self.client.force_login(self.user)
-        denied = self.client.post("/admin-area/sandbox-execution/bonus/start/")
+        denied = self.client.post("/admin-area/sandbox-execution/sports_capital/start/")
         self.assertEqual(denied.status_code, 404)
         self.assertIsNone(RoutingConfigurationRepository().load())
 
         self.client.force_login(self.staff)
-        allowed = self.client.post("/admin-area/sandbox-execution/bonus/start/")
+        blocked_bonus = self.client.post(
+            "/admin-area/sandbox-execution/bonus/start/",
+            follow=True,
+        )
+        self.assertContains(
+            blocked_bonus,
+            "BonusEngine provider path is not connected yet.",
+        )
+        configuration = RoutingConfigurationRepository().load()
+        self.assertTrue(configuration is None or not configuration.bonus.execution)
+
+        allowed = self.client.post("/admin-area/sandbox-execution/sports_capital/start/")
         self.assertRedirects(allowed, "/dashboard/")
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
-        self.assertTrue(configuration.bonus.execution)
-        self.assertTrue(configuration.bonus.execution_sandbox)
-        stopped = self.client.post("/admin-area/sandbox-execution/bonus/stop/")
+        self.assertTrue(configuration.sports_capital.execution)
+        self.assertTrue(configuration.sports_capital.execution_sandbox)
+
+        stopped = self.client.post("/admin-area/sandbox-execution/sports_capital/stop/")
         self.assertRedirects(stopped, "/dashboard/")
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
-        self.assertFalse(configuration.bonus.execution)
-        self.assertFalse(configuration.bonus.execution_sandbox)
+        self.assertFalse(configuration.sports_capital.execution)
+        self.assertFalse(configuration.sports_capital.execution_sandbox)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
         self.assertEqual(ExecutionRecordRow.objects.count(), 0)
