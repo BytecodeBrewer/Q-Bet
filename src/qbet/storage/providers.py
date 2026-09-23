@@ -27,7 +27,9 @@ class PostgresSportsbookCatalogRepository:
                     legal_name=row.legal_name,
                     display_name=row.display_name,
                     domains=tuple(
-                        row.domains.order_by("domain").values_list("domain", flat=True)
+                        SportsbookProviderDomainRow.objects.filter(provider=row)
+                        .order_by("domain")
+                        .values_list("domain", flat=True)
                     ),
                     jurisdiction=row.jurisdiction,
                     sports_betting=row.sports_betting,
@@ -42,11 +44,11 @@ class PostgresSportsbookCatalogRepository:
                 ExternalProviderMapping(
                     source_id=row.source_id,
                     external_key=row.external_key,
-                    provider_id=row.provider_id,
+                    provider_id=row.provider.provider_id,
                 )
-                for row in SportsbookExternalIdentityRow.objects.order_by(
-                    "source_id", "external_key"
-                )
+                for row in SportsbookExternalIdentityRow.objects.select_related(
+                    "provider"
+                ).order_by("source_id", "external_key")
             )
         except DatabaseError as error:
             raise OSError("sportsbook provider catalog is unavailable") from error
