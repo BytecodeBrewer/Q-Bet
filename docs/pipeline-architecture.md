@@ -203,7 +203,7 @@ The pipeline remains the product's processing spine. `PortfolioLedger` is a sepa
 - `WorkflowOrchestrator`: routing, correlation ids, stage transitions, engine activation, throttling, and GUI-originated control.
 - `RequestHandler`: optional targeted refresh checks for risk, liquidity, and execution.
 - `Data Aggregation`: structured REST/WebSocket intake and normalization; no quotation scraping.
-- `Sports Match Builder`: validated event, market, bookmaker BACK, and exchange LAY pairing.
+- `Sports Match Builder`: validated fixed-odds sportsbook event, market, offer, and Dutching preparation for `BonusEngine` and `SportsCapitalEngine`. Betting-exchange market/order-book preparation belongs to the separate `SportsExchangeEngine` path.
 - Calculation engines: deterministic typed strategy evaluation without database, balance, session, GUI, or execution dependencies.
 - `Domain Risk`: provider, account, timing, market, exposure, and strategy policy decisions after calculation.
 - `LiquidityChecker`: capital availability, reservation, allocation priority, provider/account availability, pending, and recheck decisions.
@@ -213,7 +213,9 @@ The pipeline remains the product's processing spine. `PortfolioLedger` is a sepa
 
 ## Canonical Engine Paths
 
-- `BonusEngine` and `SportsCapitalEngine`: `Data Aggregation` -> `Sports Match Builder` -> calculation -> `Domain Risk` -> `LiquidityChecker`.
+- `BonusEngine`: `Data Aggregation` plus explicit promotion/account metadata -> `Sports Match Builder` -> promotional fixed-odds sportsbook calculation -> `Domain Risk` -> `LiquidityChecker`.
+- `SportsCapitalEngine`: `Data Aggregation` -> `Sports Match Builder` -> fixed-odds sportsbook arbitrage/dutching calculation -> `Domain Risk` -> `LiquidityChecker`.
+- `SportsExchangeEngine`: planned `Data Aggregation` -> exchange market/order-book preparation -> peer-to-peer exchange calculation -> exchange-specific `Domain Risk` -> `LiquidityChecker`.
 - `TicketEngine`: `Data Aggregation` -> `Ticket Preparation` -> `TicketEngine` -> `Domain Risk` where required -> `LiquidityChecker`.
 - `PredictionMarketEngine`: `Data Aggregation` -> optional `Feature / Signal Builder` -> `PredictionMarketEngine` -> optional `Domain Risk` -> `LiquidityChecker`.
 - `CryptoYieldEngine`: streaming `Data Aggregation` -> `Market State Aggregator` -> `CryptoYieldEngine` -> optional `Domain Risk` -> `LiquidityChecker`.
