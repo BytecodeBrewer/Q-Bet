@@ -63,7 +63,14 @@ class EngineRuntimeControlTests(TestCase):
         self.assertContains(ready, 'aria-label="Disable BonusEngine execution"')
         self.assertContains(ready, 'title="Ready"')
         self.assertContains(ready, "Execution ready")
+        self.assertContains(ready, "State <strong>ready</strong>", html=False)
+        self.assertNotContains(ready, "State <strong>active</strong>", html=False)
         self.assertNotContains(ready, 'title="Running"')
+
+        detail = self.client.get("/engines/bonus/")
+        self.assertContains(detail, "<dt>Operational state</dt><dd>Ready</dd>", html=True)
+        self.assertContains(detail, "<dt>Live source</dt><dd>ready</dd>", html=True)
+        self.assertNotContains(detail, "<dd>Active</dd>", html=False)
 
         ModeWorkQueueRow.objects.create(
             work_id=uuid4(),
