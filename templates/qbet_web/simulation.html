@@ -1,5 +1,6 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
+{% load display_preferences %}
 <section class="page-heading">
   <h1>Simulation</h1>
   <p>Simulation uses virtual capital only, follows the existing workflow path, and never calls live-money adapters.</p>
@@ -10,7 +11,7 @@
     <div>
       <span class="eyebrow">Market data</span>
       <strong data-provider-label>{{ provider_activity.label }}</strong>
-      {% if provider_activity.occurred_at %}<small>Last activity {{ provider_activity.occurred_at }}</small>{% endif %}
+      {% if provider_activity.occurred_at %}<small>Last activity {% localized_datetime provider_activity.occurred_at display_preferences %}</small>{% endif %}
     </div>
     <span class="activity-spinner provider-working-indicator" aria-label="Working"></span>
     <span class="activity-check provider-success-indicator" aria-label="Success">✓</span>
@@ -27,7 +28,7 @@
 
   <section class="detail-panel">
     <h2>Start simulation</h2>
-    <p class="muted">Choose the route and virtual starting capital. Capital remains inside the Simulation ledger and sandbox boundary.</p>
+    <p class="muted">Choose the route and virtual starting capital. Capital remains inside the Simulation ledger and sandbox boundary. {% currency_preference_note "EUR" display_preferences %}</p>
     <form method="post" action="{% url 'simulation-start' %}">
       {% csrf_token %}
       {{ start_form.non_field_errors }}
@@ -78,11 +79,11 @@
             <dl class="metric-list">
               <div><dt>Run / correlation id</dt><dd>{{ run.run_id }}</dd></div>
               <div><dt>Progress</dt><dd>{{ run.progress }}</dd></div>
-              <div><dt>Virtual capital</dt><dd>{{ run.current_capital }}</dd></div>
+              <div><dt>Virtual capital</dt><dd>{% localized_money run.current_capital "EUR" display_preferences %}</dd></div>
             </dl>
             {% if run.error_message %}<p class="status-error">{{ run.error_message }}</p>{% endif %}
             {% if run.is_active %}
-              <p class="muted">Run is active. Progress is persisted after every safe step.</p>
+              <p class="muted">Run is running. Progress is persisted after every safe step.</p>
               <button type="button" class="warning-button" data-simulation-stop-url="{% url 'simulation-stop' run.run_id %}">Stop simulation</button>
             {% elif run.report_id %}
               <p>
