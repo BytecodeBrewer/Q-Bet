@@ -1,40 +1,42 @@
 from __future__ import annotations
 
-from django.db import migrations, models
+import json
+from importlib.resources import files
+
 import django.db.models.deletion
+from django.db import migrations, models
 
 
 def seed_catalog(apps, schema_editor) -> None:  # noqa: ARG001
-    from qbet.providers import load_german_sportsbook_catalog
-
     Provider = apps.get_model("storage", "SportsbookProviderRow")
     Domain = apps.get_model("storage", "SportsbookProviderDomainRow")
     Identity = apps.get_model("storage", "SportsbookExternalIdentityRow")
-    catalog = load_german_sportsbook_catalog()
-    for provider in catalog.providers:
+    resource = files("qbet.providers").joinpath("ggl_sportsbooks_2026-09-07.json")
+    catalog = json.loads(resource.read_text(encoding="utf-8"))
+    for provider in catalog["providers"]:
         Provider.objects.update_or_create(
-            provider_id=provider.provider_id,
+            provider_id=provider["provider_id"],
             defaults={
-                "legal_name": provider.legal_name,
-                "display_name": provider.display_name,
-                "jurisdiction": provider.jurisdiction,
-                "sports_betting": provider.sports_betting,
-                "online": provider.online,
-                "source_url": provider.source_url,
-                "whitelist_snapshot_date": provider.whitelist_snapshot_date,
-                "status": provider.status.value,
+                "legal_name": provider["legal_name"],
+                "display_name": provider["display_name"],
+                "jurisdiction": provider["jurisdiction"],
+                "sports_betting": provider["sports_betting"],
+                "online": provider["online"],
+                "source_url": provider["source_url"],
+                "whitelist_snapshot_date": provider["whitelist_snapshot_date"],
+                "status": provider["status"],
             },
         )
-        for domain in provider.domains:
+        for domain in provider["domains"]:
             Domain.objects.update_or_create(
                 domain=domain,
-                defaults={"provider_id": provider.provider_id},
+                defaults={"provider_id": provider["provider_id"]},
             )
-    for mapping in catalog.mappings:
+    for mapping in catalog["mappings"]:
         Identity.objects.update_or_create(
-            source_id=mapping.source_id,
-            external_key=mapping.external_key,
-            defaults={"provider_id": mapping.provider_id},
+            source_id=mapping["source_id"],
+            external_key=mapping["external_key"],
+            defaults={"provider_id": mapping["provider_id"]},
         )
 
 
