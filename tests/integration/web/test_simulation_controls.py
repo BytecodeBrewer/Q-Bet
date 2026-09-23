@@ -24,7 +24,7 @@ from qbet.simulation.opportunity_source import (
 from qbet.storage.ledger import PortfolioLedgerRepository, RoutingConfigurationRepository
 from qbet.storage.models import ModeWorkQueueRow
 from qbet.storage.postgres import PostgresSimulationReportReader
-from qbet.web.models import SimulationAvailability, SimulationRunState
+from qbet.web.models import SimulationAvailability, SimulationRunState, UserDisplayPreference
 from qbet.web.monitoring import MonitoringService
 from qbet.web.simulation_control import (
     SimulationAlreadyRunningError,
@@ -132,6 +132,37 @@ class SimulationGuiControlTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "<dt>Status</dt><dd>Running.</dd>", html=True)
         self.assertContains(response, "<dt>Active / pending</dt><dd>1 / 0</dd>", html=True)
+
+    def test_simulation_surface_uses_display_preferences_without_fx_relabeling(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(bonus=EngineModes(simulation=True))
+        )
+        SimulationRunState.objects.create(
+            run_id=uuid4(),
+            engine=SimulationEngine.BONUS.value,
+            status=SimulationRunState.Status.RUNNING,
+            progress=Decimal("0.25"),
+            current_capital=Decimal("100"),
+        )
+        UserDisplayPreference.objects.create(
+            user=self.staff,
+            language="de",
+            region="DE",
+            timezone_name="Europe/Berlin",
+            time_format="24h",
+            currency="USD",
+        )
+        self.client.force_login(self.staff)
+
+        response = self.client.get("/simulation/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "100,00 EUR")
+        self.assertContains(response, "Preferred report currency: USD.")
+        self.assertContains(response, "no FX conversion is applied.")
+        self.assertContains(response, "Running / pending")
+        self.assertNotContains(response, "Active / pending")
 
     def test_normal_user_cannot_change_global_simulation_availability(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=False)
@@ -263,7 +294,7 @@ class SimulationGuiControlTests(TestCase):
             json_export = self.client.get(f"/reports/{run.report_id}/export/json/")
             csv_export = self.client.get(f"/reports/{run.report_id}/export/csv/")
 
-        self.assertContains(running_page, "Run is active.")
+        self.assertContains(running_page, "Run is running.")
         self.assertContains(running_page, "Stop simulation")
         self.assertContains(running_page, f'/simulation/{run.run_id}/run/')
         self.assertEqual(response.status_code, 200)
