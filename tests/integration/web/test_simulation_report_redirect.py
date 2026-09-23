@@ -17,7 +17,7 @@ class SimulationReportRedirectTests(TestCase):
         SimulationAvailability.objects.all().delete()
         SimulationRunState.objects.all().delete()
 
-    def test_successful_gui_start_redirects_to_persisted_report_detail(self) -> None:
+    def test_successful_gui_start_exposes_running_state_then_returns_report_url(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         RoutingConfigurationRepository().save(
             RoutingConfiguration(bonus=EngineModes(simulation=True))
@@ -29,15 +29,22 @@ class SimulationReportRedirectTests(TestCase):
             {
                 "engine": SimulationEngine.BONUS.value,
                 "starting_capital": "100.00",
-                "max_duration_minutes": "60",
             },
         )
 
         run = SimulationRunState.objects.get()
-        self.assertIsNotNone(run.report_id)
-        assert run.report_id is not None
+        self.assertEqual(run.status, SimulationRunState.Status.RUNNING)
+        self.assertIsNone(run.report_id)
         self.assertRedirects(
             response,
-            f"/reports/{run.report_id}/",
+            f"/simulation/?autostart={run.run_id}",
             fetch_redirect_response=False,
         )
+
+        executed = self.client.post(f"/simulation/{run.run_id}/run/")
+        run.refresh_from_db()
+
+        self.assertEqual(executed.status_code, 200)
+        self.assertIsNotNone(run.report_id)
+        assert run.report_id is not None
+        self.assertEqual(executed.json()["report_url"], f"/reports/{run.report_id}/")
