@@ -76,6 +76,52 @@ class DashboardInteractionTests(TestCase):
             count=4,
         )
         self.assertContains(response, "data-drag-handle", count=4)
+        self.assertContains(response, "101,00 EUR", count=2)
+
+    def test_simulation_page_formats_engine_capital_and_activity_indicators_by_state(self) -> None:
+        report = SimulationReport(
+            run_id=uuid4(),
+            config=SimulationRunConfig(
+                engine=SimulationEngine.BONUS,
+                starting_capital=Decimal("100"),
+            ),
+            engine=SimulationEngine.BONUS.value,
+            strategy_id=None,
+            status=SimulationStatus.COMPLETED,
+            starting_capital=Decimal("100"),
+            current_capital=Decimal("101"),
+            top_up_total=Decimal("0"),
+            profit_loss=Decimal("1"),
+            completed_steps=(),
+            elapsed_duration=timedelta(minutes=1),
+            progress=Decimal("1"),
+            generated_at=datetime(2026, 9, 4, tzinfo=UTC),
+        )
+        service = MonitoringService(_ReportStore(report))
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.staff)
+
+        with patch("qbet.web.views.MONITORING_SERVICE", service):
+            response = self.client.get("/simulation/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "101,00 EUR")
+
+        stylesheet = (Path(__file__).parents[3] / "static/qbet_web/app.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            ".provider-working-indicator, .provider-success-indicator { display: none; }",
+            stylesheet,
+        )
+        self.assertIn(
+            ".provider-activity.activity-working .provider-working-indicator { display: inline-block; }",
+            stylesheet,
+        )
+        self.assertIn(
+            ".provider-activity.activity-success .provider-success-indicator { display: inline-grid; }",
+            stylesheet,
+        )
 
     def test_dashboard_uses_public_home_and_simulation_hides_internal_duration(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
