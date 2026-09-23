@@ -4,10 +4,10 @@
 <section class="page-heading">
   {% if display_preferences.language == "de" %}
     <h1>Berichte</h1><p>Abgeschlossene Ergebnisberichte, neueste zuerst.</p>
-    <p class="muted">Bevorzugte Berichtswährung: {{ display_preferences.currency }}. Autoritative Beträge behalten ihre aufgezeichnete Währung.</p>
+    <p class="muted">Bevorzugte aufgezeichnete Währung: {{ display_preferences.currency }}. Autoritative Beträge behalten ihre aufgezeichnete Währung.</p>
   {% else %}
     <h1>Report history</h1><p>Completed business result reports, newest first.</p>
-    <p class="muted">Preferred report currency: {{ display_preferences.currency }}. Authoritative amounts retain their recorded currency.</p>
+    <p class="muted">Preferred recorded currency: {{ display_preferences.currency }}. Authoritative amounts retain their recorded currency.</p>
   {% endif %}
 </section>
 
@@ -50,10 +50,10 @@
 <section class="content-section">
   <h2>Business summary</h2>
   <dl><dt>Completed results</dt><dd>{{ reports|length }}</dd></dl>
-  {% if dashboard.currency_summaries %}
-    {% for summary in dashboard.currency_summaries %}
+  {% if report_currency_summaries %}
+    {% for summary in report_currency_summaries %}
       <section class="currency-summary{% if summary.currency == display_preferences.currency %} is-preferred-currency{% endif %}">
-        <h3>{{ summary.currency }}{% if summary.currency == display_preferences.currency %} <span class="preference-badge">Preferred display currency</span>{% endif %}</h3>
+        <h3>{{ summary.currency }}{% if summary.currency == display_preferences.currency %} <span class="preference-badge">Preferred recorded currency</span>{% endif %}</h3>
         <dl>
           <dt>Invested capital</dt><dd>{% localized_money summary.invested_capital summary.currency display_preferences %}</dd>
           <dt>Profit/loss</dt><dd>{% localized_money summary.profit_loss summary.currency display_preferences %}</dd>
