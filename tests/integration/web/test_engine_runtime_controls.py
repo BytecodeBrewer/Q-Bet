@@ -68,7 +68,7 @@ class EngineRuntimeControlTests(TestCase):
         self.assertNotContains(ready, "State <strong>active</strong>", html=False)
         self.assertNotContains(ready, 'title="Running"')
 
-        detail = self.client.get("/engines/bonus/")
+        detail = self.client.get("/engines/sports_capital/")
         self.assertContains(detail, "<dt>Operational state</dt><dd>Ready</dd>", html=True)
         self.assertContains(detail, "<dt>Live source</dt><dd>ready</dd>", html=True)
         self.assertNotContains(detail, "<dd>Active</dd>", html=False)
