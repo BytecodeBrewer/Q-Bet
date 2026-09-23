@@ -3,6 +3,20 @@
   "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
   "providers": [
     {
+      "provider_id": "888sport",
+      "legal_name": "888 Germany Limited",
+      "display_name": "888sport",
+      "domains": [
+        "888sport.de"
+      ],
+      "jurisdiction": "DE",
+      "sports_betting": true,
+      "online": true,
+      "source_url": "https://gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist",
+      "whitelist_snapshot_date": "2026-09-07",
+      "status": "active"
+    },
+    {
       "provider_id": "bet-at-home",
       "legal_name": "Bet-at-home.com Internet Limited",
       "display_name": "bet-at-home",
