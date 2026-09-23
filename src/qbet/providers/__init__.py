@@ -47,7 +47,7 @@ class SportsbookProvider(DomainModel):
     @field_validator("domains")
     @classmethod
     def normalize_domains(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        normalized = tuple(_normalize_domain(item) for item in value)
+        normalized = tuple(sorted(_normalize_domain(item) for item in value))
         if len(set(normalized)) != len(normalized):
             raise ValueError("provider domains must be unique")
         return normalized
