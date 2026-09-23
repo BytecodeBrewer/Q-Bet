@@ -18,7 +18,11 @@
 
   <p class="simulation-client-status" data-simulation-client-status role="status"></p>
   {% if auto_run_id %}
-    <span hidden data-auto-run-url="{% url 'simulation-run' auto_run_id %}"></span>
+    <span
+      hidden
+      data-auto-run-url="{% url 'simulation-run' auto_run_id %}"
+      data-provider-activity-url="{% url 'provider-activity' %}?correlation={{ auto_run_id }}"
+    ></span>
   {% endif %}
 
   <section class="detail-panel">
