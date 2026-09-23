@@ -135,7 +135,7 @@ def format_money(
 
 
 def currency_preference_notice(source_currency: str, preferences: DisplayPreferences) -> str:
-    """Explain the stored conversion preference without mislabeling source amounts."""
+    """Explain the stored report-currency preference without mislabeling source amounts."""
 
     if source_currency == preferences.currency:
         return f"Preferred report currency {preferences.currency} matches the recorded amount."
