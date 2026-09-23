@@ -5,6 +5,7 @@ from .builders import (
     build_legacy_exchange_hedged_free_bet_match,
     build_legacy_exchange_hedged_qualifying_bet_match,
     prepare_bonus_sportsbook_offers,
+    prepare_german_bonus_sportsbook_offers,
     build_two_way_arbitrage_match,
 )
 from .models import (
@@ -31,5 +32,6 @@ __all__ = [
     "build_legacy_exchange_hedged_free_bet_match",
     "build_legacy_exchange_hedged_qualifying_bet_match",
     "prepare_bonus_sportsbook_offers",
+    "prepare_german_bonus_sportsbook_offers",
     "build_two_way_arbitrage_match",
 ]
