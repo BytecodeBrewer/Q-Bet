@@ -103,3 +103,56 @@ def test_catalog_rejects_duplicate_ids_domains_and_invalid_mappings() -> None:
                 ),
             ),
         )
+
+
+def test_resolution_has_stable_ambiguous_and_ineligible_reason_codes() -> None:
+    active = provider()
+    inactive = provider(
+        provider_id="inactive-book",
+        legal_name="Inactive Book GmbH",
+        display_name="Inactive",
+        domains=("inactive.example.de",),
+        sports_betting=False,
+        online=False,
+        status="inactive",
+    )
+    catalog = SportsbookCatalog(
+        providers=(active, inactive),
+        mappings=(
+            ExternalProviderMapping(
+                source_id="feed",
+                external_key="licensed",
+                provider_id=active.provider_id,
+            ),
+            ExternalProviderMapping(
+                source_id="feed",
+                external_key="inactive",
+                provider_id=inactive.provider_id,
+            ),
+        ),
+    )
+
+    assert catalog.resolve(
+        source_id="feed",
+        external_key="licensed",
+        domain="inactive.example.de",
+    ).reason is ProviderEligibilityReason.AMBIGUOUS_EXTERNAL_IDENTITY
+    assert catalog.resolve(
+        source_id="feed",
+        external_key="inactive",
+    ).reason is ProviderEligibilityReason.INELIGIBLE_PROVIDER
+    assert catalog.resolve(
+        source_id="feed",
+        domain="missing.example.de",
+    ).reason is ProviderEligibilityReason.UNKNOWN_EXTERNAL_IDENTITY
+
+
+def test_catalog_rejects_duplicate_source_key_mapping() -> None:
+    item = provider()
+    mapping = ExternalProviderMapping(
+        source_id="feed",
+        external_key="book",
+        provider_id=item.provider_id,
+    )
+    with pytest.raises(ValidationError, match="duplicate external"):
+        SportsbookCatalog(providers=(item,), mappings=(mapping, mapping))
