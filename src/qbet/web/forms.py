@@ -156,13 +156,17 @@ class PresentationSettingsForm(forms.Form):
         choices=(("24h", "24-hour"), ("12h", "12-hour")),
     )
     currency = forms.ChoiceField(
-        label="Preferred report currency",
+        label="Preferred recorded currency",
         help_text=(
-            "Presentation preference only: reports highlight matching recorded currency. "
-            "Q-Bet never relabels or converts authoritative amounts without a verified FX source."
+            "Prioritizes and highlights report sections already recorded in this currency. "
+            "Q-Bet does not convert amounts between currencies without an approved FX source."
         ),
         required=False,
-        choices=(("EUR", "EUR"), ("GBP", "GBP"), ("USD", "USD")),
+        choices=(
+            ("EUR", "EUR — recorded values only"),
+            ("GBP", "GBP — recorded values only"),
+            ("USD", "USD — recorded values only"),
+        ),
     )
 
 
