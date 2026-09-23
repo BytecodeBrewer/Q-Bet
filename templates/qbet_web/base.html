@@ -1,6 +1,6 @@
 {% load static %}
 <!doctype html>
-<html lang="en" data-theme="{{ preferences.theme|default:'light' }}">
+<html lang="{{ display_preferences.language|default:'de' }}" data-theme="{{ preferences.theme|default:'light' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,12 +9,15 @@
   <link rel="stylesheet" href="{% static 'qbet_web/phase2_visual.css' %}">
   <style>
     html { min-height: 100%; background: #f3f5f7; }
-    html[data-theme="dark"] { background: #202a32; color-scheme: dark; }
+    html[data-theme="dark"] { background: #181c19; color-scheme: dark; }
     html[data-theme="light"] { color-scheme: light; }
     body { min-height: 100dvh; }
   </style>
+  <script src="{% static 'qbet_web/dashboard_dnd.js' %}" defer></script>
   <script src="{% static 'qbet_web/dashboard.js' %}" defer></script>
   <script src="{% static 'qbet_web/navigation.js' %}" defer></script>
+  <script src="{% static 'qbet_web/downloads.js' %}" defer></script>
+  <script src="{% static 'qbet_web/simulation.js' %}" defer></script>
 </head>
 <body data-theme="{{ preferences.theme|default:'light' }}" data-font-size="{{ preferences.font_size|default:'medium' }}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -23,60 +26,63 @@
       <button class="sidebar-toggle" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true">
         <span aria-hidden="true">☰</span><span class="visually-hidden">Toggle navigation</span>
       </button>
-      <a class="brand" href="{% url 'dashboard' %}" aria-label="Q-Bet dashboard">
+      <a class="brand" href="{% url 'home' %}" aria-label="Q-Bet home">
         <span class="brand-mark" aria-hidden="true">Q</span><span>Q-Bet</span>
       </a>
       <nav class="topbar-actions" aria-label="Work actions">
         <a class="topbar-action" href="{% url 'notification-inbox' %}"{% if request.resolver_match.url_name == 'notification-inbox' %} aria-current="page"{% endif %}>
-          Notifications{% if notification_unread_count %}<span class="nav-count">{{ notification_unread_count }}</span>{% endif %}
+          {{ ui.notifications }}{% if notification_unread_count %}<span class="nav-count">{{ notification_unread_count }}</span>{% endif %}
         </a>
         <a class="topbar-action" href="{% url 'execution-approvals' %}"{% if request.resolver_match.url_name == 'execution-approvals' or request.resolver_match.url_name == 'execution-approval-decision' %} aria-current="page"{% endif %}>
-          Approvals{% if approval_count_available and approval_count %}<span class="nav-count">{{ approval_count }}</span>{% endif %}
+          {{ ui.approvals }}{% if approval_count_available and approval_count %}<span class="nav-count">{{ approval_count }}</span>{% endif %}
         </a>
       </nav>
-      <div class="topbar-account"><span>{{ user.get_username }}</span><a href="{% url 'profile' %}">Profile</a></div>
+      <div class="topbar-account">
+        <span class="display-preference-chip" title="{{ ui.preferred_currency }}">{{ display_preferences.currency }}</span>
+        <span>{{ user.get_username }}</span><a href="{% url 'profile' %}">{{ ui.profile }}</a>
+      </div>
     </header>
 
     <div class="app-shell">
       <aside id="app-sidebar" class="app-sidebar">
         <nav aria-label="Application navigation">
-          <a class="sidebar-link" href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>Main Dashboard</a>
+          <a class="sidebar-link" href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>{{ ui.dashboard }}</a>
 
           <details class="sidebar-group" open>
-            <summary>Execution Engine</summary>
+            <summary>{{ ui.execution_engine }}</summary>
             <a class="sidebar-link sidebar-sublink" href="{% url 'engine-detail' 'bonus' %}"{% if request.resolver_match.url_name == 'engine-detail' and request.resolver_match.kwargs.engine_id == 'bonus' %} aria-current="page"{% endif %}>BonusEngine</a>
             <a class="sidebar-link sidebar-sublink" href="{% url 'engine-detail' 'sports_capital' %}"{% if request.resolver_match.url_name == 'engine-detail' and request.resolver_match.kwargs.engine_id == 'sports_capital' %} aria-current="page"{% endif %}>SportsCapitalEngine</a>
-            <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=execution"{% if request.resolver_match.url_name == 'report-history' and request.GET.mode != 'simulation' %} aria-current="page"{% endif %}>Reports</a>
+            <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=execution"{% if request.resolver_match.url_name == 'report-history' and request.GET.mode != 'simulation' %} aria-current="page"{% endif %}>{{ ui.reports }}</a>
           </details>
 
           {% if user.is_staff %}
             <details class="sidebar-group" open>
-              <summary>Simulation</summary>
+              <summary>{{ ui.simulation }}</summary>
               {% if simulation_enabled %}
-                <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}"{% if request.resolver_match.url_name == 'simulation' %} aria-current="page"{% endif %}>Simulation Dashboard</a>
+                <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}"{% if request.resolver_match.url_name == 'simulation' %} aria-current="page"{% endif %}>{{ ui.simulation_dashboard }}</a>
                 <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}#simulation-bonus">BonusEngine Simulation</a>
                 <a class="sidebar-link sidebar-sublink" href="{% url 'simulation' %}#simulation-sports_capital">SportsCapitalEngine Simulation</a>
-                <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=simulation"{% if request.resolver_match.url_name == 'report-history' and request.GET.mode == 'simulation' %} aria-current="page"{% endif %}>Simulation Reports</a>
+                <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=simulation"{% if request.resolver_match.url_name == 'report-history' and request.GET.mode == 'simulation' %} aria-current="page"{% endif %}>{{ ui.simulation }} {{ ui.reports }}</a>
               {% else %}
                 <span class="sidebar-unavailable">Simulation unavailable</span>
               {% endif %}
             </details>
           {% endif %}
 
-          <a class="sidebar-link" href="{% url 'presentation-settings' %}"{% if request.resolver_match.url_name == 'presentation-settings' %} aria-current="page"{% endif %}>Settings</a>
+          <a class="sidebar-link" href="{% url 'presentation-settings' %}"{% if request.resolver_match.url_name == 'presentation-settings' %} aria-current="page"{% endif %}>{{ ui.settings }}</a>
 
           {% if user.is_staff %}
             <details class="sidebar-group">
-              <summary>Staff tools</summary>
-              <a class="sidebar-link sidebar-sublink" href="{% url 'monitoring' %}"{% if request.resolver_match.url_name == 'monitoring' %} aria-current="page"{% endif %}>Monitoring</a>
+              <summary>{{ ui.staff_tools }}</summary>
+              <a class="sidebar-link sidebar-sublink" href="{% url 'monitoring' %}"{% if request.resolver_match.url_name == 'monitoring' %} aria-current="page"{% endif %}>{{ ui.monitoring }}</a>
               <a class="sidebar-link sidebar-sublink" href="{% url 'admin-area' %}"{% if request.resolver_match.url_name == 'admin-area' %} aria-current="page"{% endif %}>Q-Bet Admin</a>
               <a class="sidebar-link sidebar-sublink" href="{% url 'admin:index' %}">Django Admin</a>
             </details>
           {% endif %}
         </nav>
         <div class="sidebar-account">
-          <a class="sidebar-link" href="{% url 'profile' %}"{% if request.resolver_match.url_name == 'profile' %} aria-current="page"{% endif %}>Profile &amp; account</a>
-          <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button sidebar-signout" type="submit">Sign out</button></form>
+          <a class="sidebar-link" href="{% url 'profile' %}"{% if request.resolver_match.url_name == 'profile' %} aria-current="page"{% endif %}>{{ ui.profile }}</a>
+          <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button sidebar-signout" type="submit">{{ ui.sign_out }}</button></form>
         </div>
       </aside>
 

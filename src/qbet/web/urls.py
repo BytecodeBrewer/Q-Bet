@@ -42,7 +42,11 @@ urlpatterns = [
     ),
     path("engines/<str:engine_id>/", views.engine_detail, name="engine-detail"),
     path("simulation/", views.simulation, name="simulation"),
+    path("activity/provider/", views.provider_activity, name="provider-activity"),
     path("simulation/start/", views.simulation_start, name="simulation-start"),
+    path("simulation/<uuid:run_id>/run/", views.simulation_run, name="simulation-run"),
+    path("simulation/<uuid:run_id>/stop/", views.simulation_stop, name="simulation-stop"),
+    path("simulation/pipeline-dry-run/", views.pipeline_dry_run, name="pipeline-dry-run"),
     path("settings/presentation/", views.presentation_settings, name="presentation-settings"),
     path(
         "settings/engines/",
@@ -50,6 +54,11 @@ urlpatterns = [
         name="user-routing-preferences",
     ),
     path("reports/", views.report_history, name="report-history"),
+    path(
+        "reports/export/<str:export_format>/",
+        views.report_history_export,
+        name="report-history-export",
+    ),
     path("reports/<uuid:run_id>/", views.report_detail, name="report-detail"),
     path(
         "reports/<uuid:run_id>/export/<str:export_format>/",

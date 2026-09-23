@@ -128,6 +128,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "qbet.web.approval_context.approval_navigation",
+                "qbet.web.shell_context.authenticated_shell",
             ],
         },
     },

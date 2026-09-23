@@ -11,6 +11,10 @@
   }
 
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const dnd = globalThis.QBetDashboardDnd;
+  if (!dnd) {
+    return;
+  }
   const DRAG_START_DISTANCE = 10;
   const REORDER_HYSTERESIS = 10;
 
@@ -24,6 +28,10 @@
     let startClientY = 0;
     let layoutCompensationX = 0;
     let layoutCompensationY = 0;
+    let initialOrder = [];
+    let lastClientX = 0;
+    let lastClientY = 0;
+    let finishing = false;
 
     grid.querySelectorAll("[data-drag-handle]").forEach((handle) => {
       handle.addEventListener("pointerdown", (event) => {
@@ -45,6 +53,10 @@
         startClientY = event.clientY;
         layoutCompensationX = 0;
         layoutCompensationY = 0;
+        initialOrder = dnd.order(grid);
+        lastClientX = event.clientX;
+        lastClientY = event.clientY;
+        finishing = false;
         handle.setPointerCapture(event.pointerId);
       });
 
@@ -58,6 +70,8 @@
         }
 
         event.preventDefault();
+        lastClientX = event.clientX;
+        lastClientY = event.clientY;
         const deltaX = event.clientX - startClientX;
         const deltaY = event.clientY - startClientY;
 
@@ -84,26 +98,37 @@
         }
       });
 
-      const finishPointerDrag = (event) => {
+      const finishPointerDrag = (event, { commit = false } = {}) => {
         if (
+          finishing ||
           !draggedCard ||
           activeHandle !== handle ||
           activePointerId !== event.pointerId
         ) {
           return;
         }
-        if (handle.hasPointerCapture(event.pointerId)) {
-          handle.releasePointerCapture(event.pointerId);
+        finishing = true;
+        const pointerId = activePointerId;
+        const card = draggedCard;
+        const before = initialOrder;
+
+        if (dragStarted && !commit) {
+          dnd.restoreOrder(grid, before);
         }
 
-        if (dragStarted) {
-          draggedCard.classList.remove("is-dragging");
-          draggedCard.style.removeProperty("--drag-x");
-          draggedCard.style.removeProperty("--drag-y");
-          draggedCard.style.removeProperty("transition");
-          grid.classList.remove("is-reordering");
-          persistOrder(grid);
-        }
+        card.classList.remove("is-dragging");
+        card.style.removeProperty("--drag-x");
+        card.style.removeProperty("--drag-y");
+        card.style.removeProperty("transition");
+        grid.classList.remove("is-reordering");
+
+        const after = dnd.order(grid);
+        const shouldPersist = dnd.shouldPersist({
+          dragStarted,
+          commit,
+          before,
+          after,
+        });
 
         draggedCard = null;
         activeHandle = null;
@@ -114,14 +139,48 @@
         startClientY = 0;
         layoutCompensationX = 0;
         layoutCompensationY = 0;
+        initialOrder = [];
+        lastClientX = 0;
+        lastClientY = 0;
+
+        if (handle.hasPointerCapture(pointerId)) {
+          handle.releasePointerCapture(pointerId);
+        }
+        finishing = false;
+
+        if (shouldPersist) {
+          persistOrder(grid);
+        }
       };
 
-      handle.addEventListener("pointerup", finishPointerDrag);
-      handle.addEventListener("pointercancel", finishPointerDrag);
+      handle.addEventListener("pointerup", (event) => {
+        lastClientX = event.clientX;
+        lastClientY = event.clientY;
+        const commit = dragStarted &&
+          dnd.pointInside(grid.getBoundingClientRect(), lastClientX, lastClientY);
+        finishPointerDrag(event, { commit });
+      });
+      handle.addEventListener("pointercancel", (event) => {
+        finishPointerDrag(event);
+      });
+      handle.addEventListener("lostpointercapture", (event) => {
+        finishPointerDrag(event);
+      });
+      window.addEventListener("blur", () => {
+        if (draggedCard && activeHandle === handle && activePointerId !== null) {
+          finishPointerDrag({ pointerId: activePointerId });
+        }
+      });
 
       handle.addEventListener("keydown", (event) => {
         const card = handle.closest("[data-widget-id]");
         if (!card || card.parentElement !== grid) {
+          return;
+        }
+
+        if (event.key === "Escape" && draggedCard && activeHandle === handle && activePointerId !== null) {
+          event.preventDefault();
+          finishPointerDrag({ pointerId: activePointerId });
           return;
         }
 

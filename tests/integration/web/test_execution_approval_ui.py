@@ -15,6 +15,9 @@ from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
 )
+from qbet.web.display_preferences import DisplayPreferences, format_datetime, format_money
+from qbet.web.models import UserDisplayPreference
+from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.queue import WorkState
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
@@ -116,6 +119,46 @@ class ExecutionApprovalWebTests(TestCase):
         self.assertEqual(record.state, Lifecycle.APPROVED)
         self.assertFalse(ledger.commands)
         self.assertEqual(queue.state, WorkState.PENDING)
+
+    def test_execution_approval_uses_persisted_display_preferences(self) -> None:
+        observed_at = datetime.now(UTC)
+        execution_id = self._stage_execution(
+            now=observed_at,
+            expires_at=observed_at + timedelta(minutes=5),
+        )
+        UserDisplayPreference.objects.create(
+            user=self.user,
+            language="de",
+            region="DE",
+            timezone_name="Europe/Berlin",
+            time_format="24h",
+            currency="USD",
+        )
+        expected = ExecutionApprovalService().pending_for(
+            self.user.get_username(),
+            now=observed_at,
+        )[0]
+        display = DisplayPreferences(
+            language="de",
+            region="DE",
+            timezone_name="Europe/Berlin",
+            time_format="24h",
+            currency="USD",
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get("/execution/approvals/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            format_money(expected.capital_required, expected.currency, display),
+        )
+        self.assertContains(response, format_datetime(expected.expires_at, display))
+        self.assertContains(response, "Preferred recorded currency: USD.")
+        self.assertContains(response, "no FX conversion is applied.")
+        self.assertContains(response, str(execution_id))
+        self.assertNotContains(response, "Active")
 
     def test_expired_approval_disappears_and_navigation_count_stays_actionable(self) -> None:
         staged_at = datetime.now(UTC) - timedelta(minutes=10)

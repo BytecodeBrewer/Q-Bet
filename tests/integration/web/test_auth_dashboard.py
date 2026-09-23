@@ -15,6 +15,34 @@ django.setup()
 
 
 class AuthenticationAndDashboardTests(TestCase):
+    def test_authenticated_shell_labels_exist_on_independent_render_paths(self) -> None:
+        staff = User.objects.create_user("shell-staff", password="Strong-pass-123", is_staff=True)
+        UserDisplayPreference.objects.create(
+            user=staff,
+            language="en",
+            region="DE",
+            timezone_name="Europe/Berlin",
+            time_format="24h",
+            currency="EUR",
+        )
+        self.client.force_login(staff)
+
+        for path in (
+            "/execution/approvals/",
+            "/admin-area/gui-settings/",
+            "/admin-area/polling/",
+            "/accounts/password/change/",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'aria-label="Application navigation"')
+                self.assertContains(response, "Main Dashboard")
+                self.assertContains(response, "Reports")
+                self.assertContains(response, "Settings")
+                self.assertContains(response, "Profile &amp; account")
+                self.assertContains(response, "Sign out")
+
     def test_registration_creates_inactive_user_pending_email_verification(self) -> None:
         response = self.client.post(
             "/register/",
@@ -211,6 +239,14 @@ class AuthenticationAndDashboardTests(TestCase):
         )
 
         self.assertRedirects(response, "/settings/presentation/")
+        rendered = self.client.get("/settings/presentation/")
+        self.assertContains(rendered, '<html lang="en"')
+        self.assertContains(rendered, ">Notifications<", html=False)
+        self.assertContains(rendered, 'title="Preferred recorded currency">USD</span>', html=False)
+        self.assertNotContains(rendered, "Benachrichtigungen / Notifications")
+        self.assertContains(rendered, "Preferred recorded currency")
+        self.assertContains(rendered, "USD — recorded values only")
+        self.assertContains(rendered, "does not convert amounts between currencies")
         stored = UserDisplayPreference.objects.get(user=owner)
         self.assertEqual(
             (
@@ -244,3 +280,4 @@ class AuthenticationAndDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'value="de" selected')
         self.assertContains(response, 'value="Europe/Berlin" selected')
+        self.assertContains(response, "Benachrichtigungen / Notifications")

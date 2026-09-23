@@ -135,11 +135,11 @@ class Phase2VisualIntegrationTests(TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn(
-            '<html lang="en" data-theme="{{ preferences.theme|default:\'light\' }}">',
+            '<html lang="{{ display_preferences.language|default:\'de\' }}" data-theme="{{ preferences.theme|default:\'light\' }}">',
             base_template,
         )
         self.assertIn(
-            'html[data-theme="dark"] { background: #202a32; color-scheme: dark; }',
+            'html[data-theme="dark"] { background: #181c19; color-scheme: dark; }',
             base_template,
         )
         self.assertIn("body { min-height: 100dvh; }", base_template)

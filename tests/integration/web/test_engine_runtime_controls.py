@@ -41,7 +41,7 @@ class EngineRuntimeControlTests(TestCase):
 
         dashboard = self.client.get("/dashboard/")
         self.assertContains(dashboard, 'aria-label="Disable SportsCapitalEngine execution"')
-        self.assertContains(dashboard, 'title="Active"')
+        self.assertContains(dashboard, 'title="Ready"')
 
         stopped = self.client.post("/engines/sports_capital/execution/stop/")
         self.assertRedirects(stopped, "/dashboard/")
@@ -62,9 +62,16 @@ class EngineRuntimeControlTests(TestCase):
 
         ready = self.client.get("/dashboard/")
         self.assertContains(ready, 'aria-label="Disable SportsCapitalEngine execution"')
-        self.assertContains(ready, 'title="Active"')
-        self.assertContains(ready, "Execution active")
+        self.assertContains(ready, 'title="Ready"')
+        self.assertContains(ready, "Execution ready")
+        self.assertContains(ready, "State <strong>ready</strong>", html=False)
+        self.assertNotContains(ready, "State <strong>active</strong>", html=False)
         self.assertNotContains(ready, 'title="Running"')
+
+        detail = self.client.get("/engines/sports_capital/")
+        self.assertContains(detail, "<dt>Operational state</dt><dd>Ready</dd>", html=True)
+        self.assertContains(detail, "<dt>Live source</dt><dd>ready</dd>", html=True)
+        self.assertNotContains(detail, "<dd>Active</dd>", html=False)
 
         ModeWorkQueueRow.objects.create(
             work_id=uuid4(),
@@ -163,8 +170,19 @@ class EngineRuntimeControlTests(TestCase):
             dashboard,
             'aria-label="Disable SportsCapitalEngine simulation"',
         )
-        self.assertContains(dashboard, "Pipeline simulation")
-        self.assertContains(dashboard, "Run pipeline test")
+        self.assertContains(dashboard, "Sandbox simulation")
+        self.assertContains(dashboard, "Start simulation")
+        self.assertContains(
+            dashboard,
+            "BonusEngine remains unavailable here until its promotion-aware fixed-odds sportsbook provider path is connected.",
+        )
+
+        monitoring = self.client.get("/monitoring/")
+        self.assertContains(monitoring, 'id="runtime-readiness-heading"')
+        self.assertContains(monitoring, 'data-runtime-engine="execution:sports_capital"')
+        self.assertContains(monitoring, 'data-runtime-engine="simulation:sports_capital"')
+        self.assertContains(monitoring, "Data aggregation")
+        self.assertContains(monitoring, "LiquidityChecker")
 
         stopped = self.client.post("/engines/sports_capital/simulation/stop/")
         self.assertRedirects(stopped, "/dashboard/")
