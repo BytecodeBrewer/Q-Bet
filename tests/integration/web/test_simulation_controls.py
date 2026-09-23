@@ -159,7 +159,7 @@ class SimulationGuiControlTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "100,00 EUR")
-        self.assertContains(response, "Preferred report currency: USD.")
+        self.assertContains(response, "Preferred recorded currency: USD.")
         self.assertContains(response, "no FX conversion is applied.")
         self.assertContains(response, "Running / pending")
         self.assertNotContains(response, "Active / pending")
