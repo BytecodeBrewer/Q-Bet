@@ -1,5 +1,6 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
+{% load display_preferences %}
 <section class="page-heading dashboard-heading">
   <span class="eyebrow">Portfolio workspace</span>
   <div class="page-heading-row">
@@ -39,7 +40,7 @@
     </div>
 
     <section class="summary-grid dashboard-summary-grid" aria-label="Execution activity summary">
-      <article class="summary-item summary-item-primary"><span>Active matches</span><strong>{{ execution_monitoring.summary.active_matches }}</strong><small>running now</small></article>
+      <article class="summary-item summary-item-primary"><span>Running matches</span><strong>{{ execution_monitoring.summary.active_matches }}</strong><small>running now</small></article>
       <article class="summary-item"><span>Pending matches</span><strong>{{ execution_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
       <article class="summary-item"><span>Recorded capital</span><strong>{% if execution_monitoring.summary.involved_capital is not None %}{{ execution_monitoring.summary.involved_capital }}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>tracked execution state</small></article>
       <article class="summary-item incident-summary{% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %} has-incidents{% endif %}">
@@ -105,7 +106,7 @@
       <div class="plane-heading"><div><span class="plane-kicker">Admin only</span><h2 id="simulation-heading">Simulation</h2></div><span class="tag simulation-tag">Simulation</span></div>
 
       <section class="summary-grid dashboard-summary-grid" aria-label="Simulation activity summary">
-        <article class="summary-item summary-item-primary"><span>Active matches</span><strong>{{ simulation_monitoring.summary.active_matches }}</strong><small>running now</small></article>
+        <article class="summary-item summary-item-primary"><span>Running matches</span><strong>{{ simulation_monitoring.summary.active_matches }}</strong><small>running now</small></article>
         <article class="summary-item"><span>Pending matches</span><strong>{{ simulation_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
         <article class="summary-item"><span>Recorded runs</span><strong>{{ simulation_monitoring.summary.recorded_activity }}</strong><small>available history</small></article>
         <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{{ simulation_monitoring.summary.involved_capital }}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>simulation only</small></article>
@@ -119,10 +120,11 @@
           {{ start_form.non_field_errors }}
           <div class="simulation-form-grid">
             <label>Engine {{ start_form.engine }} {{ start_form.engine.errors }}</label>
-            <label>Virtual capital {{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</label>
+            <label>Virtual capital (EUR) {{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</label>
           </div>
           <button class="primary" type="submit">Start simulation</button>
         </form>
+        <p class="muted">{% currency_preference_note "EUR" display_preferences %}</p>
       </section>
 
       <div class="section-heading section-heading-spacious"><div><span class="eyebrow">Engine status</span><h3>Simulation engines</h3></div><a class="compact-link" href="{% url 'report-history' %}">Simulation reports</a></div>
@@ -166,7 +168,7 @@
         {% endfor %}
       </div>
 
-      {% if simulation_control.runs %}<section class="recent-runs surface-subtle"><h3>Recent simulation runs</h3><ul>{% for run in simulation_control.runs %}<li><strong>{{ run.engine }}</strong> · {{ run.status }} · {{ run.progress }} · virtual capital {{ run.current_capital }}{% if run.report_id %} · <a href="{% url 'report-detail' run.report_id %}">report</a>{% endif %}</li>{% endfor %}</ul></section>{% endif %}
+      {% if simulation_control.runs %}<section class="recent-runs surface-subtle"><h3>Recent simulation runs</h3><ul>{% for run in simulation_control.runs %}<li><strong>{{ run.engine }}</strong> · {{ run.status }} · {{ run.progress }} · virtual capital {% localized_money run.current_capital "EUR" display_preferences %}{% if run.report_id %} · <a href="{% url 'report-detail' run.report_id %}">report</a>{% endif %}</li>{% endfor %}</ul></section>{% endif %}
     </section>
   {% endif %}
 </div>
