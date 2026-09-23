@@ -54,7 +54,7 @@ def harden_catalog_tables(apps, schema_editor) -> None:  # noqa: ARG001
         schema_editor.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
         schema_editor.execute(
             f"""
-            DO $
+            DO $$
             BEGIN
                 IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
                     EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE public.{table} FROM anon';
@@ -63,7 +63,7 @@ def harden_catalog_tables(apps, schema_editor) -> None:  # noqa: ARG001
                     EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE public.{table} FROM authenticated';
                 END IF;
             END
-            $;
+            $$;
             """
         )
 
