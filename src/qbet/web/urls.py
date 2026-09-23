@@ -42,6 +42,7 @@ urlpatterns = [
     ),
     path("engines/<str:engine_id>/", views.engine_detail, name="engine-detail"),
     path("simulation/", views.simulation, name="simulation"),
+    path("activity/provider/", views.provider_activity, name="provider-activity"),
     path("simulation/start/", views.simulation_start, name="simulation-start"),
     path("simulation/<uuid:run_id>/run/", views.simulation_run, name="simulation-run"),
     path("simulation/<uuid:run_id>/stop/", views.simulation_stop, name="simulation-stop"),
