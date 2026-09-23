@@ -241,3 +241,56 @@ class NotificationInboxDeliveryRow(models.Model):
             )
         ]
         ordering = ("-created_at",)
+
+
+class SportsbookProviderRow(models.Model):
+    """Durable static sportsbook identity and German licensing metadata."""
+
+    provider_id = models.CharField(max_length=255, primary_key=True)
+    legal_name = models.CharField(max_length=255)
+    display_name = models.CharField(max_length=255)
+    jurisdiction = models.CharField(max_length=2)
+    sports_betting = models.BooleanField()
+    online = models.BooleanField()
+    source_url = models.URLField(max_length=500)
+    whitelist_snapshot_date = models.DateField()
+    status = models.CharField(max_length=32)
+
+    class Meta:
+        db_table = "qbet_sportsbook_providers"
+
+
+class SportsbookProviderDomainRow(models.Model):
+    """One GGL-listed domain owned by one canonical sportsbook provider."""
+
+    domain = models.CharField(max_length=255, primary_key=True)
+    provider = models.ForeignKey(
+        SportsbookProviderRow,
+        on_delete=models.CASCADE,
+        related_name="domains",
+    )
+
+    class Meta:
+        db_table = "qbet_sportsbook_provider_domains"
+
+
+class SportsbookExternalIdentityRow(models.Model):
+    """Source-specific bookmaker identity mapped to a canonical sportsbook."""
+
+    id = models.BigAutoField(primary_key=True)
+    source_id = models.CharField(max_length=255)
+    external_key = models.CharField(max_length=255)
+    provider = models.ForeignKey(
+        SportsbookProviderRow,
+        on_delete=models.CASCADE,
+        related_name="external_identities",
+    )
+
+    class Meta:
+        db_table = "qbet_sportsbook_external_identities"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("source_id", "external_key"),
+                name="qbet_sportsbook_external_identity_unique",
+            )
+        ]

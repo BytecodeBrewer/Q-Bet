@@ -30,6 +30,14 @@ This file is the companion register for concrete Phase 3 external integrations. 
 | GUI/product experience | Continue incremental visual refinement, animations, interaction polish, and clearer product surfaces while integrations are added. | Existing Django GUI remains the product surface. | functional controls exist; larger Settings/Admin/UX expansion later in Phase 3 |
 | Cloud runtime | Keep the current Vercel + Supabase production baseline while Phase 3 validates integrations. Broader container orchestration and per-user cloud isolation are Phase 4 concerns. | Vercel + Supabase current baseline. | existing |
 
+## German Sportsbook Provider Identity
+
+- The GGL official whitelist is the legal/licensing source of truth for German sportsbook eligibility. The reviewed seed snapshot is dated 07 September 2026 and is versioned in `src/qbet/providers/ggl_sportsbooks_2026-09-07.json`.
+- Odds aggregators are market-data and external-identity sources only. They do not establish German licensing eligibility.
+- The Odds API mappings are deliberately sparse and verified against its bookmaker catalog. The initial German mappings are `tipico_de -> tipico` and `winamax_de -> winamax`; a legal GGL provider without a verified source mapping remains listable but is not market-data-ready for that source.
+- BonusEngine German sportsbook preparation fails closed until the external bookmaker identity resolves to one active, online, German-eligible canonical provider.
+- Promotion/account terms remain a separate provider-specific boundary. No universal automatic sportsbook promotion API is assumed.
+
 ## Sportsbook And Exchange Semantics
 
 - Fixed-odds sportsbook market/quotation data remains API-first.

@@ -15,6 +15,8 @@ from qbet.calculations import (
 from qbet.data.models import DataTarget, NormalizedMarketSnapshot, NormalizedOffer
 from qbet.domain import OfferSide
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
+from qbet.providers import SportsbookCatalog
+from qbet.providers.bonus import canonicalize_german_bonus_snapshot
 
 from .models import (
     BuiltBonusMatch,
@@ -80,6 +82,19 @@ def build_legacy_exchange_hedged_free_bet_match(
         execution_offer_ids=(back_offer.id, lay_offer.id),
     )
     return BuiltBonusMatch(request=request, context=_context(snapshot))
+
+
+def prepare_german_bonus_sportsbook_offers(
+    snapshot: NormalizedMarketSnapshot,
+    offer_ids: tuple[str, ...],
+    catalog: SportsbookCatalog,
+) -> PreparedBonusSportsbookOffers:
+    """Resolve German sportsbook identity before canonical Bonus preparation."""
+
+    selected_offers = tuple(_offer_by_id(snapshot, identifier) for identifier in offer_ids)
+    selected_snapshot = snapshot.model_copy(update={"offers": selected_offers})
+    canonical = canonicalize_german_bonus_snapshot(selected_snapshot, catalog)
+    return prepare_bonus_sportsbook_offers(canonical, offer_ids)
 
 
 def prepare_bonus_sportsbook_offers(

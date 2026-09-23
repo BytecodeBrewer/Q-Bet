@@ -34,7 +34,7 @@ The central success criterion is not the number of available components. The com
 | Area | Current state | Main Phase 3 gap |
 | --- | --- | --- |
 | Internal workflow | The first connected SportsCapital Phase 3 E2E gate composes real adapter boundaries, calculation/risk/liquidity, isolated modes, sandbox capital feedback, post-event settlement, persistence, Monitoring and Reporting; regression ownership is documented in `docs/test-strategy.md` | no remaining core Phase 3 test-ownership gap; extend focused coverage only when new connected behavior is added |
-| Market data | The Odds API feeds GUI-started SportsCapital Simulation through fixed-odds sportsbook snapshots and the Sports Match Builder | BonusEngine still needs promotion/account metadata plus a fixed-odds sportsbook hedge-preparation path |
+| Market data | The Odds API feeds GUI-started SportsCapital Simulation through fixed-odds sportsbook snapshots and the Sports Match Builder; German sportsbook identity is gated by the versioned GGL catalog before Bonus preparation | BonusEngine still needs provider-specific promotion/account metadata and later connected fixed-odds sportsbook market-data composition |
 | RequestHandler | targeted pre-execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | no remaining core Phase 3 gap; post-event result collection is a separate settlement boundary |
 | Smart Polling | persisted provider/target/engine strategies, quota/cost metadata and staff configuration are implemented | multi-provider source selection can be added when another source is introduced |
 | Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback composed from completed Simulation work into Portfolio Ledger | no remaining core Phase 3 gap; broaden only when another bank/account flow requires it |
@@ -51,7 +51,7 @@ The central success criterion is not the number of available components. The com
 Data Ingestion retrieves and normalizes external data. Preparation is optional and engine-specific; the architecture must not invent a Match Builder or extra stage where the engine can already consume the normalized data directly.
 
 - BonusEngine and SportsCapitalEngine use fixed-odds sportsbook match/market preparation.
-- BonusEngine additionally requires explicit promotion/account metadata, which is separate from quotation data.
+- BonusEngine additionally requires explicit promotion/account metadata, which is separate from quotation data. German sportsbook identities must resolve through the GGL-backed canonical provider catalog before normalized offers can enter the German Bonus preparation path.
 - Betting exchanges belong to the separate planned SportsExchangeEngine and can require exchange market/order-book preparation.
 - Ticket arbitrage is expected to need less or no comparable Match Builder.
 - Crypto is expected to consume normalized exchange/market data without a sports-style Match Builder.
