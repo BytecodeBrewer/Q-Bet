@@ -155,7 +155,7 @@ class ExecutionApprovalWebTests(TestCase):
             format_money(expected.capital_required, expected.currency, display),
         )
         self.assertContains(response, format_datetime(expected.expires_at, display))
-        self.assertContains(response, "Preferred report currency: USD.")
+        self.assertContains(response, "Preferred recorded currency: USD.")
         self.assertContains(response, "no FX conversion is applied.")
         self.assertContains(response, str(execution_id))
         self.assertNotContains(response, "Active")
