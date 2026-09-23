@@ -1,0 +1,38 @@
+{% extends "qbet_web/base.html" %}
+{% block title %}Bonus Offers · Q-Bet{% endblock %}
+{% block content %}
+<section class="page-heading page-heading-row">
+  <div>
+    <span class="eyebrow">BonusEngine</span>
+    <h1>Bonus Offer List</h1>
+    <p>Your recorded sportsbook promotion terms. Expired offers stay visible for history but cannot enter new work.</p>
+  </div>
+  <button class="button-link" type="button" data-bonus-offer-dialog-open>New Bonus Offer</button>
+</section>
+
+{% if bonus_offers %}
+  <div class="bonus-offer-list">
+    {% for offer in bonus_offers %}
+      <article class="bonus-offer-row">
+        <div class="bonus-offer-row-header">
+          <div>
+            <h2>{{ offer.name }}</h2>
+            <span>{{ offer.provider.display_name }}</span>
+          </div>
+          <span class="bonus-offer-status {% if offer.status_label == 'Expired' %}bonus-offer-status-expired{% elif offer.status_label == 'Active' %}bonus-offer-status-active{% else %}bonus-offer-status-unavailable{% endif %}">
+            {{ offer.status_label }}
+          </span>
+        </div>
+        <div class="bonus-offer-row-meta">
+          <span>{{ offer.get_promotion_type_display }}</span>
+          {% if offer.promotion_value is not None %}<span>{{ offer.promotion_value }} {{ offer.currency }}</span>{% endif %}
+          {% if offer.required_stake is not None %}<span>Required stake {{ offer.required_stake }} {{ offer.currency }}</span>{% endif %}
+          <span>Valid until {{ offer.valid_until|date:"Y-m-d H:i" }}</span>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="empty-state">No Bonus Offers yet. Add one when a sportsbook promotion needs to enter BonusEngine preparation.</p>
+{% endif %}
+{% endblock %}

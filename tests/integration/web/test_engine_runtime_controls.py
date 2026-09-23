@@ -174,7 +174,7 @@ class EngineRuntimeControlTests(TestCase):
         self.assertContains(dashboard, "Start simulation")
         self.assertContains(
             dashboard,
-            "BonusEngine remains unavailable here until its promotion-aware fixed-odds sportsbook provider path is connected.",
+            "BonusEngine uses active user-owned Bonus Offers with fresh fixed-odds sportsbook market data.",
         )
 
         monitoring = self.client.get("/monitoring/")
@@ -192,36 +192,31 @@ class EngineRuntimeControlTests(TestCase):
         self.assertTrue(configuration.sports_capital.execution_sandbox)
         self.assertFalse(configuration.sports_capital.simulation)
 
-    def test_staff_cannot_enable_bonus_product_route_until_provider_path_exists(self) -> None:
+    def test_staff_can_enable_bonus_simulation_while_execution_stays_blocked(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.staff)
 
         execution = self.client.post("/engines/bonus/execution/start/", follow=True)
-        simulation = self.client.post("/engines/bonus/simulation/start/", follow=True)
+        simulation = self.client.post("/engines/bonus/simulation/start/")
 
-        self.assertContains(execution, "BonusEngine provider path is not connected yet.")
-        self.assertContains(simulation, "BonusEngine provider path is not connected yet.")
+        self.assertContains(
+            execution,
+            "BonusEngine Execution provider path is not connected yet.",
+        )
+        self.assertRedirects(simulation, "/dashboard/")
         configuration = RoutingConfigurationRepository().load()
-        self.assertTrue(
-            configuration is None
-            or (
-                not configuration.bonus.execution
-                and not configuration.bonus.simulation
-            )
-        )
+        assert configuration is not None
+        self.assertFalse(configuration.bonus.execution)
+        self.assertTrue(configuration.bonus.simulation)
 
-        stale = RoutingConfigurationRepository().save(
-            RoutingConfiguration(
-                bonus=EngineModes(simulation=True, execution=True),
-            )
-        )
-        self.assertTrue(stale.bonus.execution)
         dashboard = self.client.get("/dashboard/")
         self.assertContains(dashboard, "Provider path unavailable")
         self.assertNotContains(dashboard, 'aria-label="Enable BonusEngine execution"')
         self.assertNotContains(dashboard, 'aria-label="Disable BonusEngine execution"')
-        self.assertNotContains(dashboard, 'aria-label="Enable BonusEngine simulation"')
-        self.assertNotContains(dashboard, 'aria-label="Disable BonusEngine simulation"')
+        self.assertContains(
+            dashboard,
+            'aria-label="Disable BonusEngine simulation"',
+        )
 
     def test_staff_cannot_start_simulation_engine_when_simulation_layer_is_disabled(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=False)

@@ -14,6 +14,14 @@ from .free_bet import (
     FreeBetStakeReturn,
     calculate_free_bet,
 )
+from .fixed_odds_bonus import (
+    SportsbookFreeBetInput,
+    SportsbookFreeBetResult,
+    SportsbookQualifyingBetInput,
+    SportsbookQualifyingBetResult,
+    calculate_sportsbook_free_bet,
+    calculate_sportsbook_qualifying_bet,
+)
 from .qualifying_bet import (
     QualifyingBetInput,
     QualifyingBetResult,
@@ -38,10 +46,16 @@ __all__ = [
     "FreeBetStakeReturn",
     "QualifyingBetInput",
     "QualifyingBetResult",
+    "SportsbookFreeBetInput",
+    "SportsbookFreeBetResult",
+    "SportsbookQualifyingBetInput",
+    "SportsbookQualifyingBetResult",
     "TwoWayArbitrageInput",
     "TwoWayArbitrageResult",
     "calculate_dutching",
     "calculate_free_bet",
     "calculate_qualifying_bet",
+    "calculate_sportsbook_free_bet",
+    "calculate_sportsbook_qualifying_bet",
     "calculate_two_way_arbitrage",
 ]

@@ -57,7 +57,11 @@ def connected_product_routing_configuration(
     if configuration is None:
         return None
     return RoutingConfiguration(
-        bonus=EngineModes(),
+        bonus=EngineModes(
+            simulation=configuration.bonus.simulation,
+            execution=False,
+            execution_sandbox=False,
+        ),
         sports_capital=configuration.sports_capital,
     )
 

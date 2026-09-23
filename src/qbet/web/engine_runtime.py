@@ -40,8 +40,12 @@ def engine_runtime_control(
     if action not in {"start", "stop"}:
         raise Http404("Action not found.")
 
-    if engine_id == "bonus" and action == "start":
-        messages.error(request, "BonusEngine provider path is not connected yet.")
+    if (
+        engine_id == "bonus"
+        and workflow_mode is WorkflowMode.EXECUTION
+        and action == "start"
+    ):
+        messages.error(request, "BonusEngine Execution provider path is not connected yet.")
         return redirect("dashboard")
 
     if workflow_mode is WorkflowMode.SIMULATION:

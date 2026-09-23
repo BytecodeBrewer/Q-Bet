@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path, reverse_lazy
 
-from qbet.web import views
+from qbet.web import bonus_offers, views
 from qbet.web.engine_runtime import engine_runtime_control, sandbox_execution_control
 from qbet.web.execution_approvals import execution_approval_decision, execution_approvals
 from qbet.web.polling_settings import polling_settings
@@ -17,6 +17,8 @@ urlpatterns = [
     path("verify-email/<str:uidb64>/<str:token>/", views.verify_email, name="verify-email"),
     path("profile/", views.profile, name="profile"),
     path("notifications/", views.notification_inbox, name="notification-inbox"),
+    path("bonus-offers/", bonus_offers.bonus_offer_list, name="bonus-offer-list"),
+    path("bonus-offers/create/", bonus_offers.bonus_offer_create, name="bonus-offer-create"),
     path(
         "notifications/<uuid:task_id>/read/",
         views.notification_inbox_read,

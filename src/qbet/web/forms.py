@@ -409,7 +409,10 @@ class SimulationAvailabilityForm(forms.Form):
 
 class SimulationStartForm(forms.Form):
     engine = forms.ChoiceField(
-        choices=((SimulationEngine.SPORTS_CAPITAL.value, "SportsCapitalEngine"),)
+        choices=(
+            (SimulationEngine.BONUS.value, "BonusEngine"),
+            (SimulationEngine.SPORTS_CAPITAL.value, "SportsCapitalEngine"),
+        )
     )
     starting_capital = forms.DecimalField(
         min_value=Decimal("10"),

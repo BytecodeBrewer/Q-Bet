@@ -9,8 +9,14 @@ from qbet.calculations import (
     FreeBetResult,
     QualifyingBetInput,
     QualifyingBetResult,
+    SportsbookFreeBetInput,
+    SportsbookFreeBetResult,
+    SportsbookQualifyingBetInput,
+    SportsbookQualifyingBetResult,
     calculate_free_bet,
     calculate_qualifying_bet,
+    calculate_sportsbook_free_bet,
+    calculate_sportsbook_qualifying_bet,
 )
 from qbet.domain.models import (
     Currency,
@@ -28,11 +34,25 @@ class BonusStrategy(str):
     pass
 
 
+BonusInput = (
+    QualifyingBetInput
+    | FreeBetInput
+    | SportsbookQualifyingBetInput
+    | SportsbookFreeBetInput
+)
+BonusCalculationResult = (
+    QualifyingBetResult
+    | FreeBetResult
+    | SportsbookQualifyingBetResult
+    | SportsbookFreeBetResult
+)
+
+
 class BonusEngineRequest(DomainModel):
-    """Legacy exchange-hedged request retained for deterministic regression tests."""
+    """BonusEngine request supporting canonical sportsbook and retained legacy fixtures."""
 
     opportunity_id: Identifier
-    inputs: QualifyingBetInput | FreeBetInput
+    inputs: BonusInput
     currency: Currency
     execution_offer_ids: tuple[Identifier, Identifier]
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -48,7 +68,7 @@ class BonusEngineRequest(DomainModel):
 
 
 class BonusEngineEvaluation(DomainModel):
-    calculation_result: QualifyingBetResult | FreeBetResult
+    calculation_result: BonusCalculationResult
     strategy_result: StrategyResult
     worst_case_profit_loss: Decimal
     is_profitable: bool
@@ -69,20 +89,39 @@ class BonusEngineEvaluation(DomainModel):
 
 
 class BonusEngine(StrategyEngine[BonusEngineRequest, BonusEngineEvaluation]):
-    """Evaluate retained exchange-hedged calculation primitives."""
+    """Evaluate BonusEngine promotions without weakening the approval boundary."""
 
-    def evaluate(self, request):
-        result = (
-            calculate_qualifying_bet(request.inputs)
-            if isinstance(request.inputs, QualifyingBetInput)
-            else calculate_free_bet(request.inputs)
-        )
-        worst = min(result.back_win_profit_loss, result.lay_win_profit_loss)
-        strategy = "qualifying_bet" if isinstance(result, QualifyingBetResult) else "free_bet"
+    def evaluate(self, request: BonusEngineRequest) -> BonusEngineEvaluation:
+        inputs = request.inputs
+        if isinstance(inputs, QualifyingBetInput):
+            result: BonusCalculationResult = calculate_qualifying_bet(inputs)
+            worst = min(result.back_win_profit_loss, result.lay_win_profit_loss)
+            strategy = "qualifying_bet"
+            capital_required = result.back_stake
+            step_stakes = (result.back_stake, result.lay_stake)
+        elif isinstance(inputs, FreeBetInput):
+            result = calculate_free_bet(inputs)
+            worst = min(result.back_win_profit_loss, result.lay_win_profit_loss)
+            strategy = "free_bet"
+            capital_required = result.back_stake
+            step_stakes = (result.back_stake, result.lay_stake)
+        elif isinstance(inputs, SportsbookQualifyingBetInput):
+            result = calculate_sportsbook_qualifying_bet(inputs)
+            worst = result.guaranteed_profit_loss
+            strategy = "qualifying_bet"
+            capital_required = result.capital_required
+            step_stakes = (result.promotion_stake, result.hedge_stake)
+        else:
+            result = calculate_sportsbook_free_bet(inputs)
+            worst = result.guaranteed_profit_loss
+            strategy = "free_bet"
+            capital_required = result.capital_required
+            step_stakes = (result.promotion_amount, result.hedge_stake)
+
         strategy_result = StrategyResult(
             strategy=strategy,
             opportunity_id=request.opportunity_id,
-            stake=result.back_stake,
+            stake=capital_required,
             expected_profit=worst,
             currency=request.currency,
             generated_at=request.generated_at,
@@ -98,7 +137,7 @@ class BonusEngine(StrategyEngine[BonusEngineRequest, BonusEngineEvaluation]):
                 )
                 for offer, stake in zip(
                     request.execution_offer_ids,
-                    (result.back_stake, result.lay_stake),
+                    step_stakes,
                     strict=True,
                 )
             ),

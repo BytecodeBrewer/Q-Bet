@@ -119,7 +119,7 @@
 
       <section class="simulation-control-panel">
         <div class="section-heading"><div><span class="eyebrow">Sandbox</span><h3>Sandbox simulation</h3></div><span class="tag simulation-tag">Virtual only</span></div>
-        <p>SportsCapital can use its configured fixture or connected odds source. BonusEngine remains unavailable here until its promotion-aware fixed-odds sportsbook provider path is connected.</p>
+        <p>SportsCapital can use its configured fixture or connected odds source. BonusEngine uses active user-owned Bonus Offers with fresh fixed-odds sportsbook market data.</p>
         <form method="post" action="{% url 'simulation-start' %}">
           {% csrf_token %}
           {{ start_form.non_field_errors }}
@@ -137,18 +137,14 @@
         {% for engine in simulation_engines %}
           <article class="engine-card simulation-card dashboard-engine-card draggable-card{% if not engine.enabled %} is-inactive{% endif %}" data-simulation-engine="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
             <div class="engine-card-controls">
-              {% if engine.engine_id == "bonus" %}
-                <span class="tag neutral-tag" title="Provider path unavailable">Unavailable</span>
-              {% else %}
-                <form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'stop' %}">
-                  {% csrf_token %}
-                  {% if engine.enabled %}
-                    <button class="engine-runtime-button is-stop" type="submit" title="Disable" aria-label="Disable {{ engine.name }} simulation"><span aria-hidden="true">■</span></button>
-                  {% else %}
-                    <button class="engine-runtime-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'start' %}" title="Enable" aria-label="Enable {{ engine.name }} simulation"><span aria-hidden="true">▶</span></button>
-                  {% endif %}
-                </form>
-              {% endif %}
+              <form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'stop' %}">
+                {% csrf_token %}
+                {% if engine.enabled %}
+                  <button class="engine-runtime-button is-stop" type="submit" title="Disable" aria-label="Disable {{ engine.name }} simulation"><span aria-hidden="true">■</span></button>
+                {% else %}
+                  <button class="engine-runtime-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'simulation' 'start' %}" title="Enable" aria-label="Enable {{ engine.name }} simulation"><span aria-hidden="true">▶</span></button>
+                {% endif %}
+              </form>
               <button class="drag-handle" type="button" data-drag-handle aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move simulated {{ engine.name }}" title="Reorder">
                 <span class="drag-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
               </button>

@@ -86,7 +86,7 @@ from qbet.web.forms import (
     SimulationStartForm,
     UserRoutingPreferencesForm,
 )
-from qbet.web.models import AccountVerification, CustomerReportAccess
+from qbet.web.models import AccountVerification, CustomerReportAccess, SimulationRunState
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.provider_activity import ProviderActivitySnapshot, provider_activity_snapshot
 from qbet.web.readiness import deployment_release_id, persistence_readiness
@@ -616,6 +616,7 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
         run = SIMULATION_CONTROL.begin(
             engine=engine,
             starting_capital=form.cleaned_data["starting_capital"],
+            initiated_by=cast(User, request.user),
         )
     except SimulationControlError as error:
         messages.error(request, str(error))
@@ -629,6 +630,11 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
 @require_POST
 def simulation_run(request: HttpRequest, run_id: UUID) -> HttpResponse:
     _require_staff(request)
+    if not SimulationRunState.objects.filter(
+        pk=run_id,
+        initiated_by=request.user,
+    ).exists():
+        raise Http404("Simulation run was not found.")
     try:
         run = SIMULATION_CONTROL.run(run_id)
     except SimulationControlError as error:
@@ -668,6 +674,11 @@ def simulation_run(request: HttpRequest, run_id: UUID) -> HttpResponse:
 @require_POST
 def simulation_stop(request: HttpRequest, run_id: UUID) -> HttpResponse:
     _require_staff(request)
+    if not SimulationRunState.objects.filter(
+        pk=run_id,
+        initiated_by=request.user,
+    ).exists():
+        raise Http404("Simulation run was not found.")
     try:
         run = SIMULATION_CONTROL.stop(run_id)
     except SimulationControlError as error:

@@ -3,7 +3,12 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
+
+from qbet.data import THE_ODDS_API_PROVIDER_ID
+from qbet.providers import GERMAN_JURISDICTION, ProviderStatus
 
 
 class SimulationAvailability(models.Model):
@@ -46,6 +51,13 @@ class SimulationRunState(models.Model):
         default=Decimal("0"),
     )
     report_id = models.UUIDField(null=True, blank=True)
+    initiated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="qbet_simulation_runs",
+        null=True,
+        blank=True,
+    )
     error_message = models.CharField(max_length=255, blank=True)
     started_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -113,3 +125,122 @@ class AccountVerification(models.Model):
 
     class Meta:
         db_table = "qbet_account_verification"
+
+
+class BonusOffer(models.Model):
+    """User-owned promotion terms that may feed BonusEngine preparation."""
+
+    class PromotionType(models.TextChoices):
+        QUALIFYING_BET = "qualifying_bet", "Qualifying bet"
+        FREE_BET = "free_bet", "Free bet"
+
+    class StakeReturnRule(models.TextChoices):
+        STAKE_NOT_RETURNED = "stake_not_returned", "Stake not returned"
+        STAKE_RETURNED = "stake_returned", "Stake returned"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_bonus_offers",
+    )
+    provider = models.ForeignKey(
+        "storage.SportsbookProviderRow",
+        on_delete=models.PROTECT,
+        related_name="bonus_offers",
+    )
+    name = models.CharField(max_length=160)
+    promotion_type = models.CharField(max_length=32, choices=PromotionType.choices)
+    promotion_value = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    currency = models.CharField(
+        max_length=3,
+        choices=(("EUR", "EUR"), ("GBP", "GBP"), ("USD", "USD")),
+        default="EUR",
+    )
+    required_stake = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    minimum_odds = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("1.01"))],
+    )
+    wagering_requirement = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    stake_return_rule = models.CharField(
+        max_length=32,
+        choices=StakeReturnRule.choices,
+        blank=True,
+        default="",
+    )
+    valid_until = models.DateTimeField(db_index=True)
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_bonus_offers"
+        ordering = ("valid_until", "-updated_at", "id")
+
+    @property
+    def is_expired(self) -> bool:
+        return self.valid_until <= timezone.now()
+
+    @property
+    def is_preparation_ready(self) -> bool:
+        if self.is_expired:
+            return False
+        provider = self.provider
+        if (
+            provider.status != ProviderStatus.ACTIVE.value
+            or provider.jurisdiction != GERMAN_JURISDICTION
+            or not provider.sports_betting
+            or not provider.online
+        ):
+            return False
+        if self.wagering_requirement not in (None, Decimal(0)):
+            return False
+        if self.promotion_type == self.PromotionType.QUALIFYING_BET:
+            if (
+                self.required_stake is None
+                or self.promotion_value is not None
+                or self.stake_return_rule
+            ):
+                return False
+        elif self.promotion_type == self.PromotionType.FREE_BET:
+            if (
+                self.promotion_value is None
+                or self.required_stake is not None
+                or not self.stake_return_rule
+            ):
+                return False
+        else:
+            return False
+        from qbet.storage.models import SportsbookExternalIdentityRow
+
+        return SportsbookExternalIdentityRow.objects.filter(
+            provider_id=provider.provider_id,
+            source_id=THE_ODDS_API_PROVIDER_ID,
+        ).exists()
+
+    @property
+    def status_label(self) -> str:
+        if self.is_expired:
+            return "Expired"
+        return "Active" if self.is_preparation_ready else "Unavailable"

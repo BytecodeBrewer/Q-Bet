@@ -45,7 +45,7 @@ class UserRoutingPreferenceSettingsTests(TestCase):
         self.assertRedirects(response, "/settings/presentation/")
         alice = self.preferences.load("alice")
         bob = self.preferences.load("bob")
-        self.assertFalse(alice.bonus.simulation)
+        self.assertTrue(alice.bonus.simulation)
         self.assertFalse(alice.bonus.execution)
         self.assertTrue(alice.sports_capital.simulation)
         self.assertFalse(alice.sports_capital.execution)
