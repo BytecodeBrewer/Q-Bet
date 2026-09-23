@@ -14,6 +14,8 @@ Users can persist personal `BonusEngine` / `SportsCapitalEngine` Simulation and 
 
 Engine runtime state is explicit: `Inactive` means routing is disabled, `Ready` means the engine is enabled and ready to accept work, and `Running` is reserved for durable work that is actually processing. Monitoring, engine detail, and the dashboard use the same persisted state sources and vocabulary for that distinction.
 
+Display preferences are durable per user. Language affects the supported authenticated application chrome and locale-sensitive date/number formatting. The currency setting is a non-converting preferred report/display currency: Q-Bet highlights that preference and formats known monetary values consistently, while authoritative transaction/report amounts retain their recorded currency until an explicitly approved FX presentation source exists.
+
 The current operating direction is API- and notification-first. Additional engines, broader live execution, and browser-based execution are deliberately not part of the current scope; the focus is on connecting the existing components into complete, realistic system flows and hardening those paths before expanding the product surface.
 
 > [!NOTE]
