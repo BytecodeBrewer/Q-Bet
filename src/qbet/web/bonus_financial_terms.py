@@ -49,7 +49,7 @@ class SettingsSportsbookFinancialProfileRepository:
             raise ValueError("bonus sportsbook financial profile must be an object")
         return SportsbookFinancialProfile.model_validate(
             {
-                "provider_id": str(provider_id),
                 **item,
+                "provider_id": str(provider_id),
             }
         )
