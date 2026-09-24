@@ -111,11 +111,7 @@ class BonusOfferSimulationOpportunitySource:
                 "Bonus Offer market data can only feed BonusEngine Simulation.",
             )
 
-        offer = self._active_offer()
-        provider_state = self._provider_state(offer.provider.provider_id)
-        promotion_profile = self._required_financial_profile(
-            offer.provider.provider_id
-        )
+        offers = self._active_offers()
         try:
             catalog = self._catalog_repository.load()
         except OSError:
@@ -157,6 +153,40 @@ class BonusOfferSimulationOpportunitySource:
                 "bonus_market_requires_two_outcomes",
                 "Current fixed-odds BonusEngine hedging supports two-outcome markets only.",
             )
+
+        last_market_error: SimulationOpportunitySourceError | None = None
+        for offer in offers:
+            try:
+                return self._build_offer_bundle(
+                    snapshot=snapshot,
+                    offer=offer,
+                    catalog=catalog,
+                    correlation_id=correlation_id,
+                )
+            except SimulationOpportunitySourceError as error:
+                if error.reason_code != "bonus_market_no_compatible_offer":
+                    raise
+                last_market_error = error
+
+        if last_market_error is not None:
+            raise last_market_error
+        raise _source_error(
+            "bonus_market_no_compatible_offer",
+            "No active Bonus Offer is compatible with the fresh sportsbook market.",
+        )
+
+    def _build_offer_bundle(
+        self,
+        *,
+        snapshot: NormalizedMarketSnapshot,
+        offer: BonusOffer,
+        catalog: SportsbookCatalog,
+        correlation_id: UUID,
+    ) -> SimulationOpportunityBundle:
+        provider_state = self._provider_state(offer.provider.provider_id)
+        promotion_profile = self._required_financial_profile(
+            offer.provider.provider_id
+        )
         if offer.wagering_requirement not in (None, Decimal(0)):
             raise _source_error(
                 "bonus_offer_conditions_unsupported",
@@ -235,7 +265,7 @@ class BonusOfferSimulationOpportunitySource:
             ),
         )
 
-    def _active_offer(self) -> BonusOffer:
+    def _active_offers(self) -> tuple[BonusOffer, ...]:
         active = tuple(
             BonusOffer.objects.filter(
                 user_id=self._user_id,
@@ -250,9 +280,9 @@ class BonusOfferSimulationOpportunitySource:
                 "bonus_offer_missing",
                 "Create an active Bonus Offer before starting BonusEngine Simulation.",
             )
-        for offer in active:
-            if offer.is_preparation_ready:
-                return offer
+        ready = tuple(offer for offer in active if offer.is_preparation_ready)
+        if ready:
+            return ready
         raise _source_error(
             "bonus_offer_unavailable",
             "No active Bonus Offer is currently eligible for API-backed preparation.",
