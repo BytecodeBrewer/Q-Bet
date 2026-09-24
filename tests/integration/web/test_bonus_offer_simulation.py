@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from qbet.calculations import SportsbookFreeBetInput
@@ -21,12 +21,16 @@ from qbet.data import (
     THE_ODDS_API_PROVIDER_ID,
 )
 from qbet.domain.models import OfferSide
+from qbet.domain.verification import ProviderState
 from qbet.providers import ProviderStatus, load_german_sportsbook_catalog
 from qbet.layers import SimulationLogRecordType
 from qbet.simulation import SimulationEngine, SimulationRunConfig
 from qbet.simulation.opportunity_source import SimulationOpportunitySourceError
 from qbet.storage.models import ExecutionRecordRow, SportsbookProviderRow
-from qbet.storage.postgres import PostgresSimulationReportReader
+from qbet.storage.postgres import (
+    PostgresProviderStateRepository,
+    PostgresSimulationReportReader,
+)
 from qbet.storage.providers import PostgresSportsbookCatalogRepository
 from qbet.web.bonus_offer_simulation import (
     BonusOfferSimulationConfig,
@@ -103,6 +107,12 @@ def _source(user: User, snapshot: NormalizedMarketSnapshot):
     )
 
 
+@override_settings(
+    QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS={
+        "tipico": {"fee_rate": "0", "tax_mode": "none"},
+        "winamax": {"fee_rate": "0", "tax_mode": "none"},
+    }
+)
 class BonusOfferSimulationTests(TestCase):
     def setUp(self) -> None:
         self.user = User.objects.create_user(
@@ -117,6 +127,10 @@ class BonusOfferSimulationTests(TestCase):
         )
         PostgresSportsbookCatalogRepository().replace(load_german_sportsbook_catalog())
         self.tipico = SportsbookProviderRow.objects.get(provider_id="tipico")
+        self.provider_states = PostgresProviderStateRepository()
+        self.provider_states.upsert(
+            ProviderState(provider_id="tipico", active_bets_count=0)
+        )
 
     def _qualifying_offer(self, user: User | None = None) -> BonusOffer:
         return BonusOffer.objects.create(
@@ -157,6 +171,18 @@ class BonusOfferSimulationTests(TestCase):
         records = reader.load_records(run.run_id)
         self.assertEqual(report.engine, SimulationEngine.BONUS.value)
         self.assertEqual(report.customer_report_input.provider, self.tipico.display_name)
+        self.assertEqual(
+            report.customer_report_input.invested_capital,
+            Decimal("20.00"),
+        )
+        self.assertEqual(
+            tuple(term.tax_mode for term in report.customer_report_input.financial_terms),
+            ("none", "none"),
+        )
+        self.assertEqual(
+            tuple(term.fee_rate for term in report.customer_report_input.financial_terms),
+            (Decimal("0"), Decimal("0")),
+        )
         stages = {
             record.payload.get("stage")
             for record in records
@@ -164,6 +190,59 @@ class BonusOfferSimulationTests(TestCase):
         }
         self.assertIn(WorkflowStage.DOMAIN_RISK.value, stages)
         self.assertIn(WorkflowStage.LIQUIDITY_CHECK.value, stages)
+
+    def test_persisted_provider_risk_state_rejects_connected_bonus_simulation(self) -> None:
+        self._qualifying_offer()
+        self.provider_states.upsert(
+            ProviderState(provider_id="tipico", active_bets_count=2)
+        )
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        service = SimulationControlService(opportunity_source=_source(self.user, _snapshot()))
+
+        run = service.start(
+            engine=SimulationEngine.BONUS,
+            starting_capital=Decimal("100"),
+            initiated_by=self.user,
+        )
+
+        self.assertEqual(run.status, "stopped")
+        self.assertEqual(run.current_capital, Decimal("100"))
+        self.assertEqual(ExecutionRecordRow.objects.count(), 0)
+        assert run.report_id is not None
+        records = PostgresSimulationReportReader().load_records(run.run_id)
+        risk_records = tuple(
+            record
+            for record in records
+            if record.record_type is SimulationLogRecordType.RISK_DECISION
+        )
+        self.assertTrue(risk_records)
+        self.assertEqual(
+            risk_records[-1].payload["decision_code"],
+            "provider_frequency_limit",
+        )
+
+    @override_settings(
+        QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS={
+            "tipico": {"fee_rate": "0", "tax_mode": "none"},
+        }
+    )
+    def test_missing_counterparty_financial_terms_fail_closed(self) -> None:
+        self._qualifying_offer()
+        source = _source(self.user, _snapshot())
+
+        with self.assertRaises(SimulationOpportunitySourceError) as raised:
+            source.build(
+                SimulationRunConfig(
+                    engine=SimulationEngine.BONUS,
+                    starting_capital=Decimal("100"),
+                ),
+                uuid4(),
+            )
+
+        self.assertIn(
+            raised.exception.reason_code,
+            {"bonus_financial_terms_missing", "bonus_market_no_compatible_offer"},
+        )
 
     def test_free_bet_offer_uses_fixed_odds_sportsbook_input(self) -> None:
         BonusOffer.objects.create(
