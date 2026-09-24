@@ -8,6 +8,7 @@ from .customer import CustomerReportUnavailable, CustomerResultReport
 from .models import (
     CompletedStepSummary,
     CustomerReportAmount,
+    CustomerReportFinancialTerm,
     CustomerReportInput,
     ReportDetailSelection,
     SimulationReport,
@@ -17,6 +18,7 @@ from .models import (
 __all__ = [
     "CompletedStepSummary",
     "CustomerReportAmount",
+    "CustomerReportFinancialTerm",
     "CustomerReportingCurrencySummary",
     "CustomerReportingDashboard",
     "CustomerReportingQuery",
