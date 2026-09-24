@@ -191,6 +191,59 @@ class BonusOfferSimulationTests(TestCase):
         self.assertIn(WorkflowStage.DOMAIN_RISK.value, stages)
         self.assertIn(WorkflowStage.LIQUIDITY_CHECK.value, stages)
 
+    def test_source_skips_earlier_active_offer_when_only_later_offer_matches_market(self) -> None:
+        first = BonusOffer.objects.create(
+            user=self.user,
+            provider=self.tipico,
+            name="Too-high minimum odds",
+            promotion_type=BonusOffer.PromotionType.QUALIFYING_BET,
+            currency="EUR",
+            required_stake=Decimal("10.00"),
+            minimum_odds=Decimal("9.00"),
+            valid_until=timezone.now() + timedelta(hours=1),
+        )
+        compatible = BonusOffer.objects.create(
+            user=self.user,
+            provider=self.tipico,
+            name="Compatible qualifier",
+            promotion_type=BonusOffer.PromotionType.QUALIFYING_BET,
+            currency="EUR",
+            required_stake=Decimal("10.00"),
+            minimum_odds=Decimal("2.00"),
+            valid_until=timezone.now() + timedelta(hours=2),
+        )
+        self.assertEqual(first.status_label, "Active")
+        self.assertEqual(compatible.status_label, "Active")
+
+        collector = _Collector(_snapshot())
+        source = BonusOfferSimulationOpportunitySource(
+            user_id=self.user.pk,
+            config=BonusOfferSimulationConfig(
+                sport="tennis_atp",
+                event_id="event-123",
+                market="h2h",
+                assumed_liquidity=Decimal("100"),
+                stake_precision=Decimal("0.01"),
+            ),
+            collector=collector,
+        )
+
+        bundle = source.build(
+            SimulationRunConfig(
+                engine=SimulationEngine.BONUS,
+                starting_capital=Decimal("100"),
+            ),
+            uuid4(),
+        )
+
+        self.assertEqual(collector.calls, 1)
+        self.assertEqual(len(bundle.opportunities), 1)
+        self.assertTrue(
+            bundle.opportunities[0].opportunity_id.endswith(
+                f"bonus-offer-{compatible.pk}"
+            )
+        )
+
     def test_persisted_provider_risk_state_rejects_connected_bonus_simulation(self) -> None:
         self._qualifying_offer()
         self.provider_states.upsert(
