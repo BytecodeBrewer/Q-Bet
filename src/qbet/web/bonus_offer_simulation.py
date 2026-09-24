@@ -33,6 +33,7 @@ from qbet.data import (
 from qbet.data.sports_match_builder import prepare_german_bonus_sportsbook_offers
 from qbet.domain.models import Currency, DomainModel, Identifier, PositiveDecimal
 from qbet.domain.verification import ProviderState
+from qbet.providers import SportsbookCatalog
 from qbet.engines import BonusEngineRequest
 from qbet.reporting import (
     CustomerReportAmount,
@@ -112,7 +113,9 @@ class BonusOfferSimulationOpportunitySource:
 
         offer = self._active_offer()
         provider_state = self._provider_state(offer.provider.provider_id)
-        promotion_profile = self._financial_profile(offer.provider.provider_id)
+        promotion_profile = self._required_financial_profile(
+            offer.provider.provider_id
+        )
         try:
             catalog = self._catalog_repository.load()
         except OSError:
@@ -275,31 +278,35 @@ class BonusOfferSimulationOpportunitySource:
             )
         return state
 
-    def _financial_profile(
+    def _required_financial_profile(
         self,
         provider_id: str,
-        *,
-        required: bool = True,
-    ) -> SportsbookFinancialProfile | None:
-        try:
-            profile = self._financial_profile_repository.get(provider_id)
-        except ValueError:
-            raise _source_error(
-                "bonus_financial_terms_invalid",
-                "Configured sportsbook fee/tax terms are invalid.",
-            ) from None
-        if profile is None and required:
+    ) -> SportsbookFinancialProfile:
+        profile = self._optional_financial_profile(provider_id)
+        if profile is None:
             raise _source_error(
                 "bonus_financial_terms_missing",
                 "Explicit sportsbook fee/tax terms are required for BonusEngine Simulation.",
             )
         return profile
 
+    def _optional_financial_profile(
+        self,
+        provider_id: str,
+    ) -> SportsbookFinancialProfile | None:
+        try:
+            return self._financial_profile_repository.get(provider_id)
+        except ValueError:
+            raise _source_error(
+                "bonus_financial_terms_invalid",
+                "Configured sportsbook fee/tax terms are invalid.",
+            ) from None
+
     def _select_pair(
         self,
         snapshot: NormalizedMarketSnapshot,
         offer: BonusOffer,
-        catalog,
+        catalog: SportsbookCatalog,
         promotion_profile: SportsbookFinancialProfile,
     ) -> tuple[NormalizedOffer, NormalizedOffer, SportsbookFinancialProfile]:
         canonical: list[tuple[NormalizedOffer, NormalizedOffer]] = []
@@ -321,6 +328,7 @@ class BonusOfferSimulationOpportunitySource:
             and pair[1].currency == offer.currency
             and (minimum_odds is None or pair[1].odds >= minimum_odds)
         ]
+        missing_financial_terms = False
         candidate_pairs: list[
             tuple[
                 NormalizedOffer,
@@ -337,11 +345,12 @@ class BonusOfferSimulationOpportunitySource:
                     and hedge.provider != promotion.provider
                     and hedge.currency == promotion.currency
                 ):
-                    hedge_profile = self._financial_profile(
-                        hedge.provider,
-                        required=False,
+                    hedge_profile = self._optional_financial_profile(
+                        hedge.provider
                     )
-                    if hedge_profile is not None:
+                    if hedge_profile is None:
+                        missing_financial_terms = True
+                    else:
                         candidate_pairs.append(
                             (
                                 raw_promotion,
@@ -352,9 +361,14 @@ class BonusOfferSimulationOpportunitySource:
                             )
                         )
         if not candidate_pairs:
+            if missing_financial_terms:
+                raise _source_error(
+                    "bonus_financial_terms_missing",
+                    "Explicit fee/tax terms are missing for compatible opposing sportsbooks.",
+                )
             raise _source_error(
                 "bonus_market_no_compatible_offer",
-                "No fresh opposing sportsbook offer with explicit financial terms is compatible with this Bonus Offer.",
+                "No fresh opposing sportsbook offer is compatible with this Bonus Offer.",
             )
         selected = max(
             candidate_pairs,
@@ -470,7 +484,7 @@ def _report_financial_term(
     )
 
 
-def _provider_display_name(catalog, provider_id: str) -> str:
+def _provider_display_name(catalog: SportsbookCatalog, provider_id: str) -> str:
     try:
         return next(
             provider.display_name
