@@ -8,7 +8,11 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from qbet.reporting.models import CustomerReportAmount, SimulationReport
+from qbet.reporting.models import (
+    CustomerReportAmount,
+    CustomerReportFinancialTerm,
+    SimulationReport,
+)
 from qbet.simulation.models import SimulationStatus
 
 
@@ -28,6 +32,7 @@ class CustomerResultReport:
     engine: str
     strategy: str
     assigned_amounts: tuple[CustomerReportAmount, ...]
+    financial_terms: tuple[CustomerReportFinancialTerm, ...]
     invested_capital: Decimal
     result_state: str
     profit_loss: Decimal
@@ -58,6 +63,7 @@ class CustomerResultReport:
             engine=str(report.engine),
             strategy=business.strategy,
             assigned_amounts=business.assigned_amounts,
+            financial_terms=business.financial_terms,
             invested_capital=business.invested_capital,
             result_state=business.result_state,
             profit_loss=report.profit_loss,
