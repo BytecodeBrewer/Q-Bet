@@ -269,6 +269,41 @@ class BonusOfferSimulationTests(TestCase):
         self.assertEqual(len(bundle.opportunities), 1)
         request = bundle.opportunities[0]
         self.assertIsInstance(request.inputs, SportsbookFreeBetInput)
+        self.assertEqual(
+            bundle.customer_report_input.invested_capital,
+            Decimal("6.00"),
+        )
+        self.assertEqual(
+            tuple(
+                (amount.label, amount.amount)
+                for amount in bundle.customer_report_input.assigned_amounts
+            ),
+            (
+                ("Promotion amount", Decimal("10.00")),
+                ("Cash hedge stake", Decimal("6.00")),
+            ),
+        )
+
+    def test_missing_provider_state_fails_closed_before_market_calculation(self) -> None:
+        self._qualifying_offer()
+        from qbet.storage.models import ProviderStateRow
+
+        ProviderStateRow.objects.filter(provider_id="tipico").delete()
+        source = _source(self.user, _snapshot())
+
+        with self.assertRaises(SimulationOpportunitySourceError) as raised:
+            source.build(
+                SimulationRunConfig(
+                    engine=SimulationEngine.BONUS,
+                    starting_capital=Decimal("100"),
+                ),
+                uuid4(),
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "bonus_provider_state_unavailable",
+        )
 
     def test_ineligible_provider_offer_is_unavailable_and_fails_closed(self) -> None:
         offer = self._qualifying_offer()
