@@ -354,3 +354,96 @@ body.sidebar-collapsed .app-sidebar { display: none; }
   .provider-activity { align-items: flex-start; }
   .topbar-account { flex-wrap: wrap; }
 }
+
+
+/* Bonus Offer intake */
+.topbar-add { position: relative; }
+.topbar-add > .topbar-action { font: inherit; cursor: pointer; }
+.topbar-menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 60;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.topbar-menu[hidden] { display: none; }
+.topbar-menu a, .topbar-menu button {
+  width: 100%;
+  display: block;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+}
+.topbar-menu a:hover, .topbar-menu button:hover,
+.topbar-menu a:focus-visible, .topbar-menu button:focus-visible {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.bonus-offer-dialog {
+  width: min(680px, calc(100vw - 28px));
+  max-height: min(86dvh, 820px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.bonus-offer-dialog::backdrop { background: rgba(15, 23, 42, .46); }
+.bonus-offer-form { padding: 22px; overflow-y: auto; max-height: inherit; }
+.bonus-offer-dialog-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
+.bonus-offer-dialog-heading p { margin: 4px 0 0; color: var(--muted); }
+.bonus-offer-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.bonus-offer-fields .full-width { grid-column: 1 / -1; }
+.bonus-offer-field { display: grid; gap: 6px; }
+.bonus-offer-field input, .bonus-offer-field select, .bonus-offer-field textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font: inherit;
+}
+.bonus-offer-field textarea { min-height: 88px; resize: vertical; }
+.bonus-offer-field .errorlist { margin: 0; padding-left: 18px; color: var(--danger); font-size: .9em; }
+.bonus-offer-strategy-fields { display: contents; }
+.bonus-offer-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.bonus-offer-actions .secondary-button {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 14px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.bonus-offer-list { display: grid; gap: 12px; }
+.bonus-offer-row { padding: 16px 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.bonus-offer-row-header { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+.bonus-offer-row-meta { display: flex; gap: 8px 16px; flex-wrap: wrap; margin-top: 10px; color: var(--muted); font-size: .92em; }
+.bonus-offer-status { display: inline-flex; padding: 4px 8px; border-radius: 999px; font-size: .78em; font-weight: 700; }
+.bonus-offer-status-active { background: #e8f4ec; color: #256545; }
+.bonus-offer-status-expired { background: var(--surface-muted); color: var(--muted); }
+.bonus-offer-status-unavailable { background: #fff3d7; color: #7b510f; }
+body[data-theme="dark"] .bonus-offer-status-active { background: #264238; color: #8ed4ac; }
+body[data-theme="dark"] .bonus-offer-status-unavailable { background: #493b21; color: #f0c67d; }
+@media (max-width: 700px) {
+  .topbar-add { flex: 1; }
+  .topbar-add > .topbar-action { width: 100%; justify-content: center; }
+  .topbar-menu { left: 0; right: 0; min-width: 0; }
+  .bonus-offer-fields { grid-template-columns: 1fr; }
+  .bonus-offer-fields .full-width { grid-column: auto; }
+  .bonus-offer-dialog-heading, .bonus-offer-row-header { flex-direction: column; }
+}

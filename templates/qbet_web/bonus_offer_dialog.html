@@ -1,0 +1,83 @@
+<dialog id="bonus-offer-dialog" class="bonus-offer-dialog" data-bonus-offer-dialog{% if bonus_offer_dialog_open %} data-open="true"{% endif %}>
+  <form class="bonus-offer-form" method="post" action="{% url 'bonus-offer-create' %}" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="return_to" value="{{ request.get_full_path }}">
+    <div class="bonus-offer-dialog-heading">
+      <div>
+        <span class="eyebrow">BonusEngine input</span>
+        <h2>New Bonus Offer</h2>
+        <p>Record promotion terms only. Match, market and quotation data remain API-owned.</p>
+      </div>
+      <button class="text-button" type="button" data-bonus-offer-dialog-close aria-label="Close Bonus Offer dialog">Close</button>
+    </div>
+    {{ bonus_offer_form.non_field_errors }}
+    <div class="bonus-offer-fields">
+      <label class="bonus-offer-field">
+        <span>{{ bonus_offer_form.provider.label }}</span>
+        {{ bonus_offer_form.provider }}
+        {{ bonus_offer_form.provider.errors }}
+      </label>
+      <label class="bonus-offer-field">
+        <span>{{ bonus_offer_form.name.label }}</span>
+        {{ bonus_offer_form.name }}
+        {{ bonus_offer_form.name.errors }}
+      </label>
+      <label class="bonus-offer-field">
+        <span>{{ bonus_offer_form.promotion_type.label }}</span>
+        {{ bonus_offer_form.promotion_type }}
+        {{ bonus_offer_form.promotion_type.errors }}
+      </label>
+      <label class="bonus-offer-field">
+        <span>{{ bonus_offer_form.currency.label }}</span>
+        {{ bonus_offer_form.currency }}
+        {{ bonus_offer_form.currency.errors }}
+      </label>
+
+      <div class="bonus-offer-strategy-fields" data-bonus-offer-strategy="qualifying_bet">
+        <label class="bonus-offer-field">
+          <span>{{ bonus_offer_form.required_stake.label }}</span>
+          {{ bonus_offer_form.required_stake }}
+          {{ bonus_offer_form.required_stake.errors }}
+        </label>
+      </div>
+
+      <div class="bonus-offer-strategy-fields" data-bonus-offer-strategy="free_bet">
+        <label class="bonus-offer-field">
+          <span>{{ bonus_offer_form.promotion_value.label }}</span>
+          {{ bonus_offer_form.promotion_value }}
+          {{ bonus_offer_form.promotion_value.errors }}
+        </label>
+        <label class="bonus-offer-field">
+          <span>{{ bonus_offer_form.stake_return_rule.label }}</span>
+          {{ bonus_offer_form.stake_return_rule }}
+          {{ bonus_offer_form.stake_return_rule.errors }}
+        </label>
+      </div>
+
+      <label class="bonus-offer-field">
+        <span>{{ bonus_offer_form.minimum_odds.label }}</span>
+        {{ bonus_offer_form.minimum_odds }}
+        {{ bonus_offer_form.minimum_odds.errors }}
+      </label>
+      <label class="bonus-offer-field">
+        <span>{{ bonus_offer_form.wagering_requirement.label }}</span>
+        {{ bonus_offer_form.wagering_requirement }}
+        {{ bonus_offer_form.wagering_requirement.errors }}
+      </label>
+      <label class="bonus-offer-field">
+        <span>{{ bonus_offer_form.valid_until.label }}</span>
+        {{ bonus_offer_form.valid_until }}
+        {{ bonus_offer_form.valid_until.errors }}
+      </label>
+      <label class="bonus-offer-field full-width">
+        <span>{{ bonus_offer_form.notes.label }}</span>
+        {{ bonus_offer_form.notes }}
+        {{ bonus_offer_form.notes.errors }}
+      </label>
+    </div>
+    <div class="bonus-offer-actions">
+      <button class="secondary-button" type="button" data-bonus-offer-dialog-close>Cancel</button>
+      <button class="primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>

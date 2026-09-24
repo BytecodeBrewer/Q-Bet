@@ -18,6 +18,7 @@
   <script src="{% static 'qbet_web/navigation.js' %}" defer></script>
   <script src="{% static 'qbet_web/downloads.js' %}" defer></script>
   <script src="{% static 'qbet_web/simulation.js' %}" defer></script>
+  <script src="{% static 'qbet_web/bonus_offers.js' %}" defer></script>
 </head>
 <body data-theme="{{ preferences.theme|default:'light' }}" data-font-size="{{ preferences.font_size|default:'medium' }}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -30,6 +31,15 @@
         <span class="brand-mark" aria-hidden="true">Q</span><span>Q-Bet</span>
       </a>
       <nav class="topbar-actions" aria-label="Work actions">
+        <div class="topbar-add" data-bonus-offer-menu>
+          <button class="topbar-action" type="button" data-bonus-offer-menu-toggle aria-haspopup="menu" aria-expanded="false">
+            <span aria-hidden="true">＋</span><span>Add</span>
+          </button>
+          <div class="topbar-menu" data-bonus-offer-menu-panel role="menu" hidden>
+            <button type="button" role="menuitem" data-bonus-offer-dialog-open>New Bonus Offer</button>
+            <a role="menuitem" href="{% url 'bonus-offer-list' %}">Bonus Offer List</a>
+          </div>
+        </div>
         <a class="topbar-action" href="{% url 'notification-inbox' %}"{% if request.resolver_match.url_name == 'notification-inbox' %} aria-current="page"{% endif %}>
           {{ ui.notifications }}{% if notification_unread_count %}<span class="nav-count">{{ notification_unread_count }}</span>{% endif %}
         </a>
@@ -42,6 +52,7 @@
         <span>{{ user.get_username }}</span><a href="{% url 'profile' %}">{{ ui.profile }}</a>
       </div>
     </header>
+    {% include "qbet_web/bonus_offer_dialog.html" %}
 
     <div class="app-shell">
       <aside id="app-sidebar" class="app-sidebar">

@@ -38,6 +38,15 @@ class CustomerReportAmount(DomainModel):
     amount: Decimal = Field(ge=Decimal(0), allow_inf_nan=False)
 
 
+class CustomerReportFinancialTerm(DomainModel):
+    """One explicit provider fee/tax profile recorded with the business result."""
+
+    provider: str = Field(min_length=1, max_length=120)
+    fee_rate: Decimal = Field(ge=Decimal(0), lt=Decimal(1), allow_inf_nan=False)
+    tax_mode: Literal["stake", "profit", "none"]
+    tax_rate: Decimal = Field(ge=Decimal(0), lt=Decimal(1), allow_inf_nan=False)
+
+
 class CustomerReportInput(DomainModel):
     """Business data required before a completed result can become a customer report."""
 
@@ -46,6 +55,7 @@ class CustomerReportInput(DomainModel):
     counterparty_provider: str = Field(min_length=1, max_length=120)
     strategy: str = Field(min_length=1, max_length=120)
     assigned_amounts: tuple[CustomerReportAmount, ...] = Field(min_length=1)
+    financial_terms: tuple[CustomerReportFinancialTerm, ...] = ()
     invested_capital: Decimal = Field(gt=Decimal(0), allow_inf_nan=False)
     result_state: Literal["completed"] = "completed"
     currency: str = Field(pattern=r"^[A-Z]{3}$")

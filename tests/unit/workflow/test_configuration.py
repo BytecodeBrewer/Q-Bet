@@ -56,7 +56,7 @@ def test_static_and_dynamic_routing_configuration_are_mutually_exclusive() -> No
         )
 
 
-def test_connected_product_routing_masks_unconnected_bonus_without_mutating_source() -> None:
+def test_connected_product_routing_keeps_bonus_simulation_and_masks_execution() -> None:
     source = RoutingConfiguration(
         bonus=EngineModes(simulation=True, execution=True),
         sports_capital=EngineModes(simulation=True),
@@ -65,7 +65,11 @@ def test_connected_product_routing_masks_unconnected_bonus_without_mutating_sour
     projected = connected_product_routing_configuration(source)
 
     assert projected is not None
-    assert projected.bonus == EngineModes()
+    assert projected.bonus == EngineModes(
+        simulation=True,
+        execution=False,
+        execution_sandbox=False,
+    )
     assert projected.sports_capital == source.sports_capital
     assert source.bonus.simulation
     assert source.bonus.execution

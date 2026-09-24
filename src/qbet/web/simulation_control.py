@@ -6,6 +6,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone
@@ -30,6 +31,10 @@ from qbet.simulation.opportunity_source import (
 from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
+from qbet.web.bonus_offer_simulation import (
+    BonusOfferSimulationConfig,
+    BonusOfferSimulationOpportunitySource,
+)
 from qbet.web.models import SimulationAvailability, SimulationRunState
 
 _ACTIVE_STATUSES = (
@@ -165,6 +170,7 @@ class SimulationControlService:
         *,
         engine: SimulationEngine,
         starting_capital: Decimal,
+        initiated_by: User | None = None,
     ) -> SimulationRunSnapshot:
         """Persist a visible running lifecycle before the synchronous worker request starts."""
 
@@ -193,6 +199,7 @@ class SimulationControlService:
                     status=SimulationRunState.Status.RUNNING,
                     progress=Decimal("0"),
                     current_capital=starting_capital,
+                    initiated_by=initiated_by,
                 )
         except (SimulationDisabledError, SimulationAlreadyRunningError):
             raise
@@ -270,7 +277,10 @@ class SimulationControlService:
             return self._snapshot(run_id)
 
         try:
-            source = self._opportunity_source or self._configured_opportunity_source(engine)
+            source = self._opportunity_source or self._configured_opportunity_source(
+                engine,
+                user_id=(row.initiated_by.pk if row.initiated_by is not None else None),
+            )
             bundle = source.build(effective_config, run_id)
             if self._stop_requested(run_id):
                 return self._snapshot(run_id)
@@ -367,10 +377,15 @@ class SimulationControlService:
         engine: SimulationEngine,
         starting_capital: Decimal,
         max_duration: timedelta = _DEFAULT_MAX_DURATION,
+        initiated_by: User | None = None,
     ) -> SimulationRunSnapshot:
         """Backward-compatible synchronous API used outside the interactive GUI."""
 
-        run = self.begin(engine=engine, starting_capital=starting_capital)
+        run = self.begin(
+            engine=engine,
+            starting_capital=starting_capital,
+            initiated_by=initiated_by,
+        )
         return self.run(run.run_id, max_duration=max_duration)
 
     def has_active_runs(self) -> bool:
@@ -458,16 +473,52 @@ class SimulationControlService:
     @staticmethod
     def _configured_opportunity_source(
         engine: SimulationEngine,
+        *,
+        user_id: int | None = None,
     ) -> SimulationOpportunitySource:
-        if engine is SimulationEngine.BONUS:
-            raise SimulationControlError(
-                "BonusEngine provider-backed Simulation is not connected yet.",
-                reason_code="bonus_provider_path_not_connected",
-            )
-
         source_mode = str(
             getattr(settings, "QBET_SIMULATION_SPORTS_SOURCE", "fixture")
         ).strip().lower()
+
+        if engine is SimulationEngine.BONUS:
+            if user_id is None:
+                raise SimulationControlError(
+                    "BonusEngine Simulation requires an authenticated run owner.",
+                    reason_code="bonus_offer_user_missing",
+                )
+            if source_mode != "the_odds_api":
+                raise SimulationControlError(
+                    "BonusEngine Simulation requires the configured API market source.",
+                    reason_code="bonus_market_configuration_missing",
+                )
+            values = {
+                "sport": getattr(settings, "QBET_SIMULATION_ODDS_SPORT", ""),
+                "event_id": getattr(settings, "QBET_SIMULATION_ODDS_EVENT_ID", ""),
+                "market": getattr(settings, "QBET_SIMULATION_ODDS_MARKET", ""),
+                "assumed_liquidity": getattr(
+                    settings, "QBET_SIMULATION_ASSUMED_LIQUIDITY", ""
+                ),
+                "stake_precision": getattr(
+                    settings, "QBET_SIMULATION_STAKE_PRECISION", ""
+                ),
+            }
+            if any(not str(value).strip() for value in values.values()):
+                raise SimulationControlError(
+                    "Connected BonusEngine Simulation is not fully configured.",
+                    reason_code="bonus_market_configuration_missing",
+                )
+            try:
+                bonus_config = BonusOfferSimulationConfig.model_validate(values)
+            except ValidationError:
+                raise SimulationControlError(
+                    "Connected BonusEngine Simulation configuration is invalid.",
+                    reason_code="bonus_market_configuration_invalid",
+                ) from None
+            return BonusOfferSimulationOpportunitySource(
+                user_id=user_id,
+                config=bonus_config,
+            )
+
         if source_mode in {"", "fixture"}:
             return DeterministicSimulationOpportunitySource()
         if source_mode != "the_odds_api":

@@ -12,6 +12,8 @@ from qbet.calculations import (
     DutchingResult,
     FreeBetResult,
     QualifyingBetResult,
+    SportsbookFreeBetResult,
+    SportsbookQualifyingBetResult,
     TwoWayArbitrageResult,
 )
 from qbet.domain.models import (
@@ -78,7 +80,12 @@ class SimulationRunConfig(DomainModel):
 
 
 type SimulationCalculationResult = (
-    QualifyingBetResult | FreeBetResult | TwoWayArbitrageResult | DutchingResult
+    QualifyingBetResult
+    | FreeBetResult
+    | SportsbookQualifyingBetResult
+    | SportsbookFreeBetResult
+    | TwoWayArbitrageResult
+    | DutchingResult
 )
 
 

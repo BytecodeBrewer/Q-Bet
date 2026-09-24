@@ -28,7 +28,7 @@
 
   <section class="detail-panel">
     <h2>Start simulation</h2>
-    <p class="muted">SportsCapital can run through the current Simulation source. BonusEngine remains unavailable until its promotion-aware fixed-odds sportsbook provider path is connected. Choose virtual starting capital; it remains inside the Simulation ledger and sandbox boundary. {% currency_preference_note "EUR" display_preferences %}</p>
+    <p class="muted">SportsCapital and BonusEngine use their configured Simulation market sources. BonusEngine combines your active promotion terms with fresh fixed-odds sportsbook data. Choose virtual starting capital; it remains inside the Simulation ledger and sandbox boundary. {% currency_preference_note "EUR" display_preferences %}</p>
     <form method="post" action="{% url 'simulation-start' %}">
       {% csrf_token %}
       {{ start_form.non_field_errors }}

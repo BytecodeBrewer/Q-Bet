@@ -139,7 +139,7 @@ class SimulationGuiControlTests(TestCase):
         self.assertContains(response, "<dt>Running / pending</dt><dd>1 / 0</dd>", html=True)
         self.assertContains(
             response,
-            "BonusEngine remains unavailable until its promotion-aware fixed-odds sportsbook provider path is connected.",
+            "BonusEngine combines your active promotion terms with fresh fixed-odds sportsbook data.",
         )
 
     def test_simulation_surface_uses_display_preferences_without_fx_relabeling(self) -> None:
@@ -185,7 +185,7 @@ class SimulationGuiControlTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(SimulationAvailability.objects.get(pk=1).enabled)
 
-    def test_product_simulation_form_exposes_only_connected_sports_capital(self) -> None:
+    def test_product_simulation_form_exposes_connected_bonus_and_sports_capital(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.staff)
 
@@ -201,20 +201,20 @@ class SimulationGuiControlTests(TestCase):
         self.assertContains(
             response,
             '<option value="bonus">BonusEngine</option>',
-            count=1,
+            count=2,
             html=True,
         )
         self.assertContains(response, "Pipeline dry-run")
         self.assertContains(
             response,
-            "BonusEngine remains unavailable until its promotion-aware fixed-odds sportsbook provider path is connected.",
+            "BonusEngine combines your active promotion terms with fresh fixed-odds sportsbook data.",
         )
         self.assertContains(
             response,
-            "BonusEngine remains unavailable until its promotion-aware fixed-odds sportsbook provider path is connected.",
+            "BonusEngine combines your active promotion terms with fresh fixed-odds sportsbook data.",
         )
 
-    def test_forged_bonus_gui_start_is_rejected_without_creating_run(self) -> None:
+    def test_bonus_gui_start_records_authenticated_run_owner(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         RoutingConfigurationRepository().save(
             RoutingConfiguration(bonus=EngineModes(simulation=True))
@@ -230,8 +230,10 @@ class SimulationGuiControlTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(SimulationRunState.objects.exists())
+        self.assertEqual(response.status_code, 302)
+        run = SimulationRunState.objects.get()
+        self.assertEqual(run.engine, SimulationEngine.BONUS.value)
+        self.assertEqual(run.initiated_by, self.staff)
 
 
     def test_normal_user_cannot_start_simulation_even_when_enabled(self) -> None:
@@ -463,7 +465,7 @@ class SimulationGuiControlTests(TestCase):
         self.assertEqual(sports.live_state, "ready")
         self.assertEqual(sports.total_activity, 1)
 
-    def test_default_bonus_simulation_fails_closed_until_provider_path_exists(self) -> None:
+    def test_default_bonus_simulation_fails_closed_without_run_owner(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         service = SimulationControlService()
 
@@ -476,11 +478,11 @@ class SimulationGuiControlTests(TestCase):
 
         self.assertEqual(
             raised.exception.reason_code,
-            "bonus_provider_path_not_connected",
+            "bonus_offer_user_missing",
         )
         run = SimulationRunState.objects.get()
         self.assertEqual(run.status, SimulationRunState.Status.FAILED)
-        self.assertEqual(run.error_message, "bonus_provider_path_not_connected")
+        self.assertEqual(run.error_message, "bonus_offer_user_missing")
 
     def test_control_service_runs_current_sports_capital_engine(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)

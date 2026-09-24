@@ -5,7 +5,11 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Protocol
 
-from qbet.calculations import QualifyingBetInput, TwoWayArbitrageInput
+from qbet.calculations import (
+    QualifyingBetInput,
+    SportsbookQualifyingBetInput,
+    TwoWayArbitrageInput,
+)
 from qbet.engines import (
     BonusEngine,
     BonusEngineEvaluation,
@@ -105,7 +109,11 @@ def _ensure_engine(config: SimulationRunConfig, engine: SimulationEngine) -> Non
 
 
 def _bonus_strategy_id(request: BonusEngineRequest) -> str:
-    return "qualifying_bet" if isinstance(request.inputs, QualifyingBetInput) else "free_bet"
+    return (
+        "qualifying_bet"
+        if isinstance(request.inputs, (QualifyingBetInput, SportsbookQualifyingBetInput))
+        else "free_bet"
+    )
 
 
 def _sports_capital_strategy_id(request: SportsCapitalEngineRequest) -> str:

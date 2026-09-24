@@ -124,7 +124,7 @@ class StoredRoutingDispatchTests(TestCase):
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
 
-    def test_default_product_coordinator_masks_stale_persisted_bonus_routes(self) -> None:
+    def test_default_product_coordinator_keeps_bonus_simulation_and_masks_execution(self) -> None:
         RoutingConfigurationRepository().save(
             RoutingConfiguration(
                 bonus=EngineModes(simulation=True, execution=True),
@@ -146,8 +146,9 @@ class StoredRoutingDispatchTests(TestCase):
             expires_at=NOW + timedelta(minutes=5),
         )
 
-        self.assertEqual(scheduled, ())
-        self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
+        self.assertEqual(len(scheduled), 1)
+        self.assertEqual(scheduled[0].work.mode, WorkflowMode.SIMULATION)
+        self.assertEqual(ModeWorkQueueRow.objects.count(), 1)
         persisted = RoutingConfigurationRepository().load()
         assert persisted is not None
         self.assertTrue(persisted.bonus.simulation)

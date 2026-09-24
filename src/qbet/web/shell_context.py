@@ -29,6 +29,10 @@ def shell_context(request: HttpRequest) -> dict[str, object]:
         "display_preferences": display_preferences,
         "ui": ui_copy(display_preferences.language),
     }
+    if request.user.is_authenticated:
+        from qbet.web.bonus_offers import bonus_offer_shell_context
+
+        context.update(bonus_offer_shell_context(request))
     setattr(request, "_qbet_shell_context", context)
     return context
 
