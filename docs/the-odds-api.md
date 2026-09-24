@@ -49,6 +49,22 @@ Set `QBET_SIMULATION_SPORTS_SOURCE=the_odds_api` to enable the connected source.
 The API credential remains `QBET_THE_ODDS_API_KEY` and must stay in the environment/deployment secret boundary. Connected Simulation never logs the key, a credential-bearing URL, or raw provider payload. Provider failures are mapped to stable Simulation reason codes and normal tests inject offline collectors/transports.
 
 
+### Connected BonusEngine financial/risk inputs
+
+BonusEngine Simulation uses the same configured event/market source, but promotion metadata remains user-owned and separate from market quotations. A connected BonusEngine run also requires:
+
+- persisted provider/account risk state for the selected canonical promotion sportsbook;
+- explicit provider-specific financial terms through `QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS`.
+
+The financial-terms value is a JSON provider mapping keyed by canonical sportsbook id. Each entry declares `fee_rate` as a decimal fraction and `tax_mode` as `none`, `stake`, or `profit`. The German `stake` / `profit` tax modes use the project-standard 5.3 percent rate.
+
+Example:
+
+    $env:QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS='{"tipico":{"fee_rate":"0","tax_mode":"none"},"winamax":{"fee_rate":"0.01","tax_mode":"profit"}}'
+
+Missing or invalid provider state and missing fee/tax terms fail closed. Q-Bet does not assume zero fees, zero tax, or a healthy sportsbook account when those decision-critical inputs are unavailable.
+
+
 ## Post-Event Scores And Settlement
 
 The Odds API v4 scores endpoint is the first connected post-event result source. Result collection remains separate from pre-execution RequestHandler revalidation:
