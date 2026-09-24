@@ -232,12 +232,27 @@ class BonusOffer(models.Model):
                 return False
         else:
             return False
-        from qbet.storage.models import SportsbookExternalIdentityRow
+        from qbet.storage.models import ProviderStateRow, SportsbookExternalIdentityRow
+        from qbet.web.bonus_financial_terms import (
+            SettingsSportsbookFinancialProfileRepository,
+        )
 
-        return SportsbookExternalIdentityRow.objects.filter(
+        if not SportsbookExternalIdentityRow.objects.filter(
             provider_id=provider.provider_id,
             source_id=THE_ODDS_API_PROVIDER_ID,
-        ).exists()
+        ).exists():
+            return False
+        if not ProviderStateRow.objects.filter(provider_id=provider.provider_id).exists():
+            return False
+        try:
+            return (
+                SettingsSportsbookFinancialProfileRepository().get(
+                    provider.provider_id
+                )
+                is not None
+            )
+        except ValueError:
+            return False
 
     @property
     def status_label(self) -> str:
