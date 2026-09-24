@@ -49,6 +49,15 @@ class CustomerReportExport:
                 {"label": amount.label, "amount": str(amount.amount)}
                 for amount in self.report.assigned_amounts
             ],
+            "financial_terms": [
+                {
+                    "provider": term.provider,
+                    "fee_rate": str(term.fee_rate),
+                    "tax_mode": term.tax_mode,
+                    "tax_rate": str(term.tax_rate),
+                }
+                for term in self.report.financial_terms
+            ],
             "invested_capital": str(self.report.invested_capital),
             "profit_loss": str(self.report.profit_loss),
             "current_capital": str(self.report.current_capital),
@@ -82,7 +91,14 @@ class CustomerReportExport:
             (f"assigned_amount.{index + 1}.{amount.label}", str(amount.amount))
             for index, amount in enumerate(self.report.assigned_amounts)
         )
-        return rows + amount_rows
+        financial_rows = tuple(
+            (
+                f"financial_term.{index + 1}.{term.provider}",
+                f"fee_rate={term.fee_rate};tax_mode={term.tax_mode};tax_rate={term.tax_rate}",
+            )
+            for index, term in enumerate(self.report.financial_terms)
+        )
+        return rows + amount_rows + financial_rows
 
     def pdf_document(self) -> bytes:
         """Create a compact, dependency-free PDF from the typed business projection."""
@@ -100,6 +116,10 @@ class CustomerReportExport:
             *(
                 f"Assigned amount - {amount.label}: {_money(amount.amount, self.report.currency)}"
                 for amount in self.report.assigned_amounts
+            ),
+            *(
+                f"Financial terms - {term.provider}: fee {term.fee_rate}, tax {term.tax_mode} ({term.tax_rate})"
+                for term in self.report.financial_terms
             ),
             f"Result: {self.report.result_state}",
             f"Profit/loss: {_money(self.report.profit_loss, self.report.currency)}",
