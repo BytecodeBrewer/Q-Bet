@@ -8,6 +8,7 @@ import pytest
 
 from qbet.reporting import (
     CustomerReportAmount,
+    CustomerReportFinancialTerm,
     CustomerReportInput,
     CustomerReportUnavailable,
     CustomerResultReport,
@@ -50,6 +51,14 @@ def _customer_input() -> CustomerReportInput:
             CustomerReportAmount(label="Back stake", amount=Decimal("50")),
             CustomerReportAmount(label="Lay stake", amount=Decimal("48.25")),
         ),
+        financial_terms=(
+            CustomerReportFinancialTerm(
+                provider="Bookmaker A",
+                fee_rate=Decimal("0.01"),
+                tax_mode="stake",
+                tax_rate=Decimal("0.053"),
+            ),
+        ),
         invested_capital=Decimal("50"),
         currency="EUR",
         transaction_id="result-2026-09-05-001",
@@ -67,6 +76,7 @@ def test_completed_simulation_projects_a_business_only_customer_report() -> None
     assert report.counterparty_provider == "Exchange B"
     assert report.strategy == "Qualifying bet"
     assert report.invested_capital == Decimal("50")
+    assert report.financial_terms[0].tax_mode == "stake"
     assert report.profit_loss == Decimal("12.50")
     assert report.transaction_id == "result-2026-09-05-001"
     assert not hasattr(report, "events")
@@ -108,6 +118,12 @@ def test_customer_exports_share_business_data_and_exclude_technical_metadata() -
     assert document["mode"] == "simulation"
     assert document["providers"] == {"primary": "Bookmaker A", "counterparty": "Exchange B"}
     assert document["assigned_amounts"][0] == {"label": "Back stake", "amount": "50"}
+    assert document["financial_terms"][0] == {
+        "provider": "Bookmaker A",
+        "fee_rate": "0.01",
+        "tax_mode": "stake",
+        "tax_rate": "0.053",
+    }
     assert set(document).isdisjoint(
         {"events", "session_id", "pipeline_step", "correlation_id", "adapter", "logs"}
     )
