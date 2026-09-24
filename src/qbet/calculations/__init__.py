@@ -15,10 +15,13 @@ from .free_bet import (
     calculate_free_bet,
 )
 from .fixed_odds_bonus import (
+    GERMAN_BETTING_TAX_RATE,
     SportsbookFreeBetInput,
     SportsbookFreeBetResult,
     SportsbookQualifyingBetInput,
     SportsbookQualifyingBetResult,
+    SportsbookTaxMode,
+    SportsbookTaxTreatment,
     calculate_sportsbook_free_bet,
     calculate_sportsbook_qualifying_bet,
 )
@@ -42,6 +45,7 @@ __all__ = [
     "DutchingResult",
     "DutchingTargetMode",
     "FreeBetInput",
+    "GERMAN_BETTING_TAX_RATE",
     "FreeBetResult",
     "FreeBetStakeReturn",
     "QualifyingBetInput",
@@ -50,6 +54,8 @@ __all__ = [
     "SportsbookFreeBetResult",
     "SportsbookQualifyingBetInput",
     "SportsbookQualifyingBetResult",
+    "SportsbookTaxMode",
+    "SportsbookTaxTreatment",
     "TwoWayArbitrageInput",
     "TwoWayArbitrageResult",
     "calculate_dutching",
