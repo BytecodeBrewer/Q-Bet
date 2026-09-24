@@ -239,9 +239,9 @@ class BonusOfferSimulationTests(TestCase):
                 uuid4(),
             )
 
-        self.assertIn(
+        self.assertEqual(
             raised.exception.reason_code,
-            {"bonus_financial_terms_missing", "bonus_market_no_compatible_offer"},
+            "bonus_financial_terms_missing",
         )
 
     def test_free_bet_offer_uses_fixed_odds_sportsbook_input(self) -> None:
