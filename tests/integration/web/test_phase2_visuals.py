@@ -23,66 +23,65 @@ class Phase2VisualIntegrationTests(TestCase):
             is_staff=True,
         )
 
-    def test_public_home_is_presentation_first_and_contains_animated_flow(self) -> None:
+    def test_public_home_explains_multi_engine_product_and_shared_protection(self) -> None:
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Turn market opportunities into controlled decisions.")
-        self.assertContains(response, "Q-Bet opportunity pipeline")
-        self.assertContains(response, "Data Providers")
-        self.assertContains(response, "Odds APIs")
-        self.assertContains(response, "Result APIs")
-        self.assertContains(response, "Market APIs")
-        self.assertContains(response, 'data-flow-station="aggregation"')
-        self.assertContains(response, 'data-flow-station="builder"')
-        self.assertContains(response, 'data-flow-station="engine"')
-        self.assertContains(response, 'data-flow-station="risk"')
-        self.assertContains(response, 'data-flow-station="liquidity"')
-        self.assertContains(response, 'data-flow-station="ledger"')
-        self.assertContains(response, 'data-flow-station="bank"')
-        self.assertContains(response, 'data-flow-station="execution"')
-        self.assertContains(response, 'id="flow-main-path"')
-        self.assertContains(response, 'd="M56 210 H190 H330 H470 H610 H760 H930"')
-        self.assertContains(response, 'id="flow-capital-path"')
-        self.assertContains(response, "data-flow-packet", count=7)
         self.assertContains(
             response,
-            'data-flow-pulse="aggregation:.15,builder:.31,engine:.47,risk:.63,liquidity:.81,execution:1"',
+            "Separate strategies. One protected path from data to decision.",
         )
-        self.assertContains(response, 'data-flow-pulse="bank:0,ledger:.42,liquidity:1"')
-        self.assertNotContains(response, "<animateMotion")
-        self.assertNotContains(response, "Simulation")
-        self.assertContains(response, "qbet_web/home.js")
+        self.assertContains(response, "BonusEngine")
+        self.assertContains(response, "SportsCapitalEngine")
+        self.assertContains(response, "Future engines")
+        self.assertContains(response, "Promotions + sports market data")
+        self.assertContains(response, "Structured odds and market data")
+        self.assertContains(response, "Domain-specific sources")
+        self.assertContains(response, "Shared protected Q-Bet workflow")
+        self.assertContains(response, "Domain Risk")
+        self.assertContains(response, "Liquidity Check")
+        self.assertContains(response, "User authority")
+        self.assertContains(response, "Simulation or Execution")
+        self.assertContains(response, "Settlement")
+        self.assertContains(response, "Portfolio, Reporting & Monitoring")
+        self.assertContains(response, "Current")
+        self.assertContains(response, "Planned")
+        self.assertContains(response, "Higher automation")
+        self.assertContains(
+            response,
+            "removing human approval allows configured actions to execute without an individual confirmation step",
+        )
         self.assertContains(response, "Sign in")
         self.assertContains(response, "Create account")
         self.assertContains(response, "phase2_visual.css")
-        self.assertNotContains(response, "Active matches")
-        self.assertNotContains(response, "Pending matches")
-        self.assertNotContains(response, "Warnings / errors")
-        self.assertNotContains(response, "Current state")
-        self.assertNotContains(response, "Operator shortcuts")
 
-        home_script = Path(settings.BASE_DIR, "static", "qbet_web", "home.js").read_text(
-            encoding="utf-8"
-        )
+        self.assertNotContains(response, "Kubernetes")
+        self.assertNotContains(response, "Azure")
+        self.assertNotContains(response, "browser extension")
+        self.assertNotContains(response, "provider-specific browser")
+        self.assertNotContains(response, "BaseEngine")
+        self.assertNotContains(response, "YieldEngine")
+        self.assertNotContains(response, "AlphaEngine")
+        self.assertNotContains(response, "qbet_web/home.js")
+        self.assertNotContains(response, "data-flow-packet")
+        self.assertNotContains(response, "<svg")
+
+    def test_public_home_styles_cover_narrow_layout_and_reduced_motion(self) -> None:
         visual_styles = Path(
             settings.BASE_DIR,
             "static",
             "qbet_web",
             "phase2_visual.css",
         ).read_text(encoding="utf-8")
-        self.assertIn("getPointAtLength", home_script)
-        self.assertIn("requestAnimationFrame(tick)", home_script)
-        self.assertIn("pulseCrossedCheckpoints", home_script)
-        self.assertIn('"IntersectionObserver" in window', home_script)
-        self.assertIn("reducedMotion.addEventListener", home_script)
-        self.assertIn("is-packet-hit", home_script)
-        self.assertIn(".flow-provider-connector", visual_styles)
-        self.assertIn("stroke-dasharray: 5 8;", visual_styles)
-        self.assertIn(".flow-capital-connector", visual_styles)
-        self.assertIn(".flow-packet-capital", visual_styles)
-        self.assertIn(".flow-station.is-packet-hit circle", visual_styles)
-        self.assertNotIn("station-breathe", visual_styles)
+
+        self.assertIn("@media (max-width: 780px)", visual_styles)
+        self.assertIn(".architecture-lanes,", visual_styles)
+        self.assertIn(".protected-workflow-stages { grid-template-columns: 1fr; }", visual_styles)
+        self.assertIn(".authority-grid { grid-template-columns: 1fr; }", visual_styles)
+        self.assertIn("@media (max-width: 520px)", visual_styles)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", visual_styles)
+        self.assertIn("animation: none !important;", visual_styles)
+        self.assertIn("transition: none !important;", visual_styles)
 
     def test_authenticated_home_stays_presentation_first_and_links_to_dashboard(self) -> None:
         self.client.force_login(self.user)
@@ -91,6 +90,7 @@ class Phase2VisualIntegrationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Open Dashboard")
+        self.assertContains(response, "Current vs future")
         self.assertNotContains(response, "Active matches")
         self.assertNotContains(response, "Warnings / errors")
 
