@@ -174,6 +174,10 @@ QBET_SIMULATION_REQUESTED_TOTAL_STAKE = os.environ.get(
     "QBET_SIMULATION_REQUESTED_TOTAL_STAKE", ""
 ).strip()
 QBET_SIMULATION_STAKE_PRECISION = os.environ.get("QBET_SIMULATION_STAKE_PRECISION", "").strip()
+QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS = os.environ.get(
+    "QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS",
+    "",
+).strip()
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
