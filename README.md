@@ -106,6 +106,7 @@ The README stays intentionally high-level. The detailed design lives in the proj
 - [Phase 3 Missing Points](docs/phase-3-missing-points.md) — prioritized completion plan, current gaps, E2E definitions, and Definitions of Done
 - [Phase 3 Integration Register](docs/phase-3-integration-register.md) — concrete external integration choices and implementation status
 - [Phase 3 Performance Baseline](docs/phase-3-performance-baseline.md) — connected internal performance measurements and scope
+- [Phase 3 Hosted Web Performance](docs/phase-3-hosted-performance.md) — Vercel/Supabase hosted-path measurements and repeatable profiling procedure
 - [bunq Adapter](docs/bunq.md) — read-only/sandbox modes, secret configuration, and protected E2E execution
 - [The Odds API](docs/the-odds-api.md) — current market-data adapter and development smoke path
 - [Django Web Shell](docs/django-web-shell.md) — Django/Supabase bootstrap and operational notes
