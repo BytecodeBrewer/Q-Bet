@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from django.contrib.auth.models import User
 from django.db import DatabaseError
@@ -12,9 +12,11 @@ from qbet.engines import BonusEngineRequest
 from qbet.execution.models import ExecutionRecord, Lifecycle
 from qbet.storage.ledger import (
     AuthoritativePersistenceError,
+    ExecutionRecordRepository,
     ExecutionStateRepository,
     ModeWorkQueueRepository,
 )
+from qbet.storage.models import ExecutionRecordRow
 from qbet.web.display_preferences import DisplayPreferences, format_datetime, format_money
 from qbet.web.models import UserDisplayPreference
 from qbet.workflow.approval import ExecutionApprovalService
@@ -119,6 +121,23 @@ class ExecutionApprovalWebTests(TestCase):
         self.assertEqual(record.state, Lifecycle.APPROVED)
         self.assertFalse(ledger.commands)
         self.assertEqual(queue.state, WorkState.PENDING)
+
+    def test_awaiting_approval_repository_filters_owner_before_deserialization(self) -> None:
+        self._stage_execution(owner=self.user)
+        ExecutionRecordRow.objects.create(
+            record_id=uuid4(),
+            correlation_id=uuid4(),
+            mode="execution",
+            state=Lifecycle.AWAITING_APPROVAL.value,
+            payload={"proposal": {"work": {"owner": self.other.get_username()}}},
+        )
+
+        records = ExecutionRecordRepository().list_awaiting_approval(
+            owner=self.user.get_username()
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].proposal.work.owner, self.user.get_username())
 
     def test_execution_approval_uses_persisted_display_preferences(self) -> None:
         observed_at = datetime.now(UTC)

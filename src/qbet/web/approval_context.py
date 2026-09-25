@@ -39,16 +39,17 @@ def approval_navigation(request: HttpRequest) -> dict[str, object]:
         return {
             "approval_count": 0,
             "approval_count_available": False,
-            "notification_unread_count": sum(
-                not item.read for item in _NOTIFICATION_INBOX.list(request.user.get_username())
+            "notification_unread_count": _NOTIFICATION_INBOX.unread_count(
+                request.user.get_username()
             ),
             "simulation_enabled": simulation_enabled,
         }
 
-    inbox = _NOTIFICATION_INBOX.list(request.user.get_username())
     return {
         "approval_count": count,
         "approval_count_available": True,
-        "notification_unread_count": sum(not item.read for item in inbox),
+        "notification_unread_count": _NOTIFICATION_INBOX.unread_count(
+            request.user.get_username()
+        ),
         "simulation_enabled": simulation_enabled,
     }

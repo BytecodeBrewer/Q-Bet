@@ -20,7 +20,7 @@ from qbet.web.settings import parse_allowed_hosts
 from qbet.web.views import _monitoring_service
 
 from django.conf import settings
-from django.test import Client, SimpleTestCase
+from django.test import Client, SimpleTestCase, override_settings
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 
@@ -162,11 +162,42 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertEqual(payload["status"], 200)
         self.assertEqual(payload["correlation_id"], correlation_id)
         self.assertIn("duration_ms", payload)
+        self.assertNotIn("query_count", payload)
+        self.assertNotIn("query_duration_ms", payload)
         self.assertNotIn("password", stream.getvalue())
         self.assertNotIn("authorization", stream.getvalue().lower())
         self.assertNotIn("cookie", stream.getvalue().lower())
         self.assertNotIn("bank", stream.getvalue().lower())
         self.assertNotIn("bookmaker", stream.getvalue().lower())
+
+
+    @override_settings(QBET_PROFILE_WEB_REQUESTS=True)
+    def test_opt_in_query_profile_logs_only_aggregate_metrics(self) -> None:
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(SafeRequestJSONFormatter())
+        request_logger = logging.getLogger("qbet.web.request")
+        request_logger.addHandler(handler)
+        try:
+            with patch(
+                "qbet.web.views.persistence_readiness",
+                return_value=PersistenceReadiness(
+                    PersistenceReadinessCode.READY,
+                    routing="ready",
+                    approvals="ready",
+                    monitoring="ready",
+                ),
+            ):
+                response = self.client.get("/health/")
+        finally:
+            request_logger.removeHandler(handler)
+
+        payload = json.loads(stream.getvalue())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["query_count"], 0)
+        self.assertGreaterEqual(payload["query_duration_ms"], 0)
+        self.assertNotIn("sql", payload)
+        self.assertNotIn("params", payload)
 
 
 def test_parses_comma_separated_allowed_hosts_without_whitespace() -> None:

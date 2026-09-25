@@ -90,7 +90,7 @@ from qbet.web.models import AccountVerification, CustomerReportAccess, Simulatio
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.provider_activity import ProviderActivitySnapshot, provider_activity_snapshot
 from qbet.web.readiness import deployment_release_id, persistence_readiness
-from qbet.web.shell_context import shell_context
+from qbet.web.shell_context import display_preferences_for, shell_context
 from qbet.web.ui_copy import ui_copy
 from qbet.web.simulation_control import (
     SimulationControlError,
@@ -730,7 +730,7 @@ def pipeline_dry_run(request: HttpRequest) -> HttpResponse:
 def presentation_settings(request: HttpRequest) -> HttpResponse:
     user = cast(User, request.user)
     preferences = presentation_preferences(request.session)
-    display_preferences = DISPLAY_PREFERENCES.load(user)
+    display_preferences = display_preferences_for(request)
     form = PresentationSettingsForm(
         request.POST or None,
         initial={
@@ -896,7 +896,7 @@ def _report_history_selection(
 def report_history(request: HttpRequest) -> HttpResponse:
     dashboard, preset, start, end = _report_history_selection(request)
     reports = getattr(dashboard, "reports", ())
-    display_preferences = DISPLAY_PREFERENCES.load(cast(User, request.user))
+    display_preferences = display_preferences_for(request)
     currency_summaries = tuple(
         sorted(
             getattr(dashboard, "currency_summaries", ()),
