@@ -158,6 +158,7 @@ def optional_external_url(name: str) -> str:
     return value.rstrip("/")
 
 
+QBET_PROFILE_WEB_REQUESTS = _environment_flag("QBET_PROFILE_WEB_REQUESTS")
 QBET_METRICS_TOKEN = os.environ.get("QBET_METRICS_TOKEN", "")
 QBET_GRAFANA_URL = optional_external_url("QBET_GRAFANA_URL")
 QBET_VERCEL_DASHBOARD_URL = optional_external_url("QBET_VERCEL_DASHBOARD_URL")
