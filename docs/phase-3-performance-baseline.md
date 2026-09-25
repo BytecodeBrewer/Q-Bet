@@ -57,4 +57,3 @@ These values are comparative baselines, not production SLAs. The initial suite i
 ## Hosted web companion
 
 Vercel runtime behavior, browser-facing requests, Supabase roundtrips, authenticated page query counts, and warm/cold hosted measurements are documented separately in [Phase 3 Hosted Web Performance](phase-3-hosted-performance.md). That procedure complements this internal baseline rather than changing its scope or turning either set of observations into production SLAs.
-
