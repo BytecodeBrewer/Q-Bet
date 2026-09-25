@@ -179,6 +179,25 @@ During authenticated preview verification, the application returned HTTP 500 bec
 
 The authenticated shell's database dependencies were then verified against the synchronized hosted schema, including sportsbook provider lookup, Bonus Offer access, display preferences, approval ownership filtering, notification inbox access, and Simulation availability.
 
+## Authenticated hosted sample
+
+After hosted schema recovery and automatic Preview query profiling were enabled, an already-authorized admin session exercised representative authenticated surfaces on deployment `dpl_6mwKdS71XCVmnUeLXyXAjGxubM7G` at measured code SHA `f0194a2f4dcf35e73147faf860e2cb5f50d7761c`.
+
+Observed successful authenticated requests:
+
+| Surface | Status | Request duration | Query count | Aggregate query duration |
+| --- | ---: | ---: | ---: | ---: |
+| Dashboard `/dashboard/` | 200 | 79.066–110.975 ms on repeated warm samples | 16–17 | 35.654–53.588 ms |
+| Report detail `/reports/<run_id>/` | 200 | 69.558–77.043 ms | 9 | 24.885–28.521 ms |
+| Admin control `/admin-area/polling/` | 200 | 93.794 ms | 8 | 31.792 ms |
+| Presentation Settings `/settings/presentation/` | 200 | 76.435–102.963 ms | 12 | 27.360–42.190 ms |
+| Simulation page `/simulation/` | 200 | 96.255–151.257 ms | 14 | 44.687–47.522 ms |
+| Successful Simulation run action `/simulation/<run_id>/run/` | 200 | 427.570 ms | 64 | 272.717 ms |
+
+The authenticated sample confirms that ordinary hosted pages are generally sub-200 ms at the Django/application layer in this small operator run. The heavier successful Simulation action is materially database-bound relative to the simple pages: about 273 ms of its 428 ms request time was aggregate query execution across 64 queries. That path is therefore the clearest remaining candidate for a future focused performance ticket rather than broad caching inside this ticket.
+
+The sample also confirms that the earlier authenticated HTTP 500 was removed after hosted schema synchronization: the representative authenticated pages above all returned HTTP 200.
+
 ## Remaining constraints
 
 - Cold-start behavior is observable but variable and should not be converted into a strict SLA from a handful of requests.
