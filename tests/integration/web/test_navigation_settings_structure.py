@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -14,8 +13,8 @@ class NavigationAndSettingsStructureTests(TestCase):
         with (
             patch("qbet.web.approval_context._APPROVALS.active_count_for", return_value=2),
             patch(
-                "qbet.web.approval_context._NOTIFICATION_INBOX.list",
-                return_value=(SimpleNamespace(read=False), SimpleNamespace(read=True)),
+                "qbet.web.approval_context._NOTIFICATION_INBOX.unread_count",
+                return_value=1,
             ),
         ):
             response = self.client.get("/dashboard/")
