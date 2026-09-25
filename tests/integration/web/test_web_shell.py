@@ -65,26 +65,23 @@ class WebShellSmokeTests(SimpleTestCase):
             },
         )
 
-    def test_home_renders_presentation_flow_without_operational_or_staff_state(self) -> None:
+    def test_home_renders_product_story_without_operational_or_staff_state(self) -> None:
         response = self.client.get("/")
 
         self.assertContains(response, "Q-Bet")
-        self.assertContains(response, "Turn market opportunities into controlled decisions.")
-        self.assertContains(response, "Data Providers")
-        self.assertContains(response, "Aggregation")
-        self.assertContains(response, "Builder")
-        self.assertContains(response, "Engine")
-        self.assertContains(response, "Risk")
-        self.assertContains(response, "Liquidity")
-        self.assertContains(response, "Portfolio")
-        self.assertContains(response, "Ledger")
-        self.assertContains(response, "Bank")
-        self.assertContains(response, "Execution")
+        self.assertContains(
+            response,
+            "Separate strategies. One protected path from data to decision.",
+        )
+        self.assertContains(response, "BonusEngine")
+        self.assertContains(response, "SportsCapitalEngine")
+        self.assertContains(response, "Shared protected Q-Bet workflow")
+        self.assertContains(response, "Domain Risk")
+        self.assertContains(response, "Liquidity Check")
+        self.assertContains(response, "Simulation or Execution")
+        self.assertContains(response, "Current vs future")
         self.assertContains(response, "Sign in")
         self.assertContains(response, "Create account")
-        self.assertContains(response, "data-flow-packet", count=7)
-        self.assertNotContains(response, "<animateMotion")
-        self.assertNotContains(response, "Simulation")
         self.assertNotContains(response, "Active matches")
         self.assertNotContains(response, "Pending matches")
         self.assertNotContains(response, "Warnings / errors")
@@ -94,6 +91,8 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertNotContains(response, 'href="/monitoring/"')
         self.assertNotContains(response, 'href="/admin-area/"')
         self.assertNotContains(response, 'href="/admin/"')
+        self.assertNotContains(response, "Kubernetes")
+        self.assertNotContains(response, "Azure")
         self.assertNotContains(response, "BaseEngine")
         self.assertNotContains(response, "YieldEngine")
         self.assertNotContains(response, "AlphaEngine")
@@ -112,8 +111,8 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertIn("@media (prefers-reduced-motion: reduce)", stylesheet)
         self.assertIn("transition-duration: .001ms", stylesheet)
         self.assertIn("@media (prefers-reduced-motion: reduce)", visual_stylesheet)
-        self.assertIn(".flow-packet { display: none; }", visual_stylesheet)
-        self.assertIn(".flow-station.is-packet-hit circle { animation: none; }", visual_stylesheet)
+        self.assertIn("animation: none !important;", visual_stylesheet)
+        self.assertIn("transition: none !important;", visual_stylesheet)
 
     def test_account_boundary_requires_django_authentication(self) -> None:
         response = self.client.get("/account/")
