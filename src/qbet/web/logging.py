@@ -46,8 +46,19 @@ class SafeRequestJSONFormatter(logging.Formatter):
         "user_id",
         "correlation_id",
     )
+    optional_request_fields = (
+        "query_count",
+        "query_duration_ms",
+    )
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {"event": record.getMessage()}
         payload.update({field: getattr(record, field, None) for field in self.request_fields})
+        payload.update(
+            {
+                field: getattr(record, field)
+                for field in self.optional_request_fields
+                if hasattr(record, field)
+            }
+        )
         return json.dumps(payload, default=str, separators=(",", ":"))
