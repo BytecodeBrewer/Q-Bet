@@ -14,16 +14,28 @@ from qbet.web.ui_copy import ui_copy
 _DISPLAY_PREFERENCES = DisplayPreferenceRepository()
 
 
+def display_preferences_for(request: HttpRequest) -> DisplayPreferences:
+    """Reuse one durable display-preference read within the current request."""
+
+    cached = getattr(request, "_qbet_display_preferences", None)
+    if isinstance(cached, DisplayPreferences):
+        return cached
+
+    preferences = (
+        _DISPLAY_PREFERENCES.load(cast(User, request.user))
+        if request.user.is_authenticated
+        else DisplayPreferences()
+    )
+    setattr(request, "_qbet_display_preferences", preferences)
+    return preferences
+
+
 def shell_context(request: HttpRequest) -> dict[str, object]:
     cached = getattr(request, "_qbet_shell_context", None)
     if isinstance(cached, dict):
         return cached
 
-    display_preferences = (
-        _DISPLAY_PREFERENCES.load(cast(User, request.user))
-        if request.user.is_authenticated
-        else DisplayPreferences()
-    )
+    display_preferences = display_preferences_for(request)
     context: dict[str, object] = {
         "preferences": presentation_preferences(request.session),
         "display_preferences": display_preferences,
