@@ -140,6 +140,39 @@ The current `develop` global CSS/JS source footprint inspected during this ticke
 
 A controlled browser DOM-ready/interaction sample was not available in the agent execution environment, so no synthetic browser timing is reported as fact.
 
+## After-change preview observations
+
+After the bounded changes above, the exact PR head `0c0e0d9ec392c37a056e0493ebbe47377bfc121a` deployed successfully to Vercel in `dub1`.
+
+Comparable persistence-heavy preview observations:
+
+Pre-ticket `iad1` preview `/health/` samples (status 503):
+- 975.612 ms
+- 747.839 ms
+- median: about 862 ms
+
+Post-change `dub1` preview first/idle-ish `/health/` samples across equivalent runtime-code deployments (status 503):
+- 248.997 ms
+- 201.663 ms
+- 179.193 ms
+- 160.484 ms
+- 200.649 ms
+- 158.463 ms
+- median: about 190 ms
+
+Post-change warm repeated `/health/` samples (status 503):
+- 42.087 ms
+- 32.164 ms
+- 43.150 ms
+- 31.212 ms
+- median: about 37 ms
+
+In this small sample, the median first/idle-ish persistence-heavy request fell by about 78% (roughly 4.5x faster) and the warm median fell by about 96% (more than 20x faster) relative to the two pre-ticket `iad1` preview observations.
+
+These numbers are directional hosted observations only. They are not latency SLAs, and the 503 readiness status remains a separate degraded-state signal that must not be presented as healthy merely because it returns faster.
+
+Public rendering on the exact PR-head preview remained fast: one observed landing request completed its Django/application work in 29.699 ms after deployment. Preview protection limited repeated public/login fetches through the agent connector, so no synthetic browser or authenticated page timing is invented.
+
 ## Remaining constraints
 
 - Cold-start behavior is observable but variable and should not be converted into a strict SLA from a handful of requests.
