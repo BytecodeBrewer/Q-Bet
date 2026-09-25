@@ -125,6 +125,27 @@ class NotificationPreferenceInboxPersistenceTests(TestCase):
         self.assertTrue(inbox.mark_read("owner", task.id))
         self.assertEqual(inbox.unread_count("owner"), 0)
 
+    def test_unread_count_bounds_recent_deliveries_before_read_filter(self) -> None:
+        old_unread = _task().model_copy(
+            update={"id": uuid4(), "execution_id": uuid4(), "correlation_id": uuid4()}
+        )
+        recent_read_a = _task().model_copy(
+            update={"id": uuid4(), "execution_id": uuid4(), "correlation_id": uuid4()}
+        )
+        recent_read_b = _task().model_copy(
+            update={"id": uuid4(), "execution_id": uuid4(), "correlation_id": uuid4()}
+        )
+        inbox = PostgresNotificationInbox()
+        for task in (old_unread, recent_read_a, recent_read_b):
+            _persist(task)
+            self.assertTrue(inbox.deliver("owner", task.id, task.category))
+
+        self.assertTrue(inbox.mark_read("owner", recent_read_a.id))
+        self.assertTrue(inbox.mark_read("owner", recent_read_b.id))
+
+        self.assertEqual(inbox.unread_count("owner", limit=2), 0)
+        self.assertEqual(inbox.unread_count("owner", limit=3), 1)
+
     def test_suppressed_task_does_not_appear_after_preferences_are_reenabled(self) -> None:
         task = _task()
         _persist(task)
