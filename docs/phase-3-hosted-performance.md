@@ -101,13 +101,13 @@ The region change must be validated on a preview deployment before any productio
 
 ## Opt-in hosted query profiling
 
-Set:
+Vercel Preview deployments enable safe aggregate request/query profiling automatically. Other environments can opt in with:
 
 ```text
 QBET_PROFILE_WEB_REQUESTS=true
 ```
 
-to add these aggregate fields to the existing `request.completed` structured log:
+This adds these aggregate fields to the existing `request.completed` structured log:
 
 - `query_count`
 - `query_duration_ms`
@@ -122,7 +122,7 @@ The profiler uses Django's database execution wrapper for the current request on
 2. Confirm the Supabase project/region without copying connection secrets.
 3. Measure public `/` and `/accounts/login/` after an idle period, then repeat several warm requests.
 4. Measure `/health/` separately because it deliberately exercises persistence/readiness.
-5. Enable `QBET_PROFILE_WEB_REQUESTS=true` only in the intended preview/operator environment.
+5. Use the Vercel Preview deployment, where safe aggregate profiling is enabled automatically, or explicitly set `QBET_PROFILE_WEB_REQUESTS=true` in another intended operator environment.
 6. During an already-authorized operator session, visit:
    - Dashboard
    - Reporting
@@ -142,7 +142,7 @@ A controlled browser DOM-ready/interaction sample was not available in the agent
 
 ## After-change preview observations
 
-After the bounded changes above, the exact PR head `0c0e0d9ec392c37a056e0493ebbe47377bfc121a` deployed successfully to Vercel in `dub1`.
+After the bounded changes above, measured PR preview deployment `0c0e0d9ec392c37a056e0493ebbe47377bfc121a` deployed successfully to Vercel in `dub1`. Later exact-head validation also confirmed the branch preview remained in `dub1`; measurements are tied to the deployment SHA that produced them rather than calling an intermediate SHA the final PR head.
 
 Comparable persistence-heavy preview observations:
 
@@ -172,6 +172,12 @@ In this small sample, the median first/idle-ish persistence-heavy request fell b
 These numbers are directional hosted observations only. They are not latency SLAs, and the 503 readiness status remains a separate degraded-state signal that must not be presented as healthy merely because it returns faster.
 
 Public rendering on the exact PR-head preview remained fast: one observed landing request completed its Django/application work in 29.699 ms after deployment. Preview protection limited repeated public/login fetches through the agent connector, so no synthetic browser or authenticated page timing is invented.
+
+## Hosted schema readiness incident
+
+During authenticated preview verification, the application returned HTTP 500 because the hosted PostgreSQL schema lagged behind the code release: the sportsbook catalog and Bonus Offer migrations were not yet present. The schema was synchronized before continuing the performance review. This incident is treated as deployment/schema readiness, not as evidence against the latency changes above.
+
+The authenticated shell's database dependencies were then verified against the synchronized hosted schema, including sportsbook provider lookup, Bonus Offer access, display preferences, approval ownership filtering, notification inbox access, and Simulation availability.
 
 ## Remaining constraints
 
