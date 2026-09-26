@@ -32,7 +32,7 @@ class CustomerReportingQuery:
             raise ValueError("reporting end must not precede start")
         if self.end - self.start > MAX_REPORTING_RANGE:
             raise ValueError("reporting range must not exceed 31 days")
-        if self.mode not in {None, "", "simulation"}:
+        if self.mode not in {None, "", "simulation", "execution"}:
             raise ValueError("unsupported reporting mode")
         if self.engine not in {None, "", "bonus", "sports_capital"}:
             raise ValueError("unsupported reporting engine")

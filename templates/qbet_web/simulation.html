@@ -1,79 +1,128 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
+{% load display_preferences %}
 <section class="page-heading">
   <h1>Simulation</h1>
   <p>Simulation uses virtual capital only, follows the existing workflow path, and never calls live-money adapters.</p>
 </section>
 
-<section class="detail-panel">
-  <h2>Start simulation</h2>
-  <p class="muted">Phase 2 uses deterministic local sandbox opportunities. External provider data arrives in Phase 3 through adapters.</p>
-  <form method="post" action="{% url 'simulation-start' %}">
-    {% csrf_token %}
-    {{ start_form.non_field_errors }}
-    <div class="metric-list">
-      <div><dt>{{ start_form.engine.label_tag }}</dt><dd>{{ start_form.engine }} {{ start_form.engine.errors }}</dd></div>
-      <div><dt>{{ start_form.starting_capital.label_tag }}</dt><dd>{{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</dd></div>
-      <div><dt>{{ start_form.max_duration_minutes.label_tag }}</dt><dd>{{ start_form.max_duration_minutes }} {{ start_form.max_duration_minutes.errors }}</dd></div>
+<div data-simulation-control>
+  <section class="provider-activity activity-state activity-{{ provider_activity.state }}" data-provider-activity aria-live="polite">
+    <div>
+      <span class="eyebrow">Market data</span>
+      <strong data-provider-label>{{ provider_activity.label }}</strong>
+      {% if provider_activity.occurred_at %}<small>Last activity {% localized_datetime provider_activity.occurred_at display_preferences %}</small>{% endif %}
     </div>
-    <button type="submit">Start simulation</button>
-  </form>
-</section>
+    <span class="activity-spinner provider-working-indicator" aria-label="Working"></span>
+    <span class="activity-check provider-success-indicator" aria-label="Success">✓</span>
+  </section>
 
-<section class="detail-panel">
-  <h2>Recent lifecycle state</h2>
-  {% if simulation_control.runs %}
-    <div class="engine-grid">
-      {% for run in simulation_control.runs %}
-        <article class="engine-card" data-simulation-run="{{ run.run_id }}">
-          <div class="card-heading">
-            <h3>{{ run.engine }}</h3>
-            <span class="tag">{{ run.status }}</span>
-          </div>
-          <dl class="metric-list">
-            <div><dt>Run / correlation id</dt><dd>{{ run.run_id }}</dd></div>
-            <div><dt>Progress</dt><dd>{{ run.progress }}</dd></div>
-            <div><dt>Virtual capital</dt><dd>{{ run.current_capital }}</dd></div>
-          </dl>
-          {% if run.error_message %}<p class="status-error">{{ run.error_message }}</p>{% endif %}
-          {% if run.report_id %}
-            <p>
-              <a href="{% url 'report-detail' run.report_id %}">Open report</a>
-              · <a href="{% url 'report-export' run.report_id 'json' %}">JSON export</a>
-              · <a href="{% url 'report-export' run.report_id 'csv' %}">CSV export</a>
-            </p>
-          {% elif run.is_active %}
-            <p class="muted">Run is active. Reload this page to read the latest persisted lifecycle state.</p>
-          {% endif %}
-        </article>
-      {% endfor %}
-    </div>
-  {% else %}
-    <p class="muted">No GUI-started simulation runs recorded yet.</p>
+  <p class="simulation-client-status" data-simulation-client-status role="status"></p>
+  {% if auto_run_id %}
+    <span
+      hidden
+      data-auto-run-url="{% url 'simulation-run' auto_run_id %}"
+      data-provider-activity-url="{% url 'provider-activity' %}?correlation={{ auto_run_id }}"
+    ></span>
   {% endif %}
-</section>
 
-<section class="engine-grid">
-  {% for engine in monitoring.engines %}
-    <article id="simulation-{{ engine.engine_id }}" class="engine-card" data-simulation-engine="{{ engine.engine_id }}">
-      <div class="card-heading"><h2>{{ engine.name }}</h2><span class="tag">Simulation</span></div>
-      <dl class="metric-list">
-        <div><dt>Status</dt><dd>{{ engine.detail }}</dd></div>
-        <div><dt>Progress</dt><dd>{% if engine.latest_report_id %}Available in latest report{% else %}Unavailable{% endif %}</dd></div>
-        <div><dt>Active / pending</dt><dd>{{ engine.running_matches }} / {{ engine.pending_matches }}</dd></div>
-        <div><dt>Virtual capital</dt><dd>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}Unavailable{% endif %}</dd></div>
-        <div><dt>Warnings / errors</dt><dd>{{ engine.warning_count }} / {{ engine.error_count }}</dd></div>
-      </dl>
-      {% if engine.latest_report_id %}
-        <p>
-          <a href="{% url 'report-detail' engine.latest_report_id %}">Open latest report</a>
-          · <a href="{% url 'report-export' engine.latest_report_id 'json' %}">JSON</a>
-          · <a href="{% url 'report-export' engine.latest_report_id 'csv' %}">CSV</a>
-        </p>
-      {% else %}
-        <span class="muted">No simulation report available.</span>
-      {% endif %}
-    </article>
-  {% endfor %}
-</section>
+  <section class="detail-panel">
+    <h2>Start simulation</h2>
+    <p class="muted">SportsCapital and BonusEngine use their configured Simulation market sources. BonusEngine combines your active promotion terms with fresh fixed-odds sportsbook data. Choose virtual starting capital; it remains inside the Simulation ledger and sandbox boundary. {% currency_preference_note "EUR" display_preferences %}</p>
+    <form method="post" action="{% url 'simulation-start' %}">
+      {% csrf_token %}
+      {{ start_form.non_field_errors }}
+      <div class="metric-list">
+        <div><dt>{{ start_form.engine.label_tag }}</dt><dd>{{ start_form.engine }} {{ start_form.engine.errors }}</dd></div>
+        <div><dt>{{ start_form.starting_capital.label_tag }}</dt><dd>{{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</dd></div>
+      </div>
+      <button class="primary" type="submit">Start simulation</button>
+    </form>
+  </section>
+
+  <section class="detail-panel pipeline-dry-run">
+    <div class="section-heading">
+      <div><span class="eyebrow">Diagnostics</span><h2>Pipeline dry-run</h2></div>
+      <span class="tag neutral-tag">Readiness only</span>
+    </div>
+    <p class="muted">Checks pipeline stage readiness with synthetic control input only. It creates no provider query, opportunity, order, match activity, or capital movement.</p>
+    <form method="post" action="{% url 'pipeline-dry-run' %}">
+      {% csrf_token %}
+      <div class="metric-list">
+        <div><dt>{{ pipeline_dry_run_form.engine.label_tag }}</dt><dd>{{ pipeline_dry_run_form.engine }}</dd></div>
+        <div><dt>{{ pipeline_dry_run_form.mode.label_tag }}</dt><dd>{{ pipeline_dry_run_form.mode }}</dd></div>
+      </div>
+      <button type="submit">Run readiness dry-run</button>
+    </form>
+    {% if pipeline_dry_run %}
+      <div class="dry-run-result" role="status">
+        <strong>{{ pipeline_dry_run.engine }} · {{ pipeline_dry_run.mode }}</strong>
+        <ul class="workflow-list">
+          {% for stage in pipeline_dry_run.stages %}
+            <li><span class="status status-{% if stage.ready %}green{% else %}red{% endif %}" aria-hidden="true"></span><span>{{ stage.name }}</span><span>{{ stage.detail }}</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="detail-panel">
+    <h2>Recent lifecycle state</h2>
+    {% if simulation_control.runs %}
+      <div class="engine-grid">
+        {% for run in simulation_control.runs %}
+          <article class="engine-card" data-simulation-run="{{ run.run_id }}">
+            <div class="card-heading">
+              <h3>{{ run.engine }}</h3>
+              <span class="tag">{{ run.status }}</span>
+            </div>
+            <dl class="metric-list">
+              <div><dt>Run / correlation id</dt><dd>{{ run.run_id }}</dd></div>
+              <div><dt>Progress</dt><dd>{{ run.progress }}</dd></div>
+              <div><dt>Virtual capital</dt><dd>{% localized_money run.current_capital "EUR" display_preferences %}</dd></div>
+            </dl>
+            {% if run.error_message %}<p class="status-error">{{ run.error_message }}</p>{% endif %}
+            {% if run.is_active %}
+              <p class="muted">Run is running. Progress is persisted after every safe step.</p>
+              <button type="button" class="warning-button" data-simulation-stop-url="{% url 'simulation-stop' run.run_id %}">Stop simulation</button>
+            {% elif run.report_id %}
+              <p>
+                <a href="{% url 'report-detail' run.report_id %}">Open report</a>
+                · <a data-download-feedback href="{% url 'report-export' run.report_id 'json' %}">JSON export</a>
+                · <a data-download-feedback href="{% url 'report-export' run.report_id 'csv' %}">CSV export</a>
+              </p>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">No GUI-started simulation runs recorded yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="engine-grid">
+    {% for engine in monitoring.engines %}
+      <article id="simulation-{{ engine.engine_id }}" class="engine-card" data-simulation-engine="{{ engine.engine_id }}">
+        <div class="card-heading"><h2>{{ engine.name }}</h2><span class="tag">Simulation</span></div>
+        <dl class="metric-list">
+          <div><dt>Status</dt><dd>{{ engine.detail }}</dd></div>
+          <div><dt>Progress</dt><dd>{% if engine.latest_report_id %}Available in latest report{% else %}Unavailable{% endif %}</dd></div>
+          <div><dt>Running / pending</dt><dd>{{ engine.running_matches }} / {{ engine.pending_matches }}</dd></div>
+          <div><dt>Virtual capital</dt><dd>{% if engine.involved_capital is not None %}{% localized_money engine.involved_capital "EUR" display_preferences %}{% else %}Unavailable{% endif %}</dd></div>
+          <div><dt>Warnings / errors</dt><dd>{{ engine.warning_count }} / {{ engine.error_count }}</dd></div>
+        </dl>
+        {% if engine.latest_report_id %}
+          <p>
+            <a href="{% url 'report-detail' engine.latest_report_id %}">Open latest report</a>
+            · <a data-download-feedback href="{% url 'report-export' engine.latest_report_id 'json' %}">JSON</a>
+            · <a data-download-feedback href="{% url 'report-export' engine.latest_report_id 'csv' %}">CSV</a>
+          </p>
+        {% else %}
+          <span class="muted">No simulation report available.</span>
+        {% endif %}
+      </article>
+    {% endfor %}
+  </section>
+  <p class="download-status" data-download-status role="status"></p>
+</div>
 {% endblock %}

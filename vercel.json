@@ -3,5 +3,8 @@
   "framework": "django",
   "git": {
     "deploymentEnabled": false
-  }
+  },
+  "regions": [
+    "dub1"
+  ]
 }

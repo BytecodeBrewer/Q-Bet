@@ -217,11 +217,15 @@ class ExecutionRecordRepository:
         return ExecutionRecord.model_validate(row.payload)
 
     def list_awaiting_approval(self, *, owner: str) -> tuple[ExecutionRecord, ...]:
-        rows = ExecutionRecordRow.objects.filter(state=Lifecycle.AWAITING_APPROVAL.value).order_by(
-            "updated_at"
+        payloads = (
+            ExecutionRecordRow.objects.filter(
+                state=Lifecycle.AWAITING_APPROVAL.value,
+                payload__proposal__work__owner=owner,
+            )
+            .order_by("updated_at")
+            .values_list("payload", flat=True)
         )
-        records = tuple(ExecutionRecord.model_validate(row.payload) for row in rows)
-        return tuple(record for record in records if record.proposal.work.owner == owner)
+        return tuple(ExecutionRecord.model_validate(payload) for payload in payloads)
 
     @transaction.atomic
     def save_transition(self, record: ExecutionRecord) -> ExecutionRecord:

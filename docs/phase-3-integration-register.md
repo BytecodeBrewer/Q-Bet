@@ -30,6 +30,25 @@ This file is the companion register for concrete Phase 3 external integrations. 
 | GUI/product experience | Continue incremental visual refinement, animations, interaction polish, and clearer product surfaces while integrations are added. | Existing Django GUI remains the product surface. | functional controls exist; larger Settings/Admin/UX expansion later in Phase 3 |
 | Cloud runtime | Keep the current Vercel + Supabase production baseline while Phase 3 validates integrations. Broader container orchestration and per-user cloud isolation are Phase 4 concerns. | Vercel + Supabase current baseline. | existing |
 
+## German Sportsbook Provider Identity
+
+- The GGL official whitelist is the legal/licensing source of truth for German sportsbook eligibility. The reviewed seed snapshot is dated 07 September 2026 and is versioned in `src/qbet/providers/ggl_sportsbooks_2026-09-07.json`.
+- Odds aggregators are market-data and external-identity sources only. They do not establish German licensing eligibility.
+- The Odds API mappings are deliberately sparse and verified against its bookmaker catalog. The initial German mappings are `tipico_de -> tipico` and `winamax_de -> winamax`; a legal GGL provider without a verified source mapping remains listable but is not market-data-ready for that source.
+- BonusEngine German sportsbook preparation fails closed until the external bookmaker identity resolves to one active, online, German-eligible canonical provider.
+- Promotion/account terms remain a separate provider-specific boundary. No universal automatic sportsbook promotion API is assumed.
+
+## Sportsbook And Exchange Semantics
+
+- Fixed-odds sportsbook market/quotation data remains API-first.
+- BonusEngine promotion/account metadata is a separate input boundary; no universal promotion API is assumed.
+- A later Phase 3 provider-specific read-only browser adapter may supply promotion/account metadata from the user's own configured sportsbook account where no supported API exists.
+- Betting exchanges are peer-to-peer venues and belong to the separate planned `SportsExchangeEngine`; sportsbook brands such as Tipico or Bwin are not exchange counterparties exposed through an exchange API.
+- Betfair currently states that its Exchange is unavailable to customers in Germany, and its API does not expose Exchange markets from German locations. This is an integration constraint, not a generic engine definition.
+  - https://support.betfair.com/de/app/answers/detail/a_id/5939/
+  - https://support.developer.betfair.com/hc/en-us/articles/360004831131-Why-do-markets-not-appear-in-the-listEvents-listMarketCatalogue-or-listMarketBook-API-response
+- Controlled sportsbook browser order placement remains a later Phase 4 authority increase behind approval, revalidation, risk, liquidity, and execution controls.
+
 ## Data Source Roles
 
 The same external provider does not have to serve every pipeline responsibility. Phase 3 should classify adapters by role and compose them deliberately.

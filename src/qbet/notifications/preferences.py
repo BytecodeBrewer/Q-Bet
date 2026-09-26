@@ -8,6 +8,7 @@ from typing import Protocol
 from uuid import UUID
 
 from django.db import DatabaseError
+from django.db.models import Exists, OuterRef, Subquery
 from django.utils import timezone
 
 from qbet.notifications.models import ExecutionNotificationTask, NotificationStatus
@@ -147,6 +148,39 @@ class PostgresNotificationInbox:
             for delivery in deliveries
             if (row := rows.get(delivery.task_id)) is not None
         )
+
+    def unread_count(self, user_id: str, *, limit: int = 100) -> int:
+        """Count recent valid unread deliveries without materializing inbox payloads."""
+
+        bounded_limit = max(1, min(limit, 100))
+        recent_delivery_ids = (
+            NotificationInboxDeliveryRow.objects.filter(user_id=user_id)
+            .order_by("-created_at", "-id")
+            .values("id")[:bounded_limit]
+        )
+        owned_task = NotificationTaskRow.objects.filter(
+            task_id=OuterRef("task_id"),
+            recipient_id=user_id,
+        )
+        read_marker = NotificationInboxReadRow.objects.filter(
+            user_id=user_id,
+            task_id=OuterRef("task_id"),
+        )
+        try:
+            return (
+                NotificationInboxDeliveryRow.objects.filter(
+                    user_id=user_id,
+                    id__in=Subquery(recent_delivery_ids),
+                )
+                .annotate(
+                    owned_task=Exists(owned_task),
+                    read_marker=Exists(read_marker),
+                )
+                .filter(owned_task=True, read_marker=False)
+                .count()
+            )
+        except DatabaseError:
+            return 0
 
     def mark_read(self, user_id: str, task_id: UUID) -> bool:
         try:

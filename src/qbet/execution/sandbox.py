@@ -2,7 +2,12 @@
 
 from datetime import datetime
 
-from qbet.calculations import FreeBetResult, QualifyingBetResult
+from qbet.calculations import (
+    FreeBetResult,
+    QualifyingBetResult,
+    SportsbookFreeBetResult,
+    SportsbookQualifyingBetResult,
+)
 from qbet.engines import BonusEngine, BonusEngineRequest, SportsCapitalEngine
 from qbet.execution.models import ApprovedExecutionRequest, ExecutionProposal, SandboxResult
 
@@ -18,6 +23,8 @@ def valuation(request):
         capital = result.back_stake + result.lay_liability
     elif isinstance(result, FreeBetResult):
         capital = result.lay_liability
+    elif isinstance(result, (SportsbookQualifyingBetResult, SportsbookFreeBetResult)):
+        capital = result.capital_required
     else:
         capital = result.total_stake
     return capital, capital + evaluation.worst_case_profit_loss

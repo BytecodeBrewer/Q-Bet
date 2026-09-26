@@ -18,7 +18,7 @@ from qbet.reporting import (
     SimulationReport,
 )
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
-from qbet.web.models import CustomerReportAccess, SimulationAvailability
+from qbet.web.models import CustomerReportAccess, SimulationAvailability, UserDisplayPreference
 from qbet.web.monitoring import MonitoringService
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
@@ -209,8 +209,8 @@ class GuiControlPlaneTests(TestCase):
         self.assertIn("<span>Recorded runs</span><strong>2</strong>", content)
         self.assertContains(response, "Customer plane")
         self.assertContains(response, "Admin only")
-        self.assertContains(response, "Deterministic pipeline test")
-        self.assertContains(response, "Run pipeline test")
+        self.assertContains(response, "Sandbox simulation")
+        self.assertContains(response, "Start simulation")
 
     def test_historical_incidents_do_not_poison_current_runtime_state(self) -> None:
         report = _report(SimulationEngine.BONUS)
@@ -222,11 +222,11 @@ class GuiControlPlaneTests(TestCase):
         active = service.snapshot(runtime_configuration=active_configuration)
         active_bonus = next(engine for engine in active.engines if engine.engine_id == "bonus")
 
-        self.assertEqual(active_bonus.status, "green")
+        self.assertEqual(active_bonus.status, "gray")
         self.assertTrue(active_bonus.enabled)
         self.assertTrue(active_bonus.active)
-        self.assertEqual(active_bonus.live_state, "active")
-        self.assertEqual(active_bonus.detail, "Active.")
+        self.assertEqual(active_bonus.live_state, "ready")
+        self.assertEqual(active_bonus.detail, "Ready; no work running.")
         self.assertEqual(active_bonus.warning_count, 1)
         self.assertEqual(active_bonus.error_count, 1)
         self.assertTrue(active_bonus.workflow_stages)
@@ -335,18 +335,18 @@ class GuiControlPlaneTests(TestCase):
         SimulationAvailability.objects.create(pk=1, enabled=True)
         self.client.force_login(self.user)
         self.assertEqual(self.client.get("/simulation/").status_code, 404)
-        self.assertNotContains(self.client.get("/dashboard/"), "Run pipeline test")
+        self.assertNotContains(self.client.get("/dashboard/"), "Start simulation")
 
         self.client.force_login(self.staff)
         simulation = self.client.get("/simulation/")
         dashboard = self.client.get("/dashboard/")
         self.assertEqual(simulation.status_code, 200)
         self.assertEqual(simulation.content.decode().count("data-simulation-engine="), 2)
-        self.assertContains(dashboard, "Run pipeline test")
+        self.assertContains(dashboard, "Start simulation")
 
         SimulationAvailability.objects.filter(pk=1).update(enabled=False)
         self.assertEqual(self.client.get("/simulation/").status_code, 404)
-        self.assertNotContains(self.client.get("/dashboard/"), "Run pipeline test")
+        self.assertNotContains(self.client.get("/dashboard/"), "Start simulation")
 
     def test_settings_show_admin_area_only_to_staff(self) -> None:
         self.client.force_login(self.user)
@@ -474,6 +474,75 @@ class GuiControlPlaneTests(TestCase):
         self.assertEqual(pdf_export["Content-Type"], "application/pdf")
         self.assertTrue(pdf_export.content.startswith(b"%PDF-1.4"))
 
+    def test_filtered_report_history_exports_match_active_selection(self) -> None:
+        self.client.force_login(self.staff)
+
+        params = {
+            "range": "30d",
+            "engine": "sports_capital",
+            "mode": "simulation",
+        }
+        page = self.client.get("/reports/", params)
+        json_export = self.client.get("/reports/export/json/", params)
+        csv_export = self.client.get("/reports/export/csv/", params)
+
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, '<option value="execution" >Execution</option>', html=False)
+        self.assertContains(page, "data-download-feedback")
+        self.assertEqual(json_export.status_code, 200)
+        payload = json_export.json()
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["engine"], "sports_capital")
+        self.assertEqual(payload[0]["mode"], "simulation")
+        self.assertNotIn("workflow-secret", json_export.content.decode())
+        self.assertEqual(csv_export.status_code, 200)
+        self.assertIn("Northbridge v Riverside", csv_export.content.decode())
+        self.assertIn("qbet-reports-simulation-", csv_export["Content-Disposition"])
+
+    def test_invalid_report_history_exports_reject_filters_without_fallback_data(self) -> None:
+        self.client.force_login(self.staff)
+        invalid_filters = (
+            {"range": "invalid"},
+            {"range": "30d", "engine": "unknown"},
+            {"range": "30d", "mode": "live"},
+            {"range": "custom"},
+            {
+                "range": "custom",
+                "start": "2026-09-07T11:00",
+                "end": "2026-09-07T10:00",
+            },
+        )
+
+        for params in invalid_filters:
+            with self.subTest(params=params):
+                response = self.client.get("/reports/export/json/", params)
+                self.assertEqual(response.status_code, 400)
+                self.assertNotIn("Content-Disposition", response.headers)
+                self.assertIn("report", response.content.decode().lower())
+
+        friendly_page = self.client.get("/reports/", {"range": "30d", "mode": "live"})
+        self.assertEqual(friendly_page.status_code, 200)
+        self.assertContains(friendly_page, "Choose a valid report range")
+
+    def test_execution_report_filter_is_visible_and_empty_export_is_explicit(self) -> None:
+        self.client.force_login(self.staff)
+
+        page = self.client.get("/reports/", {"range": "30d", "mode": "execution"})
+        export = self.client.get(
+            "/reports/export/json/",
+            {"range": "30d", "mode": "execution"},
+        )
+
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(
+            page,
+            '<option value="execution" selected>Execution</option>',
+            html=False,
+        )
+        self.assertEqual(export.status_code, 200)
+        self.assertEqual(export.json(), [])
+        self.assertEqual(export["X-QBet-Export-State"], "no-data")
+
     def test_missing_simulation_report_has_safe_admin_state(self) -> None:
         self.client.force_login(self.staff)
 
@@ -487,15 +556,28 @@ class GuiControlPlaneTests(TestCase):
         reporting_service = CustomerReportingService(
             _ReportStore((self.sports_report, dollar_report), ())
         )
+        UserDisplayPreference.objects.create(
+            user=self.staff,
+            language="de",
+            region="DE",
+            timezone_name="Europe/Berlin",
+            time_format="24h",
+            currency="USD",
+        )
         self.client.force_login(self.staff)
 
         with patch("qbet.web.views.CUSTOMER_REPORTING_SERVICE", reporting_service):
             response = self.client.get("/reports/?range=30d")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<h3>EUR</h3>", html=False)
-        self.assertContains(response, "<h3>USD</h3>", html=False)
+        self.assertContains(response, "<h3>EUR", html=False)
+        self.assertContains(response, "<h3>USD ", html=False)
+        self.assertContains(response, "Preferred recorded currency")
         self.assertContains(response, "50,00 EUR")
         self.assertContains(response, "50,00 USD")
         self.assertNotContains(response, "100,00 EUR")
         self.assertNotContains(response, "100,00 USD")
+        content = response.content.decode()
+        self.assertLess(content.index("<h3>USD"), content.index("<h3>EUR"))
+        hourly = self.client.get("/reports/?range=1h")
+        self.assertContains(hourly, '<option value="1h" selected>Last hour</option>', html=False)

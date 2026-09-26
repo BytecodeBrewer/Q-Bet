@@ -1,5 +1,6 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
+{% load display_preferences %}
 <section class="page-heading dashboard-heading">
   <span class="eyebrow">Portfolio workspace</span>
   <div class="page-heading-row">
@@ -13,12 +14,21 @@
       {% elif execution_layer_running %}
         <span class="status status-green" aria-hidden="true"></span><strong>Execution running</strong>
       {% elif execution_layer_active %}
-        <span class="status status-green" aria-hidden="true"></span><strong>Execution active</strong>
+        <span class="status status-gray" aria-hidden="true"></span><strong>Execution ready</strong>
       {% else %}
         <span class="status status-gray" aria-hidden="true"></span><strong>Execution idle</strong>
       {% endif %}
     </div>
   </div>
+</section>
+
+<section class="provider-activity activity-state activity-{{ provider_activity.state }}" aria-live="polite">
+  <div>
+    <span class="eyebrow">Market data</span>
+    <strong>{{ provider_activity.label }}</strong>
+    {% if provider_activity.occurred_at %}<small>Last activity {% localized_datetime provider_activity.occurred_at display_preferences %}</small>{% endif %}
+  </div>
+  {% if provider_activity.is_working %}<span class="activity-spinner" aria-label="Working"></span>{% elif provider_activity.state == "success" %}<span class="activity-check" aria-label="Success">✓</span>{% endif %}
 </section>
 
 <form id="dashboard-layout-state" data-layout-url="{% url 'dashboard-layout' %}" hidden>{% csrf_token %}</form>
@@ -30,7 +40,7 @@
     </div>
 
     <section class="summary-grid dashboard-summary-grid" aria-label="Execution activity summary">
-      <article class="summary-item summary-item-primary"><span>Active matches</span><strong>{{ execution_monitoring.summary.active_matches }}</strong><small>running now</small></article>
+      <article class="summary-item summary-item-primary"><span>Running matches</span><strong>{{ execution_monitoring.summary.active_matches }}</strong><small>running now</small></article>
       <article class="summary-item"><span>Pending matches</span><strong>{{ execution_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
       <article class="summary-item"><span>Recorded capital</span><strong>{% if execution_monitoring.summary.involved_capital is not None %}{{ execution_monitoring.summary.involved_capital }}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>tracked execution state</small></article>
       <article class="summary-item incident-summary{% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %} has-incidents{% endif %}">
@@ -50,14 +60,18 @@
         <article class="engine-card dashboard-engine-card draggable-card{% if not engine.enabled %} is-inactive{% endif %}" data-engine-widget="{{ engine.engine_id }}" data-widget-id="{{ engine.engine_id }}">
           <div class="engine-card-controls">
             {% if user.is_staff %}
-              <form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'execution' 'stop' %}">
-                {% csrf_token %}
-                {% if engine.enabled %}
-                  <button class="engine-runtime-button is-stop" type="submit" title="Disable" aria-label="Disable {{ engine.name }} execution"><span aria-hidden="true">■</span></button>
-                {% else %}
-                  <button class="engine-runtime-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'execution' 'start' %}" title="Enable" aria-label="Enable {{ engine.name }} execution"><span aria-hidden="true">▶</span></button>
-                {% endif %}
-              </form>
+              {% if engine.engine_id == "bonus" %}
+                <span class="tag neutral-tag" title="Provider path unavailable">Unavailable</span>
+              {% else %}
+                <form method="post" action="{% url 'engine-runtime-control' engine.engine_id 'execution' 'stop' %}">
+                  {% csrf_token %}
+                  {% if engine.enabled %}
+                    <button class="engine-runtime-button is-stop" type="submit" title="Disable" aria-label="Disable {{ engine.name }} execution"><span aria-hidden="true">■</span></button>
+                  {% else %}
+                    <button class="engine-runtime-button" type="submit" formaction="{% url 'engine-runtime-control' engine.engine_id 'execution' 'start' %}" title="Enable" aria-label="Enable {{ engine.name }} execution"><span aria-hidden="true">▶</span></button>
+                  {% endif %}
+                </form>
+              {% endif %}
             {% endif %}
             <button class="drag-handle" type="button" data-drag-handle aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown" aria-label="Move {{ engine.name }}" title="Reorder">
               <span class="drag-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
@@ -67,7 +81,7 @@
             <div class="card-heading engine-card-heading">
               <div>
                 <span class="engine-state-label">
-                  <span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span>
+                  <span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span>
                 </span>
                 <h3>{{ engine.name }}</h3>
               </div>
@@ -96,25 +110,26 @@
       <div class="plane-heading"><div><span class="plane-kicker">Admin only</span><h2 id="simulation-heading">Simulation</h2></div><span class="tag simulation-tag">Simulation</span></div>
 
       <section class="summary-grid dashboard-summary-grid" aria-label="Simulation activity summary">
-        <article class="summary-item summary-item-primary"><span>Active matches</span><strong>{{ simulation_monitoring.summary.active_matches }}</strong><small>running now</small></article>
+        <article class="summary-item summary-item-primary"><span>Running matches</span><strong>{{ simulation_monitoring.summary.active_matches }}</strong><small>running now</small></article>
         <article class="summary-item"><span>Pending matches</span><strong>{{ simulation_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
         <article class="summary-item"><span>Recorded runs</span><strong>{{ simulation_monitoring.summary.recorded_activity }}</strong><small>available history</small></article>
-        <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{{ simulation_monitoring.summary.involved_capital }}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>simulation only</small></article>
+        <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{% localized_money simulation_monitoring.summary.involved_capital "EUR" display_preferences %}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>simulation only</small></article>
         <article class="summary-item incident-summary{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %} has-incidents{% endif %}"><span>Recorded warnings / errors</span><strong>{{ simulation_monitoring.summary.warning_count }} / {{ simulation_monitoring.summary.error_count }}</strong><small>{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %}recent run history{% else %}No recorded issues{% endif %}</small></article>
       </section>
 
       <section class="simulation-control-panel">
-        <div class="section-heading"><div><span class="eyebrow">Sandbox</span><h3>Deterministic pipeline test</h3></div><span class="tag simulation-tag">Virtual only</span></div>
+        <div class="section-heading"><div><span class="eyebrow">Sandbox</span><h3>Sandbox simulation</h3></div><span class="tag simulation-tag">Virtual only</span></div>
+        <p>SportsCapital can use its configured fixture or connected odds source. BonusEngine uses active user-owned Bonus Offers with fresh fixed-odds sportsbook market data.</p>
         <form method="post" action="{% url 'simulation-start' %}">
           {% csrf_token %}
           {{ start_form.non_field_errors }}
           <div class="simulation-form-grid">
             <label>Engine {{ start_form.engine }} {{ start_form.engine.errors }}</label>
-            <label>Virtual capital {{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</label>
-            <label>Max duration {{ start_form.max_duration_minutes }} {{ start_form.max_duration_minutes.errors }}</label>
+            <label>Virtual capital (EUR) {{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</label>
           </div>
-          <button class="primary" type="submit">Run pipeline test</button>
+          <button class="primary" type="submit">Start simulation</button>
         </form>
+        <p class="muted">{% currency_preference_note "EUR" display_preferences %}</p>
       </section>
 
       <div class="section-heading section-heading-spacious"><div><span class="eyebrow">Engine status</span><h3>Simulation engines</h3></div><a class="compact-link" href="{% url 'report-history' %}">Simulation reports</a></div>
@@ -136,7 +151,7 @@
             </div>
             <div class="card-heading engine-card-heading">
               <div>
-                <span class="engine-state-label"><span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'active' %}Active{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span></span>
+                <span class="engine-state-label"><span class="status status-{{ engine.status }}" title="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}" aria-label="{% if engine.live_state == 'running' %}Running{% elif engine.live_state == 'ready' %}Ready{% elif engine.live_state == 'warning' %}Warning{% elif engine.live_state == 'error' %}Error{% else %}Inactive{% endif %}"></span></span>
                 <h3>{{ engine.name }}</h3>
               </div>
               <span class="tag simulation-tag">Simulation</span>
@@ -144,7 +159,7 @@
             <div class="engine-priority-metrics">
               <div><span>Running</span><strong>{{ engine.running_matches }}</strong></div>
               <div><span>Pending</span><strong>{{ engine.pending_matches }}</strong></div>
-              <div><span>Virtual capital</span><strong>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}—{% endif %}</strong></div>
+              <div><span>Virtual capital</span><strong>{% if engine.involved_capital is not None %}{% localized_money engine.involved_capital "EUR" display_preferences %}{% else %}—{% endif %}</strong></div>
             </div>
             {% if engine.warning_count or engine.error_count %}
               <div class="issue-badges" aria-label="{{ engine.name }} recorded simulation warnings and errors" title="Recorded incidents from recent simulation history">
@@ -158,7 +173,7 @@
         {% endfor %}
       </div>
 
-      {% if simulation_control.runs %}<section class="recent-runs surface-subtle"><h3>Recent simulation runs</h3><ul>{% for run in simulation_control.runs %}<li><strong>{{ run.engine }}</strong> · {{ run.status }} · {{ run.progress }} · virtual capital {{ run.current_capital }}{% if run.report_id %} · <a href="{% url 'report-detail' run.report_id %}">report</a>{% endif %}</li>{% endfor %}</ul></section>{% endif %}
+      {% if simulation_control.runs %}<section class="recent-runs surface-subtle"><h3>Recent simulation runs</h3><ul>{% for run in simulation_control.runs %}<li><strong>{{ run.engine }}</strong> · {{ run.status }} · {{ run.progress }} · virtual capital {% localized_money run.current_capital "EUR" display_preferences %}{% if run.report_id %} · <a href="{% url 'report-detail' run.report_id %}">report</a>{% endif %}</li>{% endfor %}</ul></section>{% endif %}
     </section>
   {% endif %}
 </div>

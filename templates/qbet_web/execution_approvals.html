@@ -1,6 +1,7 @@
 {% extends "qbet_web/base.html" %}
 {% block title %}Execution Approvals · Q-Bet{% endblock %}
 {% block content %}
+{% load display_preferences %}
 <section class="page-heading">
   <span class="eyebrow">Controlled execution</span>
   <h1>Execution approvals</h1>
@@ -25,10 +26,11 @@
         </div>
         <dl class="detail-list">
           <div><dt>Opportunity</dt><dd>{{ approval.opportunity_id }}</dd></div>
-          <div><dt>Capital required</dt><dd>{{ approval.capital_required }} {{ approval.currency }}</dd></div>
-          <div><dt>Valid until</dt><dd>{{ approval.expires_at }}</dd></div>
+          <div><dt>Capital required</dt><dd>{% localized_money approval.capital_required approval.currency display_preferences %}</dd></div>
+          <div><dt>Valid until</dt><dd>{% localized_datetime approval.expires_at display_preferences %}</dd></div>
           <div><dt>Remaining</dt><dd>{{ approval.remaining_validity }} remaining</dd></div>
         </dl>
+        <p class="muted">{% currency_preference_note approval.currency display_preferences %}</p>
         <div class="hero-actions">
           <form method="post" action="{% url 'execution-approval-decision' approval.execution_id %}">
             {% csrf_token %}

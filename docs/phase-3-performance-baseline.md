@@ -54,3 +54,6 @@ The JSON artifact contains a schema version, runtime scope, whether external-pro
 - derived items per second.
 
 These values are comparative baselines, not production SLAs. The initial suite intentionally has no fragile microsecond-level regression threshold. A later ticket may add broad regression budgets after enough comparable CI runs exist to establish normal variance.
+## Hosted web companion
+
+Vercel runtime behavior, browser-facing requests, Supabase roundtrips, authenticated page query counts, and warm/cold hosted measurements are documented separately in [Phase 3 Hosted Web Performance](phase-3-hosted-performance.md). That procedure complements this internal baseline rather than changing its scope or turning either set of observations into production SLAs.

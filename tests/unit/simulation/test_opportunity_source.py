@@ -22,6 +22,7 @@ from qbet.data import (
     TheOddsApiRateLimitError,
     TheOddsApiTransportError,
 )
+from qbet.monitoring import MonitoringRecord
 from qbet.simulation import SimulationEngine, SimulationRunConfig
 from qbet.simulation.opportunity_source import (
     DeterministicSimulationOpportunitySource,
@@ -37,6 +38,18 @@ SOURCE = DataSourceMetadata(
     source_id="simulation-the-odds-api",
     transport=SourceTransport.API,
 )
+
+
+class RecordingMonitoringWriter:
+    def __init__(self, *, fail: bool = False) -> None:
+        self.records: list[MonitoringRecord] = []
+        self.fail = fail
+
+    def append(self, record: MonitoringRecord) -> MonitoringRecord:
+        if self.fail:
+            raise OSError("monitoring unavailable")
+        self.records.append(record)
+        return record
 
 
 class RecordingCollector:
@@ -250,6 +263,53 @@ def test_connected_source_maps_provider_failures_to_safe_reason_codes(
     assert str(error) not in raised.value.user_message
 
 
+def test_connected_source_emits_working_then_success_provider_activity() -> None:
+    monitoring = RecordingMonitoringWriter()
+    source = TheOddsApiSportsSimulationOpportunitySource(
+        connected_config(),
+        collector=RecordingCollector(market_snapshot()),
+        monitoring_writer=monitoring,
+    )
+
+    source.build(run_config(), CORRELATION_ID)
+
+    assert [record.status for record in monitoring.records] == ["working", "success"]
+    assert all(record.event_type == "provider_query" for record in monitoring.records)
+    assert all(record.stage == "data_aggregation" for record in monitoring.records)
+    assert monitoring.records[-1].references == {
+        "provider_id": THE_ODDS_API_PROVIDER_ID,
+        "source_id": "simulation-the-odds-api",
+    }
+    assert monitoring.records[-1].duration_ms is not None
+
+
+def test_connected_source_emits_delayed_for_rate_limit() -> None:
+    monitoring = RecordingMonitoringWriter()
+    source = TheOddsApiSportsSimulationOpportunitySource(
+        connected_config(),
+        collector=RecordingCollector(error=TheOddsApiRateLimitError("quota")),
+        monitoring_writer=monitoring,
+    )
+
+    with pytest.raises(SimulationOpportunitySourceError):
+        source.build(run_config(), CORRELATION_ID)
+
+    assert [record.status for record in monitoring.records] == ["working", "delayed"]
+    assert monitoring.records[-1].reason_code == "simulation_odds_rate_limited"
+
+
+def test_monitoring_failure_never_breaks_provider_collection() -> None:
+    source = TheOddsApiSportsSimulationOpportunitySource(
+        connected_config(),
+        collector=RecordingCollector(market_snapshot()),
+        monitoring_writer=RecordingMonitoringWriter(fail=True),
+    )
+
+    bundle = source.build(run_config(), CORRELATION_ID)
+
+    assert len(bundle.opportunities) == 1
+
+
 def test_deterministic_bonus_source_remains_available_offline() -> None:
     bundle = DeterministicSimulationOpportunitySource(clock=lambda: NOW).build(
         run_config(SimulationEngine.BONUS),
@@ -257,4 +317,4 @@ def test_deterministic_bonus_source_remains_available_offline() -> None:
     )
 
     assert len(bundle.opportunities) == 2
-    assert bundle.customer_report_input.match == "Deterministic bonus fixture"
+    assert bundle.customer_report_input.match == "Legacy exchange-hedged bonus fixture"

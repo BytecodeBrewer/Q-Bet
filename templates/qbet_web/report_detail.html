@@ -38,10 +38,11 @@
 <section class="detail-panel">
   <h2>Download</h2>
   <p>
-    <a class="button-link" href="{% url 'report-export' report.report_id 'csv' %}">CSV</a>
-    <a class="button-link" href="{% url 'report-export' report.report_id 'json' %}">JSON</a>
-    <a class="button-link" href="{% url 'report-export' report.report_id 'pdf' %}">PDF</a>
+    <a class="button-link" data-download-feedback href="{% url 'report-export' report.report_id 'csv' %}">CSV</a>
+    <a class="button-link" data-download-feedback href="{% url 'report-export' report.report_id 'json' %}">JSON</a>
+    <a class="button-link" data-download-feedback href="{% url 'report-export' report.report_id 'pdf' %}">PDF</a>
   </p>
   <p class="muted">Downloads contain business result data only.</p>
+  <p class="download-status" data-download-status role="status"></p>
 </section>
 {% endblock %}

@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from django.test import TestCase
 
@@ -14,7 +14,7 @@ from qbet.notifications.preferences import (
     PostgresNotificationInbox,
     PostgresNotificationPreferenceRepository,
 )
-from qbet.storage.models import NotificationTaskRow
+from qbet.storage.models import NotificationInboxDeliveryRow, NotificationTaskRow
 
 NOW = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
 TASK_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -107,6 +107,44 @@ class NotificationPreferenceInboxPersistenceTests(TestCase):
             "owner", now=NOW + timedelta(minutes=1)
         )
         self.assertTrue(restored[0].read)
+
+    def test_unread_count_is_owner_scoped_and_ignores_stale_deliveries(self) -> None:
+        task = _task()
+        _persist(task)
+        inbox = PostgresNotificationInbox()
+        self.assertTrue(inbox.deliver("owner", task.id, task.category))
+        NotificationInboxDeliveryRow.objects.create(
+            user_id="owner",
+            task_id=uuid4(),
+            category="execution_action_required",
+        )
+
+        self.assertEqual(inbox.unread_count("owner"), 1)
+        self.assertEqual(inbox.unread_count("other"), 0)
+
+        self.assertTrue(inbox.mark_read("owner", task.id))
+        self.assertEqual(inbox.unread_count("owner"), 0)
+
+    def test_unread_count_bounds_recent_deliveries_before_read_filter(self) -> None:
+        old_unread = _task().model_copy(
+            update={"id": uuid4(), "execution_id": uuid4(), "correlation_id": uuid4()}
+        )
+        recent_read_a = _task().model_copy(
+            update={"id": uuid4(), "execution_id": uuid4(), "correlation_id": uuid4()}
+        )
+        recent_read_b = _task().model_copy(
+            update={"id": uuid4(), "execution_id": uuid4(), "correlation_id": uuid4()}
+        )
+        inbox = PostgresNotificationInbox()
+        for task in (old_unread, recent_read_a, recent_read_b):
+            _persist(task)
+            self.assertTrue(inbox.deliver("owner", task.id, task.category))
+
+        self.assertTrue(inbox.mark_read("owner", recent_read_a.id))
+        self.assertTrue(inbox.mark_read("owner", recent_read_b.id))
+
+        self.assertEqual(inbox.unread_count("owner", limit=2), 0)
+        self.assertEqual(inbox.unread_count("owner", limit=3), 1)
 
     def test_suppressed_task_does_not_appear_after_preferences_are_reenabled(self) -> None:
         task = _task()

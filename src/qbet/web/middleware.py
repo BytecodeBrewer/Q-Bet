@@ -7,7 +7,10 @@ import re
 import uuid
 from collections.abc import Callable
 from time import perf_counter
+from typing import Any
 
+from django.conf import settings
+from django.db import connection
 from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger("qbet.web.request")
@@ -39,7 +42,30 @@ class RequestCorrelationMiddleware:
         if not _correlation_id_pattern.fullmatch(correlation_id):
             correlation_id = str(uuid.uuid4())
         started_at = perf_counter()
-        response = self.get_response(request)
+        query_count = 0
+        query_duration_ms = 0.0
+
+        if settings.QBET_PROFILE_WEB_REQUESTS:
+            def profile_execute(
+                execute: Callable[..., Any],
+                sql: str,
+                params: object,
+                many: bool,
+                context: object,
+            ) -> Any:
+                nonlocal query_count, query_duration_ms
+                query_started_at = perf_counter()
+                try:
+                    return execute(sql, params, many, context)
+                finally:
+                    query_count += 1
+                    query_duration_ms += (perf_counter() - query_started_at) * 1000
+
+            with connection.execute_wrapper(profile_execute):
+                response = self.get_response(request)
+        else:
+            response = self.get_response(request)
+
         response["X-Correlation-ID"] = correlation_id
         user = getattr(request, "user", None)
         user_id = (
@@ -47,15 +73,18 @@ class RequestCorrelationMiddleware:
             if user is not None and getattr(user, "is_authenticated", False)
             else None
         )
-        logger.info(
-            "request.completed",
-            extra={
-                "method": request.method,
-                "path": safe_request_path(request.path),
-                "status": response.status_code,
-                "duration_ms": round((perf_counter() - started_at) * 1000, 3),
-                "user_id": user_id,
-                "correlation_id": correlation_id,
-            },
-        )
+        extra: dict[str, object] = {
+            "method": request.method,
+            "path": safe_request_path(request.path),
+            "status": response.status_code,
+            "duration_ms": round((perf_counter() - started_at) * 1000, 3),
+            "user_id": user_id,
+            "correlation_id": correlation_id,
+        }
+        if settings.QBET_PROFILE_WEB_REQUESTS:
+            extra.update(
+                query_count=query_count,
+                query_duration_ms=round(query_duration_ms, 3),
+            )
+        logger.info("request.completed", extra=extra)
         return response

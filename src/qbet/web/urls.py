@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path, reverse_lazy
 
-from qbet.web import views
+from qbet.web import bonus_offers, views
 from qbet.web.engine_runtime import engine_runtime_control, sandbox_execution_control
 from qbet.web.execution_approvals import execution_approval_decision, execution_approvals
 from qbet.web.polling_settings import polling_settings
@@ -17,6 +17,8 @@ urlpatterns = [
     path("verify-email/<str:uidb64>/<str:token>/", views.verify_email, name="verify-email"),
     path("profile/", views.profile, name="profile"),
     path("notifications/", views.notification_inbox, name="notification-inbox"),
+    path("bonus-offers/", bonus_offers.bonus_offer_list, name="bonus-offer-list"),
+    path("bonus-offers/create/", bonus_offers.bonus_offer_create, name="bonus-offer-create"),
     path(
         "notifications/<uuid:task_id>/read/",
         views.notification_inbox_read,
@@ -42,7 +44,11 @@ urlpatterns = [
     ),
     path("engines/<str:engine_id>/", views.engine_detail, name="engine-detail"),
     path("simulation/", views.simulation, name="simulation"),
+    path("activity/provider/", views.provider_activity, name="provider-activity"),
     path("simulation/start/", views.simulation_start, name="simulation-start"),
+    path("simulation/<uuid:run_id>/run/", views.simulation_run, name="simulation-run"),
+    path("simulation/<uuid:run_id>/stop/", views.simulation_stop, name="simulation-stop"),
+    path("simulation/pipeline-dry-run/", views.pipeline_dry_run, name="pipeline-dry-run"),
     path("settings/presentation/", views.presentation_settings, name="presentation-settings"),
     path(
         "settings/engines/",
@@ -50,6 +56,11 @@ urlpatterns = [
         name="user-routing-preferences",
     ),
     path("reports/", views.report_history, name="report-history"),
+    path(
+        "reports/export/<str:export_format>/",
+        views.report_history_export,
+        name="report-history-export",
+    ),
     path("reports/<uuid:run_id>/", views.report_detail, name="report-detail"),
     path(
         "reports/<uuid:run_id>/export/<str:export_format>/",

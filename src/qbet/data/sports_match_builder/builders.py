@@ -15,22 +15,26 @@ from qbet.calculations import (
 from qbet.data.models import DataTarget, NormalizedMarketSnapshot, NormalizedOffer
 from qbet.domain import OfferSide
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
+from qbet.providers import SportsbookCatalog
+from qbet.providers.bonus import canonicalize_german_bonus_snapshot
 
 from .models import (
     BuiltBonusMatch,
     BuiltSportsCapitalMatch,
     DutchingMatchMetadata,
     FreeBetMatchMetadata,
+    PreparedBonusSportsbookOffers,
     QualifyingBetMatchMetadata,
     SportsMatchContext,
     TwoWayArbitrageMatchMetadata,
 )
 
 
-def build_qualifying_bet_match(
+def build_legacy_exchange_hedged_qualifying_bet_match(
     snapshot: NormalizedMarketSnapshot,
     metadata: QualifyingBetMatchMetadata,
 ) -> BuiltBonusMatch:
+    """Retained bookmaker-BACK/exchange-LAY qualifying strategy for regression only."""
     _require_target(snapshot, DataTarget.BONUS)
     back_offer, lay_offer = _selected_back_lay_pair(
         snapshot, metadata.back_offer_id, metadata.lay_offer_id
@@ -53,10 +57,11 @@ def build_qualifying_bet_match(
     return BuiltBonusMatch(request=request, context=_context(snapshot))
 
 
-def build_free_bet_match(
+def build_legacy_exchange_hedged_free_bet_match(
     snapshot: NormalizedMarketSnapshot,
     metadata: FreeBetMatchMetadata,
 ) -> BuiltBonusMatch:
+    """Retained bookmaker-BACK/exchange-LAY free-bet strategy for regression only."""
     _require_target(snapshot, DataTarget.BONUS)
     back_offer, lay_offer = _selected_back_lay_pair(
         snapshot, metadata.back_offer_id, metadata.lay_offer_id
@@ -79,6 +84,37 @@ def build_free_bet_match(
     return BuiltBonusMatch(request=request, context=_context(snapshot))
 
 
+def prepare_german_bonus_sportsbook_offers(
+    snapshot: NormalizedMarketSnapshot,
+    offer_ids: tuple[str, ...],
+    catalog: SportsbookCatalog,
+) -> PreparedBonusSportsbookOffers:
+    """Resolve German sportsbook identity before canonical Bonus preparation."""
+
+    selected_offers = tuple(_offer_by_id(snapshot, identifier) for identifier in offer_ids)
+    selected_snapshot = snapshot.model_copy(update={"offers": selected_offers})
+    canonical = canonicalize_german_bonus_snapshot(selected_snapshot, catalog)
+    return prepare_bonus_sportsbook_offers(canonical, offer_ids)
+
+
+def prepare_bonus_sportsbook_offers(
+    snapshot: NormalizedMarketSnapshot,
+    offer_ids: tuple[str, ...],
+) -> PreparedBonusSportsbookOffers:
+    """Validate canonical BonusEngine fixed-odds sportsbook preparation."""
+
+    _require_target(snapshot, DataTarget.BONUS)
+    if len(offer_ids) < 2 or len(set(offer_ids)) != len(offer_ids):
+        raise ValueError("bonus sportsbook preparation requires distinct offer ids")
+    offers = tuple(_offer_by_id(snapshot, identifier) for identifier in offer_ids)
+    _require_distinct_outcomes(offers)
+    _require_fixed_odds_sportsbook_offers(offers)
+    if len({offer.provider for offer in offers}) < 2:
+        raise ValueError("bonus sportsbook preparation requires multiple sportsbooks")
+    _require_consistent_currency(offers)
+    return PreparedBonusSportsbookOffers(offers=offers, context=_context(snapshot))
+
+
 def build_two_way_arbitrage_match(
     snapshot: NormalizedMarketSnapshot,
     metadata: TwoWayArbitrageMatchMetadata,
@@ -87,6 +123,7 @@ def build_two_way_arbitrage_match(
     first_offer, second_offer = _selected_pair(
         snapshot, metadata.first_offer_id, metadata.second_offer_id
     )
+    _require_fixed_odds_sportsbook_offers((first_offer, second_offer))
     _require_available_stake(first_offer, metadata.requested_total_stake)
     _require_available_stake(second_offer, metadata.requested_total_stake)
     request = SportsCapitalEngineRequest(
@@ -113,6 +150,7 @@ def build_dutching_match(
     _require_target(snapshot, DataTarget.SPORTS_CAPITAL)
     offers = tuple(_offer_by_id(snapshot, identifier) for identifier in metadata.offer_ids)
     _require_distinct_outcomes(offers)
+    _require_fixed_odds_sportsbook_offers(offers)
     _require_selected_offers_cover_snapshot(snapshot, offers)
     _require_consistent_currency(offers)
     for offer in offers:
@@ -187,7 +225,9 @@ def _selected_back_lay_pair(
     if back_offer.selection != lay_offer.selection:
         raise ValueError("selected offers must represent the same outcome")
     if back_offer.side is not OfferSide.BACK or lay_offer.side is not OfferSide.LAY:
-        raise ValueError("selected offers must be a bookmaker back and exchange lay pair")
+        raise ValueError(
+            "legacy exchange-hedged preparation requires a bookmaker back and exchange lay pair"
+        )
     if back_offer.provider == lay_offer.provider:
         raise ValueError("back and lay offers must use distinct providers")
     _require_consistent_currency((back_offer, lay_offer))
@@ -214,6 +254,15 @@ def _require_selected_offers_cover_snapshot(
     snapshot_ids = {offer.id for offer in snapshot.offers}
     if selected_ids != snapshot_ids:
         raise ValueError("dutching selection must cover every snapshot outcome")
+
+
+def _require_fixed_odds_sportsbook_offers(
+    offers: tuple[NormalizedOffer, ...],
+) -> None:
+    if any(offer.side is not OfferSide.BACK for offer in offers):
+        raise ValueError(
+            "sportsbook preparation requires fixed-odds sportsbook back offers"
+        )
 
 
 def _require_consistent_currency(offers: tuple[NormalizedOffer, ...]) -> None:

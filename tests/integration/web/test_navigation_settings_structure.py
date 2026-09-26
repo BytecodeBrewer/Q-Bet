@@ -1,9 +1,9 @@
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
 
+from qbet.web.display_preferences import DisplayPreferences
 from qbet.web.models import SimulationAvailability
 
 
@@ -14,8 +14,8 @@ class NavigationAndSettingsStructureTests(TestCase):
         with (
             patch("qbet.web.approval_context._APPROVALS.active_count_for", return_value=2),
             patch(
-                "qbet.web.approval_context._NOTIFICATION_INBOX.list",
-                return_value=(SimpleNamespace(read=False), SimpleNamespace(read=True)),
+                "qbet.web.approval_context._NOTIFICATION_INBOX.unread_count",
+                return_value=1,
             ),
         ):
             response = self.client.get("/dashboard/")
@@ -34,6 +34,21 @@ class NavigationAndSettingsStructureTests(TestCase):
         self.assertNotIn("Approvals", sidebar)
         self.assertNotIn("Simulation Dashboard", sidebar)
         self.assertNotIn("/monitoring/", sidebar)
+
+    def test_compact_account_menu_keeps_profile_and_sign_out_actions_reachable(self) -> None:
+        user = User.objects.create_user("account-menu-user", password="Valid-pass-12345")
+        self.client.force_login(user)
+
+        response = self.client.get("/dashboard/")
+
+        content = response.content.decode()
+        account = content.split('data-account-menu>', 1)[1].split("</div>\n\n        <button", 1)[0]
+        self.assertIn('data-account-menu-toggle', account)
+        self.assertIn('data-account-menu-panel', account)
+        self.assertIn('role="menu"', account)
+        self.assertIn('role="menuitem"', account)
+        self.assertIn('/profile/', account)
+        self.assertIn('/accounts/logout/', account)
 
     def test_staff_simulation_navigation_tracks_global_availability(self) -> None:
         staff = User.objects.create_user(
@@ -89,6 +104,21 @@ class NavigationAndSettingsStructureTests(TestCase):
         self.assertContains(staff_response, "/monitoring/")
         self.assertContains(staff_response, "/admin/")
 
+    def test_display_preferences_are_loaded_once_per_rendered_request(self) -> None:
+        user = User.objects.create_user("display-cache-user", password="Valid-pass-12345")
+        self.client.force_login(user)
+
+        with patch(
+            "qbet.web.shell_context._DISPLAY_PREFERENCES.load",
+            return_value=DisplayPreferences(),
+        ) as load:
+            settings_response = self.client.get("/settings/presentation/")
+            reports_response = self.client.get("/reports/")
+
+        self.assertEqual(settings_response.status_code, 200)
+        self.assertEqual(reports_response.status_code, 200)
+        self.assertEqual(load.call_count, 2)
+
     def test_normal_user_cannot_open_staff_control_surfaces(self) -> None:
         user = User.objects.create_user("boundary-user", password="Valid-pass-12345")
         self.client.force_login(user)
@@ -106,5 +136,11 @@ class NavigationAndSettingsStructureTests(TestCase):
         response = self.client.get("/dashboard/")
 
         self.assertContains(response, 'aria-controls="app-sidebar"')
-        self.assertContains(response, 'aria-expanded="true"')
+        self.assertContains(response, 'class="sidebar-collapsed"')
+        self.assertContains(response, 'aria-expanded="false"')
+        self.assertContains(response, 'data-sidebar-close')
+        self.assertContains(response, 'data-sidebar-backdrop')
+        self.assertContains(response, 'data-account-menu-toggle')
+        self.assertContains(response, 'class="account-avatar"')
+        self.assertContains(response, 'aria-label="Open account menu for toggle-user"')
         self.assertContains(response, "/static/qbet_web/navigation.js")

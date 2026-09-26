@@ -128,6 +128,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "qbet.web.approval_context.approval_navigation",
+                "qbet.web.shell_context.authenticated_shell",
             ],
         },
     },
@@ -157,6 +158,9 @@ def optional_external_url(name: str) -> str:
     return value.rstrip("/")
 
 
+QBET_PROFILE_WEB_REQUESTS = _environment_flag("QBET_PROFILE_WEB_REQUESTS") or (
+    os.environ.get("VERCEL_ENV", "").strip().lower() == "preview"
+)
 QBET_METRICS_TOKEN = os.environ.get("QBET_METRICS_TOKEN", "")
 QBET_GRAFANA_URL = optional_external_url("QBET_GRAFANA_URL")
 QBET_VERCEL_DASHBOARD_URL = optional_external_url("QBET_VERCEL_DASHBOARD_URL")
@@ -173,6 +177,10 @@ QBET_SIMULATION_REQUESTED_TOTAL_STAKE = os.environ.get(
     "QBET_SIMULATION_REQUESTED_TOTAL_STAKE", ""
 ).strip()
 QBET_SIMULATION_STAKE_PRECISION = os.environ.get("QBET_SIMULATION_STAKE_PRECISION", "").strip()
+QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS = os.environ.get(
+    "QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS",
+    "",
+).strip()
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

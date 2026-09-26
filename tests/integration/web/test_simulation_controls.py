@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from threading import Event, Thread
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -12,18 +13,22 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 import django
 
 from django.contrib.auth.models import User
-from django.test import TestCase, override_settings
+from django.db import close_old_connections
+from django.test import TestCase, TransactionTestCase, override_settings
 
 from qbet.data import TheOddsApiAdapter
 from qbet.layers import SimulationLogRecordType
 from qbet.simulation import SimulationEngine
 from qbet.simulation.opportunity_source import (
+    DeterministicSimulationOpportunitySource,
+    SimulationOpportunityBundle,
     TheOddsApiSportsSimulationConfig,
     TheOddsApiSportsSimulationOpportunitySource,
 )
 from qbet.storage.ledger import PortfolioLedgerRepository, RoutingConfigurationRepository
+from qbet.storage.models import ModeWorkQueueRow
 from qbet.storage.postgres import PostgresSimulationReportReader
-from qbet.web.models import SimulationAvailability, SimulationRunState
+from qbet.web.models import SimulationAvailability, SimulationRunState, UserDisplayPreference
 from qbet.web.monitoring import MonitoringService
 from qbet.web.simulation_control import (
     SimulationAlreadyRunningError,
@@ -112,6 +117,7 @@ class SimulationGuiControlTests(TestCase):
         self.assertFalse(SimulationAvailability.objects.get(pk=1).enabled)
         self.assertContains(allowed, "Simulation availability disabled.")
 
+
     def test_simulation_page_uses_persisted_running_state(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         RoutingConfigurationRepository().save(
@@ -129,8 +135,43 @@ class SimulationGuiControlTests(TestCase):
         response = self.client.get("/simulation/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<dt>Status</dt><dd>Running.</dd>", html=True)
-        self.assertContains(response, "<dt>Active / pending</dt><dd>1 / 0</dd>", html=True)
+        self.assertContains(response, "<dt>Status</dt><dd>Inactive.</dd>", html=True)
+        self.assertContains(response, "<dt>Running / pending</dt><dd>1 / 0</dd>", html=True)
+        self.assertContains(
+            response,
+            "BonusEngine combines your active promotion terms with fresh fixed-odds sportsbook data.",
+        )
+
+    def test_simulation_surface_uses_display_preferences_without_fx_relabeling(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(bonus=EngineModes(simulation=True))
+        )
+        SimulationRunState.objects.create(
+            run_id=uuid4(),
+            engine=SimulationEngine.BONUS.value,
+            status=SimulationRunState.Status.RUNNING,
+            progress=Decimal("0.25"),
+            current_capital=Decimal("100"),
+        )
+        UserDisplayPreference.objects.create(
+            user=self.staff,
+            language="de",
+            region="DE",
+            timezone_name="Europe/Berlin",
+            time_format="24h",
+            currency="USD",
+        )
+        self.client.force_login(self.staff)
+
+        response = self.client.get("/simulation/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "100,00 EUR")
+        self.assertContains(response, "Preferred recorded currency: USD.")
+        self.assertContains(response, "no FX conversion is applied.")
+        self.assertContains(response, "Running / pending")
+        self.assertNotContains(response, "Active / pending")
 
     def test_normal_user_cannot_change_global_simulation_availability(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=False)
@@ -143,6 +184,57 @@ class SimulationGuiControlTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertFalse(SimulationAvailability.objects.get(pk=1).enabled)
+
+    def test_product_simulation_form_exposes_connected_bonus_and_sports_capital(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.staff)
+
+        response = self.client.get("/simulation/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '<option value="sports_capital">SportsCapitalEngine</option>',
+            count=2,
+            html=True,
+        )
+        self.assertContains(
+            response,
+            '<option value="bonus">BonusEngine</option>',
+            count=2,
+            html=True,
+        )
+        self.assertContains(response, "Pipeline dry-run")
+        self.assertContains(
+            response,
+            "BonusEngine combines your active promotion terms with fresh fixed-odds sportsbook data.",
+        )
+        self.assertContains(
+            response,
+            "BonusEngine combines your active promotion terms with fresh fixed-odds sportsbook data.",
+        )
+
+    def test_bonus_gui_start_records_authenticated_run_owner(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(bonus=EngineModes(simulation=True))
+        )
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            "/simulation/start/",
+            {
+                "engine": SimulationEngine.BONUS.value,
+                "starting_capital": "100.00",
+                "max_duration_minutes": "60",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        run = SimulationRunState.objects.get()
+        self.assertEqual(run.engine, SimulationEngine.BONUS.value)
+        self.assertEqual(run.initiated_by, self.staff)
+
 
     def test_normal_user_cannot_start_simulation_even_when_enabled(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
@@ -213,7 +305,8 @@ class SimulationGuiControlTests(TestCase):
         self.assertEqual(SimulationRunState.objects.count(), 1)
         self.assertTrue(SimulationRunState.objects.filter(pk=active_run.run_id).exists())
 
-    def test_gui_pipeline_test_requires_started_engine_and_persists_report_and_records(self) -> None:
+
+    def test_gui_simulation_exposes_running_state_then_persists_report_and_records(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         reader = PostgresSimulationReportReader()
         monitoring = MonitoringService(reader)
@@ -222,31 +315,38 @@ class SimulationGuiControlTests(TestCase):
         blocked = self.client.post(
             "/simulation/start/",
             {
-                "engine": SimulationEngine.BONUS.value,
+                "engine": SimulationEngine.SPORTS_CAPITAL.value,
                 "starting_capital": "100.00",
-                "max_duration_minutes": "60",
             },
             follow=True,
         )
-        self.assertContains(blocked, "Start this engine in Simulation before running a pipeline test.")
+        self.assertContains(blocked, "Enable this engine for Simulation before starting a simulation.")
         self.assertFalse(SimulationRunState.objects.exists())
 
         RoutingConfigurationRepository().save(
-            RoutingConfiguration(bonus=EngineModes(simulation=True))
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True))
+        )
+
+        started = self.client.post(
+            "/simulation/start/",
+            {
+                "engine": SimulationEngine.SPORTS_CAPITAL.value,
+                "starting_capital": "100.00",
+            },
+        )
+        run = SimulationRunState.objects.get()
+        self.assertEqual(run.status, SimulationRunState.Status.RUNNING)
+        self.assertRedirects(
+            started,
+            f"/simulation/?autostart={run.run_id}",
+            fetch_redirect_response=False,
         )
 
         with patch("qbet.web.views.MONITORING_SERVICE", monitoring):
-            response = self.client.post(
-                "/simulation/start/",
-                {
-                    "engine": SimulationEngine.BONUS.value,
-                    "starting_capital": "100.00",
-                    "max_duration_minutes": "60",
-                },
-                follow=True,
-            )
+            running_page = self.client.get(f"/simulation/?autostart={run.run_id}")
+            response = self.client.post(f"/simulation/{run.run_id}/run/")
+            run.refresh_from_db()
 
-            run = SimulationRunState.objects.get()
             self.assertIsNotNone(run.report_id)
             assert run.report_id is not None
             report = reader.load_report(run.report_id)
@@ -255,13 +355,15 @@ class SimulationGuiControlTests(TestCase):
             json_export = self.client.get(f"/reports/{run.report_id}/export/json/")
             csv_export = self.client.get(f"/reports/{run.report_id}/export/csv/")
 
+        self.assertContains(running_page, "Run is running.")
+        self.assertContains(running_page, "Stop simulation")
+        self.assertContains(running_page, f'/simulation/{run.run_id}/run/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], SimulationRunState.Status.COMPLETED)
         self.assertEqual(run.status, SimulationRunState.Status.COMPLETED)
         self.assertEqual(run.run_id, run.report_id)
         self.assertEqual(report.run_id, run.run_id)
-        self.assertEqual(report.engine, SimulationEngine.BONUS.value)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, str(run.run_id))
-        self.assertContains(response, "completed")
+        self.assertEqual(report.engine, SimulationEngine.SPORTS_CAPITAL.value)
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(json_export.status_code, 200)
         self.assertEqual(csv_export.status_code, 200)
@@ -277,15 +379,64 @@ class SimulationGuiControlTests(TestCase):
             any(record.record_type is SimulationLogRecordType.RUN_FINISHED for record in records)
         )
 
+
+    def test_gui_stop_transitions_active_run_without_running_work(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True))
+        )
+        self.client.force_login(self.staff)
+
+        self.client.post(
+            "/simulation/start/",
+            {
+                "engine": SimulationEngine.SPORTS_CAPITAL.value,
+                "starting_capital": "100.00",
+            },
+        )
+        run = SimulationRunState.objects.get()
+
+        stopped = self.client.post(f"/simulation/{run.run_id}/stop/")
+        run.refresh_from_db()
+
+        self.assertEqual(stopped.status_code, 200)
+        self.assertEqual(stopped.json()["status"], SimulationRunState.Status.STOPPED)
+        self.assertEqual(run.status, SimulationRunState.Status.STOPPED)
+        self.assertIsNone(run.report_id)
+
+    def test_pipeline_dry_run_is_separate_and_has_no_business_side_effects(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            "/simulation/pipeline-dry-run/",
+            {"engine": SimulationEngine.BONUS.value, "mode": "simulation"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pipeline dry-run")
+        self.assertContains(response, "Readiness only")
+        self.assertContains(
+            response,
+            "without provider, opportunity, order, or capital side effects",
+        )
+        self.assertFalse(SimulationRunState.objects.exists())
+        self.assertFalse(ModeWorkQueueRow.objects.exists())
+        self.assertIsNone(
+            PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        )
+
+
     def test_routing_and_simulation_state_survive_service_recreation(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         expected_routing = RoutingConfiguration(
-            bonus=EngineModes(simulation=True)
+            sports_capital=EngineModes(simulation=True)
         )
         RoutingConfigurationRepository().save(expected_routing)
 
         run = SimulationControlService().start(
-            engine=SimulationEngine.BONUS,
+            engine=SimulationEngine.SPORTS_CAPITAL,
             starting_capital=Decimal("100"),
             max_duration=timedelta(minutes=60),
         )
@@ -306,34 +457,45 @@ class SimulationGuiControlTests(TestCase):
         monitoring = MonitoringService(reader).snapshot(
             runtime_configuration=restored_routing
         )
-        bonus = next(engine for engine in monitoring.engines if engine.engine_id == "bonus")
-        self.assertEqual(bonus.status, "green")
-        self.assertEqual(bonus.live_state, "active")
-        self.assertEqual(bonus.total_activity, 1)
+        sports = next(
+            engine for engine in monitoring.engines
+            if engine.engine_id == "sports_capital"
+        )
+        self.assertEqual(sports.status, "gray")
+        self.assertEqual(sports.live_state, "ready")
+        self.assertEqual(sports.total_activity, 1)
 
-    def test_control_service_supports_both_current_v1_engines(self) -> None:
+    def test_default_bonus_simulation_fails_closed_without_run_owner(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
         service = SimulationControlService()
 
-        bonus = service.start(
-            engine=SimulationEngine.BONUS,
-            starting_capital=Decimal("100"),
-            max_duration=timedelta(minutes=60),
+        with self.assertRaises(SimulationControlError) as raised:
+            service.start(
+                engine=SimulationEngine.BONUS,
+                starting_capital=Decimal("100"),
+                max_duration=timedelta(minutes=60),
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "bonus_offer_user_missing",
         )
-        sports = service.start(
+        run = SimulationRunState.objects.get()
+        self.assertEqual(run.status, SimulationRunState.Status.FAILED)
+        self.assertEqual(run.error_message, "bonus_offer_user_missing")
+
+    def test_control_service_runs_current_sports_capital_engine(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        run = SimulationControlService().start(
             engine=SimulationEngine.SPORTS_CAPITAL,
             starting_capital=Decimal("100"),
             max_duration=timedelta(minutes=60),
         )
 
-        self.assertEqual(bonus.status, SimulationRunState.Status.COMPLETED)
-        self.assertEqual(sports.status, SimulationRunState.Status.COMPLETED)
+        self.assertEqual(run.status, SimulationRunState.Status.COMPLETED)
         self.assertEqual(
             set(SimulationRunState.objects.values_list("engine", flat=True)),
-            {
-                SimulationEngine.BONUS.value,
-                SimulationEngine.SPORTS_CAPITAL.value,
-            },
+            {SimulationEngine.SPORTS_CAPITAL.value},
         )
 
     def test_connected_sports_simulation_reads_one_market_and_persists_run_correlation(self) -> None:
@@ -456,3 +618,62 @@ class SimulationGuiControlTests(TestCase):
             "simulation_market_configuration_missing",
         )
 
+
+class _BlockingOpportunitySource:
+    def __init__(self) -> None:
+        self.started = Event()
+        self.release = Event()
+        self.calls = 0
+        self.delegate = DeterministicSimulationOpportunitySource()
+
+    def build(self, config, correlation_id) -> SimulationOpportunityBundle:
+        self.calls += 1
+        self.started.set()
+        if not self.release.wait(timeout=10):
+            raise TimeoutError("test did not release blocked simulation source")
+        return self.delegate.build(config, correlation_id)
+
+
+class SimulationRunConcurrencyTests(TransactionTestCase):
+    def test_overlapping_run_requests_claim_and_execute_the_simulation_once(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        source = _BlockingOpportunitySource()
+        service = SimulationControlService(opportunity_source=source)
+        run = service.begin(
+            engine=SimulationEngine.BONUS,
+            starting_capital=Decimal("100"),
+        )
+        worker_errors: list[BaseException] = []
+        worker = Thread(
+            target=self._run_in_thread,
+            args=(service, run.run_id, worker_errors),
+        )
+        worker.start()
+
+        self.assertTrue(source.started.wait(timeout=10))
+        self.assertEqual(
+            SimulationRunState.objects.get(pk=run.run_id).status,
+            SimulationRunState.Status.PROCESSING,
+        )
+        with self.assertRaises(SimulationAlreadyRunningError):
+            service.run(run.run_id)
+
+        source.release.set()
+        worker.join(timeout=15)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(worker_errors, [])
+        self.assertEqual(source.calls, 1)
+        persisted = SimulationRunState.objects.get(pk=run.run_id)
+        self.assertEqual(persisted.status, SimulationRunState.Status.COMPLETED)
+        self.assertIsNotNone(persisted.report_id)
+
+    @staticmethod
+    def _run_in_thread(service, run_id, errors: list[BaseException]) -> None:
+        close_old_connections()
+        try:
+            service.run(run_id)
+        except BaseException as error:
+            errors.append(error)
+        finally:
+            close_old_connections()

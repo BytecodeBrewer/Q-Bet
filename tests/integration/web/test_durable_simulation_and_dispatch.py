@@ -47,21 +47,24 @@ class DurableSimulationAndDispatchTests(TestCase):
         )
         SimulationAvailability.objects.create(pk=1, enabled=True)
         RoutingConfigurationRepository().save(
-            RoutingConfiguration(bonus=EngineModes(simulation=True))
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True))
         )
         self.client.force_login(staff)
 
         response = self.client.post(
             "/simulation/start/",
             {
-                "engine": SimulationEngine.BONUS.value,
+                "engine": SimulationEngine.SPORTS_CAPITAL.value,
                 "starting_capital": "125.00",
-                "max_duration_minutes": "60",
             },
         )
 
         self.assertEqual(response.status_code, 302)
         run = SimulationRunState.objects.get()
+        self.assertEqual(run.status, SimulationRunState.Status.RUNNING)
+        executed = self.client.post(f"/simulation/{run.run_id}/run/")
+        self.assertEqual(executed.status_code, 200)
+        run.refresh_from_db()
         persisted = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
         self.assertIsNotNone(persisted)
         assert persisted is not None
@@ -101,7 +104,7 @@ class DurableSimulationAndDispatchTests(TestCase):
 
         SimulationAvailability.objects.create(pk=1, enabled=True)
         RoutingConfigurationRepository().save(
-            RoutingConfiguration(bonus=EngineModes(simulation=True))
+            RoutingConfiguration(sports_capital=EngineModes(simulation=True))
         )
         staff = User.objects.create_user(
             "simulation-review-staff",
@@ -113,13 +116,15 @@ class DurableSimulationAndDispatchTests(TestCase):
         response = self.client.post(
             "/simulation/start/",
             {
-                "engine": SimulationEngine.BONUS.value,
+                "engine": SimulationEngine.SPORTS_CAPITAL.value,
                 "starting_capital": "125.00",
-                "max_duration_minutes": "60",
             },
         )
 
         self.assertEqual(response.status_code, 302)
+        run = SimulationRunState.objects.get()
+        executed = self.client.post(f"/simulation/{run.run_id}/run/")
+        self.assertEqual(executed.status_code, 200)
         persisted = repository.load_or_create(initial)
         self.assertIn("seed-cost", persisted.commands)
         self.assertGreater(len(persisted.commands), 1)

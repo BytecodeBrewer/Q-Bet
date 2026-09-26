@@ -45,6 +45,27 @@ class UserRoutingPreferences(DomainModel):
     sports_capital: UserEngineModes = Field(default_factory=UserEngineModes)
 
 
+def connected_product_routing_configuration(
+    configuration: RoutingConfiguration | None,
+) -> RoutingConfiguration | None:
+    """Mask routes whose provider-backed product path is not connected yet.
+
+    Explicit static/injected configurations remain available to low-level regression
+    seams; product composition uses this projection before scheduling new work.
+    """
+
+    if configuration is None:
+        return None
+    return RoutingConfiguration(
+        bonus=EngineModes(
+            simulation=configuration.bonus.simulation,
+            execution=False,
+            execution_sandbox=False,
+        ),
+        sports_capital=configuration.sports_capital,
+    )
+
+
 class RoutedWorkItem(DomainModel):
     id: UUID
     correlation_id: UUID

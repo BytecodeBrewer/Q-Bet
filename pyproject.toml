@@ -46,3 +46,6 @@ exclude = ["src/qbet/web/migrations"]
 pythonVersion = "3.12"
 typeCheckingMode = "basic"
 reportMissingTypeStubs = "none"
+
+[tool.setuptools.package-data]
+"qbet.providers" = ["*.json"]

@@ -77,6 +77,83 @@ class MonitoringExportTests(TestCase):
         parser.feed(response.content.decode())
         return [(urlsplit(href).path, parse_qs(urlsplit(href).query)) for href in parser.hrefs]
 
+    def test_provider_activity_is_customer_safe_on_dashboard_and_detailed_for_staff(self) -> None:
+        now = datetime.now(UTC)
+        PostgresMonitoringRepository().append(
+            MonitoringRecord(
+                correlation_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                occurred_at=now,
+                engine="sports_capital",
+                mode="simulation",
+                stage="data_aggregation",
+                event_type="provider_query",
+                status="success",
+                duration_ms=42,
+                references={
+                    "provider_id": "the-odds-api",
+                    "source_id": "simulation-the-odds-api",
+                },
+            )
+        )
+
+        self.client.force_login(self.user)
+        dashboard = self.client.get("/dashboard/")
+        self.assertContains(dashboard, "Market data updated successfully.")
+        self.assertNotContains(dashboard, "the-odds-api")
+        self.assertNotContains(dashboard, "42 ms")
+
+        self.client.force_login(self.staff)
+        monitoring = self.client.get("/monitoring/")
+        self.assertContains(monitoring, "Market data updated successfully.")
+        self.assertContains(monitoring, "the-odds-api")
+        self.assertContains(monitoring, "42 ms")
+
+    def test_provider_activity_endpoint_is_correlation_scoped_and_role_safe(self) -> None:
+        now = datetime.now(UTC)
+        correlation = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        PostgresMonitoringRepository().append(
+            MonitoringRecord(
+                correlation_id=correlation,
+                occurred_at=now,
+                engine="sports_capital",
+                mode="simulation",
+                stage="data_aggregation",
+                event_type="provider_query",
+                status="working",
+                references={
+                    "provider_id": "the-odds-api",
+                    "source_id": "simulation-the-odds-api",
+                },
+            )
+        )
+
+        self.client.force_login(self.user)
+        customer = self.client.get(
+            "/activity/provider/",
+            {"correlation": str(correlation)},
+        )
+        self.assertEqual(customer.status_code, 200)
+        self.assertEqual(customer.json()["state"], "working")
+        self.assertNotIn("provider", customer.json())
+        self.assertNotIn("duration_ms", customer.json())
+        self.assertNotIn("reason_code", customer.json())
+
+        self.client.force_login(self.staff)
+        staff = self.client.get(
+            "/activity/provider/",
+            {"correlation": str(correlation)},
+        )
+        self.assertEqual(staff.status_code, 200)
+        self.assertEqual(staff.json()["state"], "working")
+        self.assertEqual(staff.json()["provider"], "the-odds-api")
+
+        missing = self.client.get(
+            "/activity/provider/",
+            {"correlation": str(UUID("cccccccc-cccc-cccc-cccc-cccccccccccc"))},
+        )
+        self.assertEqual(missing.status_code, 200)
+        self.assertEqual(missing.json()["state"], "ready")
+
     def test_staff_can_view_compact_and_extended_monitoring_with_diagnostics(self) -> None:
         self.client.force_login(self.staff)
         compact = self.client.get("/monitoring/", self._range_params())
@@ -96,9 +173,25 @@ class MonitoringExportTests(TestCase):
         self.assertContains(extended, "[redacted]")
         self.assertNotContains(extended, "never-store-this")
 
+    def test_staff_can_submit_local_datetime_filter_values(self) -> None:
+        self.client.force_login(self.staff)
+
+        response = self.client.get(
+            "/monitoring/",
+            {"start": "2026-09-07T11:00", "end": "2026-09-07T13:00"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="datetime-local"')
+        self.assertContains(response, "match-1")
+
     def test_selected_range_and_correlation_survive_view_switch_and_exports(self) -> None:
         self.client.force_login(self.staff)
-        params = {"view": "extended", "correlation": str(self.correlation_id), **self._range_params()}
+        params = {
+            "view": "extended",
+            "correlation": str(self.correlation_id),
+            **self._range_params(),
+        }
         response = self.client.get("/monitoring/", params)
 
         self.assertEqual(response.status_code, 200)
@@ -137,6 +230,14 @@ class MonitoringExportTests(TestCase):
         self.assertIn("match-1", json_export.content.decode())
         self.assertNotIn("match-2", json_export.content.decode())
         self.assertIn("[redacted]", json_export.content.decode())
+        self.assertEqual(
+            csv_export["Content-Disposition"],
+            'attachment; filename="qbet-monitoring-extended-20260907T0900Z-20260907T1100Z.csv"',
+        )
+        self.assertEqual(
+            json_export["Content-Disposition"],
+            'attachment; filename="qbet-monitoring-extended-20260907T0900Z-20260907T1100Z.json"',
+        )
 
     def test_empty_period_returns_clear_page_and_valid_empty_exports(self) -> None:
         self.client.force_login(self.staff)
@@ -173,19 +274,23 @@ class MonitoringExportTests(TestCase):
         self.assertIn("monitoring_history_unavailable", csv_body)
         self.assertIn("Monitoring history is temporarily unavailable.", csv_body)
 
-    def test_invalid_monitoring_filters_are_rejected_without_sensitive_detail(self) -> None:
+    def test_invalid_monitoring_filters_render_friendly_feedback_and_reject_exports(self) -> None:
         self.client.force_login(self.staff)
         invalid_queries = (
             {"start": "not-a-date", "end": "2026-09-07T11:00:00+00:00"},
             {"start": "2026-09-07T12:00:00+00:00", "end": "2026-09-07T11:00:00+00:00"},
             {"start": "2026-08-01T09:00:00+00:00", "end": "2026-09-07T11:00:00+00:00"},
-            {"start": "2026-09-07T09:00:00", "end": "2026-09-07T11:00:00+00:00"},
             {"correlation": "not-a-uuid", **self._range_params()},
         )
         for query in invalid_queries:
             with self.subTest(query=query):
-                self.assertEqual(self.client.get("/monitoring/", query).status_code, 404)
-                self.assertEqual(self.client.get("/monitoring/export/json/", query).status_code, 404)
+                page = self.client.get("/monitoring/", query)
+                export = self.client.get("/monitoring/export/json/", query)
+
+                self.assertEqual(page.status_code, 200)
+                self.assertContains(page, "Monitoring filters are invalid")
+                self.assertEqual(export.status_code, 400)
+                self.assertEqual(export.json()["error"], "invalid_monitoring_filter")
 
     def test_normal_user_cannot_read_or_export_monitoring(self) -> None:
         self.client.force_login(self.user)

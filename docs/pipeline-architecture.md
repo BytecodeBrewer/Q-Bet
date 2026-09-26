@@ -18,13 +18,17 @@ This view answers: how does an opportunity move from provider data to a simulati
 flowchart LR
     sources["Conformant REST / WebSocket APIs<br>Result Data APIs"] --> ingestion["Data Aggregation"]
     ingestion --> preparation{"Engine-specific Preparation"}
-    preparation --> sportsPrep["Sports Match Builder"]
+    preparation --> sportsPrep["Sports Match Builder<br>fixed-odds sportsbook offers"]
+    promotion["Promotion / account metadata<br>explicit input or later read-only provider browser"] --> bonusPrep["Bonus preparation"]
     preparation --> predictionPrep["Feature / Signal Builder"]
     preparation --> marketState["Market State Aggregator"]
     preparation --> ticketPrep["Ticket Preparation"]
 
-    sportsPrep --> bonus["BonusEngine"]
+    sportsPrep --> bonusPrep
+    bonusPrep --> bonus["BonusEngine"]
     sportsPrep --> sports["SportsCapitalEngine"]
+    ingestion --> exchangePrep["Exchange preparation<br>peer-to-peer market / order book"]
+    exchangePrep --> sportsExchange["SportsExchangeEngine<br>planned"]
     predictionPrep --> prediction["PredictionMarketEngine"]
     marketState --> crypto["CryptoYieldEngine"]
     ticketPrep --> ticket["TicketEngine"]
@@ -199,7 +203,7 @@ The pipeline remains the product's processing spine. `PortfolioLedger` is a sepa
 - `WorkflowOrchestrator`: routing, correlation ids, stage transitions, engine activation, throttling, and GUI-originated control.
 - `RequestHandler`: optional targeted refresh checks for risk, liquidity, and execution.
 - `Data Aggregation`: structured REST/WebSocket intake and normalization; no quotation scraping.
-- `Sports Match Builder`: validated event, market, bookmaker BACK, and exchange LAY pairing.
+- `Sports Match Builder`: validated fixed-odds sportsbook event, market, offer, and Dutching preparation for `BonusEngine` and `SportsCapitalEngine`. Betting-exchange market/order-book preparation belongs to the separate `SportsExchangeEngine` path.
 - Calculation engines: deterministic typed strategy evaluation without database, balance, session, GUI, or execution dependencies.
 - `Domain Risk`: provider, account, timing, market, exposure, and strategy policy decisions after calculation.
 - `LiquidityChecker`: capital availability, reservation, allocation priority, provider/account availability, pending, and recheck decisions.
@@ -209,7 +213,16 @@ The pipeline remains the product's processing spine. `PortfolioLedger` is a sepa
 
 ## Canonical Engine Paths
 
-- `BonusEngine` and `SportsCapitalEngine`: `Data Aggregation` -> `Sports Match Builder` -> calculation -> `Domain Risk` -> `LiquidityChecker`.
+- `BonusEngine`: `Data Aggregation` plus explicit promotion/account metadata -> `Sports Match Builder` -> promotional fixed-odds sportsbook calculation -> `Domain Risk` -> `LiquidityChecker`.
+- `SportsCapitalEngine`: `Data Aggregation` -> `Sports Match Builder` -> fixed-odds sportsbook arbitrage/dutching calculation -> `Domain Risk` -> `LiquidityChecker`.
+- `SportsExchangeEngine`: planned `Data Aggregation` -> exchange market/order-book preparation -> peer-to-peer exchange calculation -> exchange-specific `Domain Risk` -> `LiquidityChecker`.
 - `TicketEngine`: `Data Aggregation` -> `Ticket Preparation` -> `TicketEngine` -> `Domain Risk` where required -> `LiquidityChecker`.
 - `PredictionMarketEngine`: `Data Aggregation` -> optional `Feature / Signal Builder` -> `PredictionMarketEngine` -> optional `Domain Risk` -> `LiquidityChecker`.
 - `CryptoYieldEngine`: streaming `Data Aggregation` -> `Market State Aggregator` -> `CryptoYieldEngine` -> optional `Domain Risk` -> `LiquidityChecker`.
+
+
+## Sportsbook And Betting-Exchange Boundary
+
+`BonusEngine` and `SportsCapitalEngine` operate on fixed-odds sportsbook offers. `SportsExchangeEngine` is a separate planned peer-to-peer venue engine with exchange-specific BACK/LAY, order-book, liquidity, commission, and matched/unmatched-order semantics.
+
+An exchange API does not expose sportsbook brands such as Tipico or Bwin as selectable bookmaker counterparties. Promotion/account metadata required by BonusEngine is separate from market quotations. Where no supported structured API exists, a later Phase 3 provider-specific read-only browser adapter may supply that metadata from the user's own configured sportsbook account. Browser order placement remains Phase 4 and stays behind the existing approval, revalidation, risk, liquidity, and execution boundaries.
