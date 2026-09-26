@@ -272,7 +272,7 @@ body[data-theme="dark"] .empty-state, body[data-theme="dark"] .message { backgro
 
 /* Application shell */
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.app-topbar { position: sticky; top: 0; z-index: 40; min-height: 58px; display: flex; align-items: center; gap: 16px; padding: 8px 18px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.app-topbar { position: sticky; top: 0; z-index: 80; min-height: 58px; display: flex; align-items: center; gap: 16px; padding: 8px 18px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .topbar-controls { margin-left: auto; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
 .sidebar-toggle, .sidebar-close, .account-avatar { display: inline-grid; place-items: center; flex: 0 0 auto; border: 1px solid var(--border); background: var(--surface-subtle); color: var(--text); cursor: pointer; }
 .sidebar-toggle { width: 40px; height: 40px; border-radius: 10px; font-size: 19px; }
@@ -331,7 +331,7 @@ body.sidebar-collapsed { overflow-x: clip; }
   .topbar-account { order: 0; margin-left: auto; }
   .sidebar-toggle { order: 1; }
   .app-shell { display: block; }
-  .app-sidebar { top: 12px; right: 12px; bottom: 12px; width: min(360px, calc(100vw - 24px)); max-width: calc(100vw - 24px); }
+  .app-sidebar { top: 95px; right: 12px; bottom: 12px; width: min(360px, calc(100vw - 24px)); max-width: calc(100vw - 24px); }
   .app-sidebar-backdrop { position: fixed; z-index: 50; inset: 0; display: block; background: rgba(9, 15, 20, .38); }
   body.sidebar-collapsed .app-sidebar-backdrop { display: none; }
   .app-main { padding: 22px 16px 40px; }
