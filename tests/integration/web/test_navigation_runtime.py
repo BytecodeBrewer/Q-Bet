@@ -156,6 +156,11 @@ const accountItemFocusedAfterOpen = accountItem.focused;
 fireDocument("keydown", { key: "Escape" });
 const accountClosedByEscape = snapshot();
 
+fire(accountToggle, "click");
+const accountOpenBeforeSidebar = snapshot();
+fire(toggle, "click");
+const sidebarOpenAfterAccount = snapshot();
+
 const repeated = [];
 for (let index = 0; index < 10; index += 1) {
   fire(toggle, "click");
@@ -172,6 +177,8 @@ process.stdout.write(JSON.stringify({
   accountOpen,
   accountItemFocusedAfterOpen,
   accountClosedByEscape,
+  accountOpenBeforeSidebar,
+  sidebarOpenAfterAccount,
   repeated,
   toggleFocused: toggle.focused,
   accountToggleFocused: accountToggle.focused,
@@ -248,6 +255,17 @@ def test_account_menu_escape_closes_with_focus_return() -> None:
     assert states["accountClosedByEscape"]["accountExpanded"] == "false"
     assert states["accountClosedByEscape"]["accountHidden"] is True
     assert states["accountToggleFocused"] is True
+
+
+def test_opening_navigation_closes_account_menu_before_showing_sidebar() -> None:
+    states = _run_navigation_script()
+
+    assert states["accountOpenBeforeSidebar"]["accountExpanded"] == "true"
+    assert states["accountOpenBeforeSidebar"]["accountHidden"] is False
+    assert states["sidebarOpenAfterAccount"]["collapsed"] is False
+    assert states["sidebarOpenAfterAccount"]["expanded"] == "true"
+    assert states["sidebarOpenAfterAccount"]["accountExpanded"] == "false"
+    assert states["sidebarOpenAfterAccount"]["accountHidden"] is True
 
 
 def test_shell_css_keeps_main_width_independent_from_right_sidebar() -> None:
