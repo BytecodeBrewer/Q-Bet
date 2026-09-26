@@ -35,6 +35,21 @@ class NavigationAndSettingsStructureTests(TestCase):
         self.assertNotIn("Simulation Dashboard", sidebar)
         self.assertNotIn("/monitoring/", sidebar)
 
+    def test_compact_account_menu_keeps_profile_and_sign_out_actions_reachable(self) -> None:
+        user = User.objects.create_user("account-menu-user", password="Valid-pass-12345")
+        self.client.force_login(user)
+
+        response = self.client.get("/dashboard/")
+
+        content = response.content.decode()
+        account = content.split('data-account-menu>', 1)[1].split("</div>\n\n        <button", 1)[0]
+        self.assertIn('data-account-menu-toggle', account)
+        self.assertIn('data-account-menu-panel', account)
+        self.assertIn('role="menu"', account)
+        self.assertIn('role="menuitem"', account)
+        self.assertIn('/profile/', account)
+        self.assertIn('/accounts/logout/', account)
+
     def test_staff_simulation_navigation_tracks_global_availability(self) -> None:
         staff = User.objects.create_user(
             "staff-nav",
@@ -121,5 +136,11 @@ class NavigationAndSettingsStructureTests(TestCase):
         response = self.client.get("/dashboard/")
 
         self.assertContains(response, 'aria-controls="app-sidebar"')
-        self.assertContains(response, 'aria-expanded="true"')
+        self.assertContains(response, 'class="sidebar-collapsed"')
+        self.assertContains(response, 'aria-expanded="false"')
+        self.assertContains(response, 'data-sidebar-close')
+        self.assertContains(response, 'data-sidebar-backdrop')
+        self.assertContains(response, 'data-account-menu-toggle')
+        self.assertContains(response, 'class="account-avatar"')
+        self.assertContains(response, 'aria-label="Open account menu for toggle-user"')
         self.assertContains(response, "/static/qbet_web/navigation.js")

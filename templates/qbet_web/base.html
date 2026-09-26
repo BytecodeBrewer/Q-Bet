@@ -20,42 +20,81 @@
   <script src="{% static 'qbet_web/simulation.js' %}" defer></script>
   <script src="{% static 'qbet_web/bonus_offers.js' %}" defer></script>
 </head>
-<body data-theme="{{ preferences.theme|default:'light' }}" data-font-size="{{ preferences.font_size|default:'medium' }}">
+<body{% if user.is_authenticated %} class="sidebar-collapsed"{% endif %} data-theme="{{ preferences.theme|default:'light' }}" data-font-size="{{ preferences.font_size|default:'medium' }}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
   {% if user.is_authenticated %}
     <header class="app-topbar">
-      <button class="sidebar-toggle" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true">
-        <span aria-hidden="true">☰</span><span class="visually-hidden">Toggle navigation</span>
-      </button>
       <a class="brand" href="{% url 'home' %}" aria-label="Q-Bet home">
         <span class="brand-mark" aria-hidden="true">Q</span><span>Q-Bet</span>
       </a>
-      <nav class="topbar-actions" aria-label="Work actions">
-        <div class="topbar-add" data-bonus-offer-menu>
-          <button class="topbar-action" type="button" data-bonus-offer-menu-toggle aria-haspopup="menu" aria-expanded="false">
-            <span aria-hidden="true">＋</span><span>Add</span>
+
+      <div class="topbar-controls">
+        <nav class="topbar-actions" aria-label="Work actions">
+          <div class="topbar-add" data-bonus-offer-menu>
+            <button class="topbar-action" type="button" data-bonus-offer-menu-toggle aria-haspopup="menu" aria-expanded="false">
+              <span aria-hidden="true">＋</span><span>Add</span>
+            </button>
+            <div class="topbar-menu" data-bonus-offer-menu-panel role="menu" hidden>
+              <button type="button" role="menuitem" data-bonus-offer-dialog-open>New Bonus Offer</button>
+              <a role="menuitem" href="{% url 'bonus-offer-list' %}">Bonus Offer List</a>
+            </div>
+          </div>
+          <a class="topbar-action" href="{% url 'notification-inbox' %}"{% if request.resolver_match.url_name == 'notification-inbox' %} aria-current="page"{% endif %}>
+            {{ ui.notifications }}{% if notification_unread_count %}<span class="nav-count">{{ notification_unread_count }}</span>{% endif %}
+          </a>
+          <a class="topbar-action" href="{% url 'execution-approvals' %}"{% if request.resolver_match.url_name == 'execution-approvals' or request.resolver_match.url_name == 'execution-approval-decision' %} aria-current="page"{% endif %}>
+            {{ ui.approvals }}{% if approval_count_available and approval_count %}<span class="nav-count">{{ approval_count }}</span>{% endif %}
+          </a>
+        </nav>
+
+        <div class="topbar-account" data-account-menu>
+          <button
+            class="account-avatar"
+            type="button"
+            data-account-menu-toggle
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-label="Open account menu for {{ user.get_username }}"
+          >
+            <span aria-hidden="true">{{ user.get_username|slice:":1"|upper }}</span>
           </button>
-          <div class="topbar-menu" data-bonus-offer-menu-panel role="menu" hidden>
-            <button type="button" role="menuitem" data-bonus-offer-dialog-open>New Bonus Offer</button>
-            <a role="menuitem" href="{% url 'bonus-offer-list' %}">Bonus Offer List</a>
+          <div class="topbar-account-menu" data-account-menu-panel role="menu" hidden>
+            <div class="account-menu-summary">
+              <strong>{{ user.get_username }}</strong>
+              <span class="display-preference-chip" title="{{ ui.preferred_currency }}">{{ display_preferences.currency }}</span>
+            </div>
+            <a class="account-menu-action" role="menuitem" href="{% url 'profile' %}">{{ ui.profile }}</a>
+            <form method="post" action="{% url 'logout' %}">
+              {% csrf_token %}
+              <button class="account-menu-action" type="submit" role="menuitem">{{ ui.sign_out }}</button>
+            </form>
           </div>
         </div>
-        <a class="topbar-action" href="{% url 'notification-inbox' %}"{% if request.resolver_match.url_name == 'notification-inbox' %} aria-current="page"{% endif %}>
-          {{ ui.notifications }}{% if notification_unread_count %}<span class="nav-count">{{ notification_unread_count }}</span>{% endif %}
-        </a>
-        <a class="topbar-action" href="{% url 'execution-approvals' %}"{% if request.resolver_match.url_name == 'execution-approvals' or request.resolver_match.url_name == 'execution-approval-decision' %} aria-current="page"{% endif %}>
-          {{ ui.approvals }}{% if approval_count_available and approval_count %}<span class="nav-count">{{ approval_count }}</span>{% endif %}
-        </a>
-      </nav>
-      <div class="topbar-account">
-        <span class="display-preference-chip" title="{{ ui.preferred_currency }}">{{ display_preferences.currency }}</span>
-        <span>{{ user.get_username }}</span><a href="{% url 'profile' %}">{{ ui.profile }}</a>
+
+        <button
+          class="sidebar-toggle"
+          type="button"
+          data-sidebar-toggle
+          aria-controls="app-sidebar"
+          aria-expanded="false"
+          aria-label="Open application navigation"
+        >
+          <span aria-hidden="true">☰</span>
+        </button>
       </div>
     </header>
     {% include "qbet_web/bonus_offer_dialog.html" %}
 
+    <div class="app-sidebar-backdrop" data-sidebar-backdrop aria-hidden="true"></div>
     <div class="app-shell">
-      <aside id="app-sidebar" class="app-sidebar">
+      <aside id="app-sidebar" class="app-sidebar" aria-label="Application navigation panel" aria-hidden="true">
+        <div class="app-sidebar-heading">
+          <strong>Navigation</strong>
+          <button class="sidebar-close" type="button" data-sidebar-close aria-label="Close application navigation">
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+
         <nav aria-label="Application navigation">
           <a class="sidebar-link" href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>{{ ui.dashboard }}</a>
 
@@ -91,6 +130,7 @@
             </details>
           {% endif %}
         </nav>
+
         <div class="sidebar-account">
           <a class="sidebar-link" href="{% url 'profile' %}"{% if request.resolver_match.url_name == 'profile' %} aria-current="page"{% endif %}>{{ ui.profile }}</a>
           <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button sidebar-signout" type="submit">{{ ui.sign_out }}</button></form>
