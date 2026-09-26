@@ -1378,7 +1378,7 @@ def portfolio(request: HttpRequest) -> HttpResponse:
         _context(
             request,
             portfolio=PORTFOLIO_CAPITAL.snapshot(
-                user_id=request.user.pk,
+                user_id=cast(int, request.user.pk),
                 is_staff=_is_staff(request.user),
             ),
         ),
