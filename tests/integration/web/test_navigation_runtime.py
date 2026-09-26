@@ -160,6 +160,8 @@ fire(accountToggle, "click");
 const accountOpenBeforeSidebar = snapshot();
 fire(toggle, "click");
 const sidebarOpenAfterAccount = snapshot();
+fire(toggle, "click");
+const afterSurfaceCoordinationReset = snapshot();
 
 const repeated = [];
 for (let index = 0; index < 10; index += 1) {
@@ -179,6 +181,7 @@ process.stdout.write(JSON.stringify({
   accountClosedByEscape,
   accountOpenBeforeSidebar,
   sidebarOpenAfterAccount,
+  afterSurfaceCoordinationReset,
   repeated,
   toggleFocused: toggle.focused,
   accountToggleFocused: accountToggle.focused,
@@ -266,6 +269,8 @@ def test_opening_navigation_closes_account_menu_before_showing_sidebar() -> None
     assert states["sidebarOpenAfterAccount"]["expanded"] == "true"
     assert states["sidebarOpenAfterAccount"]["accountExpanded"] == "false"
     assert states["sidebarOpenAfterAccount"]["accountHidden"] is True
+    assert states["afterSurfaceCoordinationReset"]["collapsed"] is True
+    assert states["afterSurfaceCoordinationReset"]["expanded"] == "false"
 
 
 def test_shell_css_keeps_main_width_independent_from_right_sidebar() -> None:
