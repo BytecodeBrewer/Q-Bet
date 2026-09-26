@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
       - name: Verify exact validation head
         shell: bash
         env:
@@ -154,24 +154,22 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  deploy-preview:
-    name: Vercel preview
+  deploy-develop:
+    name: Vercel develop deployment
     needs:
       - validation
       - performance
-    if: >-
-      github.event_name == 'push' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     environment:
-      name: ${{ github.event_name == 'push' && 'staging' || 'preview' }}
+      name: staging
       url: ${{ steps.deploy.outputs.url }}
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       QBET_DJANGO_SECRET_KEY: ${{ secrets.QBET_DJANGO_SECRET_KEY }}
-      EXPECTED_RELEASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      EXPECTED_RELEASE: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -204,7 +202,7 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@59
 
-      - name: Deploy hosted preview
+      - name: Deploy hosted develop release
         id: deploy
         shell: bash
         run: |
@@ -219,9 +217,9 @@ jobs:
               --env QBET_SIMULATION_MODE_ENABLED=false
           )"
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
-          echo "Vercel preview: $deployment_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "Vercel develop deployment: $deployment_url" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Smoke test hosted preview
+      - name: Smoke test hosted develop deployment
         shell: bash
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
