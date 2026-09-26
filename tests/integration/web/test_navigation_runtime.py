@@ -275,6 +275,7 @@ def test_shell_css_keeps_main_width_independent_from_right_sidebar() -> None:
     )[0]
 
     assert ".app-shell {" in shell
+    assert ".app-topbar { position: sticky; top: 0; z-index: 80;" in shell
     assert "display: block;" in shell
     assert "grid-template-columns: 250px minmax(0, 1fr)" not in shell
     assert ".app-main {" in shell
@@ -294,6 +295,7 @@ def test_narrow_viewport_uses_right_overlay_instead_of_content_reflow() -> None:
     mobile = shell.split("@media (max-width: 700px)", maxsplit=1)[1]
 
     assert ".app-shell { display: block; }" in mobile
+    assert "top: 95px;" in mobile
     assert "right: 12px;" in mobile
     assert "width: min(360px, calc(100vw - 24px));" in mobile
     assert ".app-sidebar-backdrop {" in mobile
