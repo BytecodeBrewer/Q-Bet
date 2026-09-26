@@ -35,6 +35,21 @@ class NavigationAndSettingsStructureTests(TestCase):
         self.assertNotIn("Simulation Dashboard", sidebar)
         self.assertNotIn("/monitoring/", sidebar)
 
+    def test_compact_account_menu_keeps_profile_and_sign_out_actions_reachable(self) -> None:
+        user = User.objects.create_user("account-menu-user", password="Valid-pass-12345")
+        self.client.force_login(user)
+
+        response = self.client.get("/dashboard/")
+
+        content = response.content.decode()
+        account = content.split('data-account-menu>', 1)[1].split("</div>\n\n        <button", 1)[0]
+        self.assertIn('data-account-menu-toggle', account)
+        self.assertIn('data-account-menu-panel', account)
+        self.assertIn('role="menu"', account)
+        self.assertIn('role="menuitem"', account)
+        self.assertIn('/profile/', account)
+        self.assertIn('/accounts/logout/', account)
+
     def test_staff_simulation_navigation_tracks_global_availability(self) -> None:
         staff = User.objects.create_user(
             "staff-nav",
