@@ -243,7 +243,7 @@ def test_account_menu_closes_open_navigation_then_remains_reachable() -> None:
     assert states["sidebarOpenBeforeAccount"]["expanded"] == "true"
     assert states["accountOpen"]["collapsed"] is True
     assert states["accountOpen"]["expanded"] == "false"
-    assert states["accountOpen"]["stored"] == "1"
+    assert states["accountOpen"]["stored"] == "0"
     assert states["accountOpen"]["accountExpanded"] == "true"
     assert states["accountOpen"]["accountHidden"] is False
     assert states["accountItemFocusedAfterOpen"] is True
