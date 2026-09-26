@@ -75,7 +75,7 @@ class PortfolioCapitalReadService:
                 )
                 location = CapitalLocation(
                     mode=balance.mode,
-                    currency=balance.currency.value,
+                    currency=balance.currency,
                     label=(
                         "Execution portfolio"
                         if balance.mode == "execution"
