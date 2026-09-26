@@ -49,6 +49,7 @@
 
   toggle.addEventListener("click", () => {
     const collapsed = document.body.classList.contains("sidebar-collapsed");
+    if (collapsed) closeAccountMenu();
     applySidebarState(!collapsed, { persist: true });
   });
 
