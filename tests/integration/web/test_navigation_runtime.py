@@ -153,6 +153,12 @@ const accountOpen = snapshot();
 fireDocument("keydown", { key: "Escape" });
 const accountClosedByEscape = snapshot();
 
+const repeated = [];
+for (let index = 0; index < 10; index += 1) {
+  fire(toggle, "click");
+  repeated.push(snapshot());
+}
+
 process.stdout.write(JSON.stringify({
   initial,
   afterOpen,
@@ -161,6 +167,7 @@ process.stdout.write(JSON.stringify({
   afterEscape,
   accountOpen,
   accountClosedByEscape,
+  repeated,
   toggleFocused: toggle.focused,
   accountToggleFocused: accountToggle.focused,
 }));
@@ -266,3 +273,16 @@ def test_reduced_motion_contract_also_covers_navigation_transition() -> None:
 
     assert "@media (prefers-reduced-motion: reduce)" in css
     assert "transition-duration: .001ms !important;" in css
+
+
+def test_repeated_sidebar_toggles_return_to_stable_geometry_state_contract() -> None:
+    states = _run_navigation_script()
+    repeated = states["repeated"]
+
+    assert len(repeated) == 10
+    for index, state in enumerate(repeated):
+        expected_collapsed = index % 2 == 1
+        assert state["collapsed"] is expected_collapsed
+        assert state["expanded"] == ("false" if expected_collapsed else "true")
+    assert repeated[-1]["collapsed"] is True
+    assert repeated[-1]["stored"] == "1"
