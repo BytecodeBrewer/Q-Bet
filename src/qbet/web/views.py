@@ -1375,7 +1375,13 @@ def portfolio(request: HttpRequest) -> HttpResponse:
     return render(
         request,
         "qbet_web/portfolio.html",
-        _context(request, portfolio=PORTFOLIO_CAPITAL.snapshot()),
+        _context(
+            request,
+            portfolio=PORTFOLIO_CAPITAL.snapshot(
+                user_id=request.user.pk,
+                is_staff=_is_staff(request.user),
+            ),
+        ),
     )
 
 
