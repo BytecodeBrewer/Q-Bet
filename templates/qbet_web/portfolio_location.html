@@ -7,7 +7,7 @@
   <div class="portfolio-balance-primary"><span>Available now</span><strong>{% localized_money location.available location.currency display_preferences %}</strong></div>
   <dl class="portfolio-state-grid">
     <div><dt>Reserved</dt><dd>{% localized_money location.reserved location.currency display_preferences %}</dd></div>
-    <div><dt>Working</dt><dd>{% localized_money location.working location.currency display_preferences %}</dd></div>
+    <div><dt>Locked</dt><dd>{% localized_money location.locked location.currency display_preferences %}</dd></div>
     <div><dt>Pending</dt><dd>{% localized_money location.pending location.currency display_preferences %}</dd></div>
     <div><dt>Tracked total</dt><dd>{% localized_money location.tracked_total location.currency display_preferences %}</dd></div>
   </dl>
