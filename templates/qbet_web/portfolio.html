@@ -1,0 +1,99 @@
+{% extends "qbet_web/base.html" %}
+{% block title %}Portfolio · Q-Bet{% endblock %}
+{% block content %}
+{% load display_preferences %}
+<section class="page-heading portfolio-heading">
+  <span class="eyebrow">Capital control</span>
+  <div class="page-heading-row">
+    <div>
+      <h1>Portfolio</h1>
+      <p>See where Q-Bet currently records capital, what is spendable, and what is committed to active work.</p>
+    </div>
+    <span class="portfolio-authority-badge">PortfolioLedger authority</span>
+  </div>
+</section>
+
+{% if not portfolio.available %}
+  <section class="portfolio-unavailable surface-panel" role="status">
+    <span class="status status-red" aria-hidden="true"></span>
+    <div><strong>Capital state unavailable</strong><p>{{ portfolio.message }}</p></div>
+  </section>
+{% else %}
+  <section class="portfolio-plane portfolio-execution" aria-labelledby="execution-capital-heading">
+    <div class="plane-heading">
+      <div><span class="plane-kicker">Real capital</span><h2 id="execution-capital-heading">Execution</h2>
+      <p class="plane-description">Authoritative live-capital state. Simulation balances never contribute to these totals.</p></div>
+      <span class="tag neutral-tag">Execution</span>
+    </div>
+
+    {% if portfolio.execution_totals %}
+      <div class="portfolio-total-grid">
+        {% for total in portfolio.execution_totals %}
+          <article class="portfolio-total-card">
+            <span>{{ total.currency }}</span>
+            <strong>{% localized_money total.tracked_total total.currency display_preferences %}</strong>
+            <small>tracked capital</small>
+            <dl>
+              <div><dt>Available</dt><dd>{% localized_money total.available total.currency display_preferences %}</dd></div>
+              <div><dt>Reserved</dt><dd>{% localized_money total.reserved total.currency display_preferences %}</dd></div>
+              <div><dt>Working</dt><dd>{% localized_money total.working total.currency display_preferences %}</dd></div>
+              <div><dt>Pending</dt><dd>{% localized_money total.pending total.currency display_preferences %}</dd></div>
+            </dl>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="portfolio-location-grid">
+      {% for location in portfolio.execution %}
+        {% include "qbet_web/portfolio_location.html" with location=location %}
+      {% empty %}
+        <article class="portfolio-empty">
+          <span class="portfolio-empty-icon" aria-hidden="true">◇</span>
+          <div><strong>No Execution capital recorded yet</strong><p>The authoritative ledger has no live-capital context. Q-Bet will not infer money from engine cards or reports.</p></div>
+        </article>
+      {% endfor %}
+    </div>
+
+    <article class="provider-configuration-note">
+      <div><span class="eyebrow">Provider accounts</span><strong>Account-level balances are not configured yet</strong>
+      <p>Q-Bet will show provider locations here only when an authoritative provider-account registry is available. No provider balance is fabricated.</p></div>
+      <span class="tag neutral-tag">Not configured</span>
+    </article>
+  </section>
+
+  {% if user.is_staff %}
+  <section class="portfolio-plane portfolio-simulation" aria-labelledby="simulation-capital-heading">
+    <div class="plane-heading">
+      <div><span class="plane-kicker">Sandbox only</span><h2 id="simulation-capital-heading">Simulation</h2>
+      <p class="plane-description">Virtual capital is isolated from Execution and is never included in real-capital totals.</p></div>
+      <span class="tag simulation-tag">Simulation</span>
+    </div>
+    {% if portfolio.simulation_totals %}
+      <div class="portfolio-total-grid">
+        {% for total in portfolio.simulation_totals %}
+          <article class="portfolio-total-card simulation-total-card">
+            <span>{{ total.currency }}</span>
+            <strong>{% localized_money total.tracked_total total.currency display_preferences %}</strong>
+            <small>virtual tracked capital</small>
+            <dl>
+              <div><dt>Available</dt><dd>{% localized_money total.available total.currency display_preferences %}</dd></div>
+              <div><dt>Reserved</dt><dd>{% localized_money total.reserved total.currency display_preferences %}</dd></div>
+              <div><dt>Working</dt><dd>{% localized_money total.working total.currency display_preferences %}</dd></div>
+              <div><dt>Pending</dt><dd>{% localized_money total.pending total.currency display_preferences %}</dd></div>
+            </dl>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+    <div class="portfolio-location-grid">
+      {% for location in portfolio.simulation %}
+        {% include "qbet_web/portfolio_location.html" with location=location %}
+      {% empty %}
+        <article class="portfolio-empty"><span class="portfolio-empty-icon" aria-hidden="true">◇</span><div><strong>No Simulation capital recorded</strong><p>No sandbox ledger currently exists.</p></div></article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+{% endif %}
+{% endblock %}
