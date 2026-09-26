@@ -66,6 +66,28 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertNotContains(response, "data-flow-packet")
         self.assertNotContains(response, "<svg")
 
+    def test_public_home_renders_sequential_workflow_motion_hooks(self) -> None:
+        response = self.client.get("/")
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-workflow-motion="sequential"', content)
+        self.assertIn('data-workflow-lane="bonus"', content)
+        self.assertIn('data-workflow-lane="sports-capital"', content)
+        self.assertIn('data-workflow-lane="future"', content)
+        self.assertEqual(content.count('data-workflow-step="data"'), 3)
+        self.assertEqual(content.count('data-workflow-step="preparation"'), 3)
+        self.assertEqual(content.count('data-workflow-step="calculation"'), 3)
+        self.assertIn('data-workflow-stage="risk"', content)
+        self.assertIn('data-workflow-stage="liquidity"', content)
+        self.assertIn('data-workflow-stage="authority"', content)
+        self.assertIn('data-workflow-stage="simulation-execution"', content)
+        self.assertIn('data-workflow-stage="settlement"', content)
+        self.assertIn('data-workflow-stage="reporting"', content)
+        self.assertIn('<span class="capability-badge is-planned">Planned</span>', content)
+        self.assertNotIn("qbet_web/home.js", content)
+        self.assertNotIn("<svg", content)
+
     def test_public_home_styles_cover_narrow_layout_and_reduced_motion(self) -> None:
         visual_styles = Path(
             settings.BASE_DIR,
@@ -74,12 +96,24 @@ class Phase2VisualIntegrationTests(TestCase):
             "phase2_visual.css",
         ).read_text(encoding="utf-8")
 
+        self.assertIn(
+            "@media (prefers-reduced-motion: no-preference) and (min-width: 781px)",
+            visual_styles,
+        )
+        self.assertIn(
+            '.architecture-frame[data-workflow-motion="sequential"]',
+            visual_styles,
+        )
+        self.assertIn("@keyframes workflow-step-pulse", visual_styles)
+        self.assertIn("@keyframes workflow-merge-pulse", visual_styles)
+        self.assertIn("@keyframes workflow-stage-focus", visual_styles)
         self.assertIn("@media (max-width: 780px)", visual_styles)
         self.assertIn(".architecture-lanes,", visual_styles)
         self.assertIn(".protected-workflow-stages { grid-template-columns: 1fr; }", visual_styles)
         self.assertIn(".authority-grid { grid-template-columns: 1fr; }", visual_styles)
         self.assertIn("@media (max-width: 520px)", visual_styles)
         self.assertIn("@media (prefers-reduced-motion: reduce)", visual_styles)
+        self.assertIn("content: none !important;", visual_styles)
         self.assertIn("animation: none !important;", visual_styles)
         self.assertIn("transition: none !important;", visual_styles)
 
