@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from qbet.ledger import PortfolioLedger
 from qbet.storage.models import PortfolioLedgerRow
+from qbet.web.models import PortfolioLedgerAccess
 
 
 @dataclass(frozen=True)
@@ -20,7 +21,7 @@ class CapitalLocation:
     label: str
     available: Decimal
     reserved: Decimal
-    working: Decimal
+    locked: Decimal
     pending: Decimal
     settled: Decimal
     cost: Decimal
@@ -36,7 +37,7 @@ class CurrencyTotals:
     tracked_total: Decimal
     available: Decimal
     reserved: Decimal
-    working: Decimal
+    locked: Decimal
     pending: Decimal
 
 
@@ -53,9 +54,19 @@ class PortfolioCapitalView:
 class PortfolioCapitalReadService:
     """Read persisted ledgers without deriving balances from engines or reports."""
 
-    def snapshot(self) -> PortfolioCapitalView:
+    def snapshot(self, *, user_id: int, is_staff: bool = False) -> PortfolioCapitalView:
         try:
-            rows = tuple(PortfolioLedgerRow.objects.order_by("mode", "currency"))
+            rows_query = PortfolioLedgerRow.objects.order_by("mode", "currency")
+            if not is_staff:
+                permitted = PortfolioLedgerAccess.objects.filter(user_id=user_id).values(
+                    "mode", "currency"
+                )
+                allowed = {(item["mode"], item["currency"]) for item in permitted}
+                rows = tuple(
+                    row for row in rows_query if (row.mode, row.currency) in allowed
+                )
+            else:
+                rows = tuple(rows_query)
         except DatabaseError:
             return PortfolioCapitalView(
                 available=False,
@@ -83,7 +94,7 @@ class PortfolioCapitalReadService:
                     ),
                     available=balance.available,
                     reserved=balance.reserved,
-                    working=balance.locked,
+                    locked=balance.locked,
                     pending=balance.pending,
                     settled=balance.settled,
                     cost=balance.cost,
@@ -120,8 +131,8 @@ def _totals(locations: list[CapitalLocation]) -> tuple[CurrencyTotals, ...]:
             reserved=sum(
                 (item.reserved for item in locations if item.currency == currency), Decimal(0)
             ),
-            working=sum(
-                (item.working for item in locations if item.currency == currency), Decimal(0)
+            locked=sum(
+                (item.locked for item in locations if item.currency == currency), Decimal(0)
             ),
             pending=sum(
                 (item.pending for item in locations if item.currency == currency), Decimal(0)
