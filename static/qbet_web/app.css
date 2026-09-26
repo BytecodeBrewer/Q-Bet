@@ -319,7 +319,6 @@ body.sidebar-collapsed { overflow-x: clip; }
 .settings-section-stack > .detail-panel { margin: 0; }
 
 @media (max-width: 900px) {
-  .topbar-action span:not(.nav-count) { display: none; }
   .settings-layout { grid-template-columns: 1fr; }
   .settings-toc { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-toc strong { grid-column: 1 / -1; }
