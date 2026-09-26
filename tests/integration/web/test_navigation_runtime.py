@@ -148,8 +148,11 @@ fire(toggle, "click");
 fireDocument("keydown", { key: "Escape" });
 const afterEscape = snapshot();
 
+fire(toggle, "click");
+const sidebarOpenBeforeAccount = snapshot();
 fire(accountToggle, "click");
 const accountOpen = snapshot();
+const accountItemFocusedAfterOpen = accountItem.focused;
 fireDocument("keydown", { key: "Escape" });
 const accountClosedByEscape = snapshot();
 
@@ -165,7 +168,9 @@ process.stdout.write(JSON.stringify({
   afterClose,
   afterCloseButton,
   afterEscape,
+  sidebarOpenBeforeAccount,
   accountOpen,
+  accountItemFocusedAfterOpen,
   accountClosedByEscape,
   repeated,
   toggleFocused: toggle.focused,
@@ -224,11 +229,22 @@ def test_sidebar_close_and_escape_restore_collapsed_state_and_focus() -> None:
     assert states["toggleFocused"] is True
 
 
-def test_account_menu_opens_and_escape_closes_with_focus_return() -> None:
+def test_account_menu_closes_open_navigation_then_remains_reachable() -> None:
     states = _run_navigation_script()
 
+    assert states["sidebarOpenBeforeAccount"]["collapsed"] is False
+    assert states["sidebarOpenBeforeAccount"]["expanded"] == "true"
+    assert states["accountOpen"]["collapsed"] is True
+    assert states["accountOpen"]["expanded"] == "false"
+    assert states["accountOpen"]["stored"] == "1"
     assert states["accountOpen"]["accountExpanded"] == "true"
     assert states["accountOpen"]["accountHidden"] is False
+    assert states["accountItemFocusedAfterOpen"] is True
+
+
+def test_account_menu_escape_closes_with_focus_return() -> None:
+    states = _run_navigation_script()
+
     assert states["accountClosedByEscape"]["accountExpanded"] == "false"
     assert states["accountClosedByEscape"]["accountHidden"] is True
     assert states["accountToggleFocused"] is True
