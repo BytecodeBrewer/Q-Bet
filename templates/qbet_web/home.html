@@ -49,9 +49,9 @@
     </div>
   </div>
 
-  <div class="architecture-frame" aria-label="Q-Bet multi-engine architecture">
+  <div class="architecture-frame" data-workflow-motion="sequential" aria-label="Q-Bet multi-engine architecture">
     <div class="architecture-lanes" aria-label="Independent engine pipelines">
-      <article class="engine-lane">
+      <article class="engine-lane" data-workflow-lane="bonus">
         <div class="engine-lane-heading">
           <div>
             <span class="capability-badge is-current">Current</span>
@@ -60,13 +60,13 @@
           <p>Promotion terms stay separate from live sportsbook quotations.</p>
         </div>
         <ol class="engine-lane-flow" aria-label="BonusEngine data path">
-          <li><span>Data</span><strong>Promotions + sports market data</strong></li>
-          <li><span>Preparation</span><strong>Promotion-aware fixed-odds setup</strong></li>
-          <li><span>Calculation</span><strong>BonusEngine</strong></li>
+          <li data-workflow-step="data"><span>Data</span><strong>Promotions + sports market data</strong></li>
+          <li data-workflow-step="preparation"><span>Preparation</span><strong>Promotion-aware fixed-odds setup</strong></li>
+          <li data-workflow-step="calculation"><span>Calculation</span><strong>BonusEngine</strong></li>
         </ol>
       </article>
 
-      <article class="engine-lane">
+      <article class="engine-lane" data-workflow-lane="sports-capital">
         <div class="engine-lane-heading">
           <div>
             <span class="capability-badge is-current">Current</span>
@@ -75,13 +75,13 @@
           <p>Own-capital strategies use a market-focused preparation path.</p>
         </div>
         <ol class="engine-lane-flow" aria-label="SportsCapitalEngine data path">
-          <li><span>Data</span><strong>Structured odds and market data</strong></li>
-          <li><span>Preparation</span><strong>Match and market preparation</strong></li>
-          <li><span>Calculation</span><strong>SportsCapitalEngine</strong></li>
+          <li data-workflow-step="data"><span>Data</span><strong>Structured odds and market data</strong></li>
+          <li data-workflow-step="preparation"><span>Preparation</span><strong>Match and market preparation</strong></li>
+          <li data-workflow-step="calculation"><span>Calculation</span><strong>SportsCapitalEngine</strong></li>
         </ol>
       </article>
 
-      <article class="engine-lane is-future">
+      <article class="engine-lane is-future" data-workflow-lane="future">
         <div class="engine-lane-heading">
           <div>
             <span class="capability-badge is-planned">Planned</span>
@@ -90,15 +90,15 @@
           <p>New domains can bring their own ingestion and preparation without replacing the shared control model.</p>
         </div>
         <ol class="engine-lane-flow" aria-label="Planned engine data path">
-          <li><span>Data</span><strong>Domain-specific sources</strong></li>
-          <li><span>Preparation</span><strong>Domain-specific preparation</strong></li>
-          <li><span>Calculation</span><strong>Future engine</strong></li>
+          <li data-workflow-step="data"><span>Data</span><strong>Domain-specific sources</strong></li>
+          <li data-workflow-step="preparation"><span>Preparation</span><strong>Domain-specific preparation</strong></li>
+          <li data-workflow-step="calculation"><span>Calculation</span><strong>Future engine</strong></li>
         </ol>
       </article>
     </div>
 
     <div class="architecture-merge" aria-hidden="true">
-      <span></span><span></span><span></span>
+      <span data-workflow-merge="bonus"></span><span data-workflow-merge="sports-capital"></span><span data-workflow-merge="future"></span>
     </div>
 
     <div class="protected-workflow" aria-labelledby="protected-workflow-heading">
@@ -107,12 +107,12 @@
         <h3 id="protected-workflow-heading">Every proposal passes the same control envelope.</h3>
       </div>
       <ol class="protected-workflow-stages">
-        <li><span>01</span><strong>Domain Risk</strong><small>Freshness, account state and strategy-specific safety.</small></li>
-        <li><span>02</span><strong>Liquidity Check</strong><small>Capital, limits and available liquidity must support the proposal.</small></li>
-        <li><span>03</span><strong>User authority</strong><small>Notification, approval and configured authority stay explicit.</small></li>
-        <li><span>04</span><strong>Simulation or Execution</strong><small>Virtual and controlled live paths remain separate.</small></li>
-        <li><span>05</span><strong>Settlement</strong><small>Results are validated before financial state changes.</small></li>
-        <li><span>06</span><strong>Portfolio, Reporting & Monitoring</strong><small>Capital state and results remain observable after the decision.</small></li>
+        <li data-workflow-stage="risk"><span>01</span><strong>Domain Risk</strong><small>Freshness, account state and strategy-specific safety.</small></li>
+        <li data-workflow-stage="liquidity"><span>02</span><strong>Liquidity Check</strong><small>Capital, limits and available liquidity must support the proposal.</small></li>
+        <li data-workflow-stage="authority"><span>03</span><strong>User authority</strong><small>Notification, approval and configured authority stay explicit.</small></li>
+        <li data-workflow-stage="simulation-execution"><span>04</span><strong>Simulation or Execution</strong><small>Virtual and controlled live paths remain separate.</small></li>
+        <li data-workflow-stage="settlement"><span>05</span><strong>Settlement</strong><small>Results are validated before financial state changes.</small></li>
+        <li data-workflow-stage="reporting"><span>06</span><strong>Portfolio, Reporting & Monitoring</strong><small>Capital state and results remain observable after the decision.</small></li>
       </ol>
     </div>
   </div>
