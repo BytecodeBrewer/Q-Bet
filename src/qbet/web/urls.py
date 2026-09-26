@@ -25,6 +25,7 @@ urlpatterns = [
         name="notification-inbox-read",
     ),
     path("dashboard/", views.dashboard, name="dashboard"),
+    path("portfolio/", views.portfolio, name="portfolio"),
     path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
     path("execution/approvals/", execution_approvals, name="execution-approvals"),
     path(
