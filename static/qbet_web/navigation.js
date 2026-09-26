@@ -65,7 +65,7 @@
     accountToggle.addEventListener("click", () => {
       const opening = accountPanel.hidden;
       if (opening && !document.body.classList.contains("sidebar-collapsed")) {
-        applySidebarState(true, { persist: true });
+        applySidebarState(true);
       }
       accountPanel.hidden = !opening;
       accountToggle.setAttribute("aria-expanded", opening ? "true" : "false");
