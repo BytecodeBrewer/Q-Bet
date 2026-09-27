@@ -119,7 +119,8 @@ class PortfolioCapitalTests(TestCase):
         hidden = self.client.get("/portfolio/")
         self.assertEqual(hidden.status_code, 200)
         self.assertNotContains(hidden, "125,00 EUR")
-        self.assertContains(hidden, "No Execution capital recorded yet")
+        self.assertContains(hidden, "Execution capital is not available for this account")
+        self.assertNotContains(hidden, "no live-capital context")
 
         self._grant(self.user, "execution", "EUR")
         visible = self.client.get("/portfolio/")
