@@ -97,6 +97,7 @@
 
         <nav aria-label="Application navigation">
           <a class="sidebar-link" href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>{{ ui.dashboard }}</a>
+          <a class="sidebar-link" href="{% url 'portfolio' %}"{% if request.resolver_match.url_name == 'portfolio' %} aria-current="page"{% endif %}>Portfolio</a>
 
           <details class="sidebar-group" open>
             <summary>{{ ui.execution_engine }}</summary>
