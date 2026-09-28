@@ -354,6 +354,185 @@
   line-height: 1.45;
 }
 
+@media (prefers-reduced-motion: no-preference) and (min-width: 781px) {
+  .architecture-frame[data-workflow-motion="sequential"] {
+    --workflow-cycle: 18s;
+  }
+
+  .architecture-frame[data-workflow-motion="sequential"] .engine-lane[data-workflow-lane] {
+    animation: workflow-lane-focus var(--workflow-cycle) ease-in-out infinite;
+    transform-origin: center;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] .engine-lane[data-workflow-lane="bonus"] {
+    animation-delay: 0s;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] .engine-lane[data-workflow-lane="sports-capital"] {
+    animation-delay: 3s;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] .engine-lane[data-workflow-lane="future"] {
+    animation-delay: 6s;
+  }
+
+  .architecture-frame[data-workflow-motion="sequential"] .engine-lane-flow li[data-workflow-step] {
+    animation: workflow-step-focus var(--workflow-cycle) ease-in-out infinite;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] .engine-lane-flow li[data-workflow-step]::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(.62);
+    animation: workflow-step-pulse var(--workflow-cycle) cubic-bezier(.2, .7, .2, 1) infinite;
+    pointer-events: none;
+  }
+
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-lane="bonus"] [data-workflow-step="data"] { --workflow-delay: .2s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-lane="bonus"] [data-workflow-step="preparation"] { --workflow-delay: 1s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-lane="bonus"] [data-workflow-step="calculation"] { --workflow-delay: 1.8s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-lane="sports-capital"] [data-workflow-step="data"] { --workflow-delay: 3.2s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-lane="sports-capital"] [data-workflow-step="preparation"] { --workflow-delay: 4s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-lane="sports-capital"] [data-workflow-step="calculation"] { --workflow-delay: 4.8s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-lane="future"] [data-workflow-step="data"] { --workflow-delay: 6.2s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-lane="future"] [data-workflow-step="preparation"] { --workflow-delay: 7s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-lane="future"] [data-workflow-step="calculation"] { --workflow-delay: 7.8s; }
+
+  .architecture-frame[data-workflow-motion="sequential"] .engine-lane-flow li[data-workflow-step],
+  .architecture-frame[data-workflow-motion="sequential"] .engine-lane-flow li[data-workflow-step]::before {
+    animation-delay: var(--workflow-delay);
+  }
+
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge {
+    position: relative;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge span[data-workflow-merge]::before,
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge span[data-workflow-merge]::after {
+    animation: workflow-connector-focus var(--workflow-cycle) ease-in-out infinite;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge span[data-workflow-merge="bonus"]::before,
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge span[data-workflow-merge="bonus"]::after {
+    animation-delay: 8.35s;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge span[data-workflow-merge="sports-capital"]::before,
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge span[data-workflow-merge="sports-capital"]::after {
+    animation-delay: 8.5s;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge span[data-workflow-merge="future"]::before,
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge span[data-workflow-merge="future"]::after {
+    animation-delay: 8.65s;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge::before {
+    content: "";
+    position: absolute;
+    z-index: 3;
+    top: 20px;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 14%, transparent);
+    opacity: 0;
+    transform: translate(-50%, -50%) translateY(-8px) scale(.7);
+    animation: workflow-merge-pulse var(--workflow-cycle) cubic-bezier(.2, .7, .2, 1) 8.75s infinite;
+    pointer-events: none;
+  }
+
+  .architecture-frame[data-workflow-motion="sequential"] .protected-workflow-stages li[data-workflow-stage] {
+    animation: workflow-stage-focus var(--workflow-cycle) ease-in-out infinite;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-stage="risk"] { animation-delay: 9.4s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-stage="liquidity"] { animation-delay: 10.2s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-stage="authority"] { animation-delay: 11s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-stage="simulation-execution"] { animation-delay: 11.8s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-stage="settlement"] { animation-delay: 12.6s; }
+  .architecture-frame[data-workflow-motion="sequential"] [data-workflow-stage="reporting"] { animation-delay: 13.4s; }
+
+  @keyframes workflow-lane-focus {
+    0%, 20%, 100% {
+      border-color: var(--border);
+      box-shadow: none;
+      transform: translateY(0);
+    }
+    4%, 15% {
+      border-color: color-mix(in srgb, var(--primary) 44%, var(--border));
+      box-shadow: 0 12px 28px color-mix(in srgb, var(--primary) 9%, transparent);
+      transform: translateY(-2px);
+    }
+  }
+
+  @keyframes workflow-step-focus {
+    0%, 8%, 100% {
+      border-color: var(--border);
+      background: var(--surface-subtle);
+      transform: translateY(0);
+    }
+    2%, 5.5% {
+      border-color: color-mix(in srgb, var(--primary) 46%, var(--border));
+      background: color-mix(in srgb, var(--primary-soft) 45%, var(--surface-subtle));
+      transform: translateY(-1px);
+    }
+  }
+
+  @keyframes workflow-step-pulse {
+    0%, 7%, 100% {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(.62);
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 18%, transparent);
+    }
+    2%, 4.5% {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+      box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 10%, transparent);
+    }
+  }
+
+  @keyframes workflow-connector-focus {
+    0%, 8%, 100% {
+      opacity: .5;
+      box-shadow: none;
+    }
+    2%, 5% {
+      opacity: 1;
+      box-shadow: 0 0 8px color-mix(in srgb, var(--primary) 28%, transparent);
+    }
+  }
+
+  @keyframes workflow-merge-pulse {
+    0%, 8%, 100% {
+      opacity: 0;
+      transform: translate(-50%, -50%) translateY(-8px) scale(.7);
+    }
+    2% {
+      opacity: 1;
+      transform: translate(-50%, -50%) translateY(0) scale(1);
+    }
+    6% {
+      opacity: 1;
+      transform: translate(-50%, -50%) translateY(25px) scale(1);
+    }
+  }
+
+  @keyframes workflow-stage-focus {
+    0%, 8%, 100% {
+      border-color: var(--border);
+      background: var(--surface);
+      box-shadow: none;
+      transform: translateY(0);
+    }
+    2%, 5.5% {
+      border-color: color-mix(in srgb, var(--primary) 52%, var(--border));
+      background: color-mix(in srgb, var(--primary-soft) 62%, var(--surface));
+      box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 8%, transparent);
+      transform: translateY(-2px);
+    }
+  }
+}
+
 .authority-grid,
 .current-future-grid {
   display: grid;
@@ -473,6 +652,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .engine-lane,
+  .architecture-frame[data-workflow-motion="sequential"] .engine-lane-flow li[data-workflow-step],
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge span[data-workflow-merge]::before,
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge span[data-workflow-merge]::after,
+  .architecture-frame[data-workflow-motion="sequential"] .protected-workflow-stages li[data-workflow-stage],
   .authority-grid article,
   .current-future-grid article,
   .button-link,
@@ -480,6 +663,12 @@
     scroll-behavior: auto !important;
     animation: none !important;
     transition: none !important;
+    transform: none !important;
+  }
+  .architecture-frame[data-workflow-motion="sequential"] .engine-lane-flow li[data-workflow-step]::before,
+  .architecture-frame[data-workflow-motion="sequential"] .architecture-merge::before {
+    content: none !important;
+    animation: none !important;
   }
 }
 
