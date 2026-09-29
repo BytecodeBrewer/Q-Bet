@@ -127,6 +127,8 @@
 }
 .flow-current-path,
 .flow-shared-path,
+.flow-simulation-path,
+.flow-execution-path,
 .flow-future-path {
   fill: none;
   stroke-linecap: round;
@@ -140,6 +142,16 @@
   stroke: url(#flowSharedLine);
   stroke-width: 4;
 }
+.flow-simulation-path {
+  stroke: url(#flowSharedLine);
+  stroke-width: 3;
+}
+.flow-execution-path {
+  stroke: var(--admin);
+  stroke-width: 2.4;
+  stroke-dasharray: 5 6;
+  opacity: .72;
+}
 .flow-station circle {
   fill: var(--surface);
   stroke: var(--primary);
@@ -150,6 +162,10 @@
 }
 .flow-shared-station circle {
   fill: color-mix(in srgb, var(--primary-soft) 34%, var(--surface));
+}
+.flow-execution-station circle {
+  fill: color-mix(in srgb, var(--admin-soft) 30%, var(--surface));
+  stroke: var(--admin);
 }
 .flow-station text {
   fill: var(--text);
