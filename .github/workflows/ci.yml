@@ -169,6 +169,7 @@ jobs:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       QBET_DJANGO_SECRET_KEY: ${{ secrets.QBET_DJANGO_SECRET_KEY }}
+      QBET_DATABASE_URL: ${{ secrets.QBET_MIGRATION_DATABASE_URL }}
       EXPECTED_RELEASE: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -199,6 +200,35 @@ jobs:
             exit 1
           }
 
+      - name: Load protected polling token from Supabase Vault
+        shell: bash
+        run: |
+          token="$(
+            python - <<'PY'
+          import os
+
+          import psycopg
+
+          with psycopg.connect(os.environ["QBET_DATABASE_URL"]) as connection:
+              with connection.cursor() as cursor:
+                  cursor.execute(
+                      """
+                      select decrypted_secret
+                      from vault.decrypted_secrets
+                      where name = 'qbet_polling_tick_token'
+                      """
+                  )
+                  row = cursor.fetchone()
+
+          if row is None or not str(row[0]).strip():
+              raise SystemExit("Q-Bet polling tick token is missing from Supabase Vault")
+
+          print(row[0])
+          PY
+          )"
+          echo "::add-mask::$token"
+          echo "QBET_POLLING_TICK_TOKEN=$token" >> "$GITHUB_ENV"
+
       - name: Install Vercel CLI
         run: npm install --global vercel@59
 
@@ -213,6 +243,7 @@ jobs:
               --env QBET_DJANGO_DEBUG=false \
               --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app \
               --env QBET_DJANGO_SECRET_KEY="$QBET_DJANGO_SECRET_KEY" \
+              --env QBET_POLLING_TICK_TOKEN="$QBET_POLLING_TICK_TOKEN" \
               --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
               --env QBET_SIMULATION_MODE_ENABLED=false
           )"
