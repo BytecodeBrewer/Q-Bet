@@ -3,49 +3,156 @@
 <section class="page-heading">
   <p><a href="{% url 'admin-area' %}">Admin</a></p>
   <h1>Smart Polling strategies</h1>
-  <p>Configure provider-aware market and result refresh policies without changing application code.</p>
+  <p>See the effective provider strategy for each current sports engine, then edit the persisted values behind it.</p>
+</section>
+
+{% if polling_error %}
+<section class="detail-panel">
+  <p class="status-warning">Polling strategy configuration is temporarily unavailable. No changes were applied.</p>
+</section>
+{% else %}
+<section class="detail-panel">
+  <div class="card-heading">
+    <div>
+      <span class="eyebrow">Effective configuration</span>
+      <h2>Provider and target overview</h2>
+    </div>
+  </div>
+  <p class="muted">
+    Resolution uses the same <code>PollingStrategyResolver</code> as Smart Polling runtime:
+    an engine Override wins over the provider/target Default.
+  </p>
+
+  {% if polling_groups %}
+    {% for group in polling_groups %}
+      <article class="engine-card">
+        <div class="card-heading">
+          <div>
+            <span class="eyebrow">{{ group.target.value|title }} target</span>
+            <h3>{{ group.source.provider_id }} / {{ group.source.source_id }}</h3>
+            <p class="muted">Transport: {{ group.source.transport.value|upper }}</p>
+          </div>
+          {% if group.default %}
+            <span class="tag neutral-tag">Default</span>
+          {% else %}
+            <span class="tag neutral-tag">No Default</span>
+          {% endif %}
+        </div>
+
+        {% if group.default %}
+          <div class="detail-panel">
+            <div class="card-heading">
+              <strong>Provider/target Default</strong>
+              <a href="{% url 'admin-polling-settings' %}{{ group.default.edit_query }}">Edit</a>
+            </div>
+            <p>
+              {% if group.default.strategy.enabled %}<strong>Enabled</strong>{% else %}<strong>Disabled</strong>{% endif %}
+              · Freshness {{ group.default.freshness }}
+            </p>
+            <p>{{ group.default.timing }}</p>
+            <p class="muted">{{ group.default.retries }} · {{ group.default.capacity }}</p>
+          </div>
+        {% else %}
+          <p class="status-warning">No provider/target Default is configured. Engines without an Override are unavailable.</p>
+        {% endif %}
+
+        <div class="engine-grid">
+          {% for route in group.routes %}
+            <article class="engine-card">
+              <div class="card-heading">
+                <div>
+                  <span class="eyebrow">Effective strategy</span>
+                  <h4>{{ route.engine_label }}</h4>
+                </div>
+                <span class="tag neutral-tag">{{ route.origin_label }}</span>
+              </div>
+
+              {% if route.strategy %}
+                {% if route.replaces_default %}
+                  <p><strong>Override</strong> replaces the Default for this engine.</p>
+                {% elif route.origin_label == "Default" %}
+                  <p>Uses the provider/target Default.</p>
+                {% endif %}
+                <p>
+                  {% if route.strategy.strategy.enabled %}<strong>Enabled</strong>{% else %}<strong>Disabled</strong>{% endif %}
+                  · Freshness {{ route.strategy.freshness }}
+                </p>
+                <p>{{ route.strategy.timing }}</p>
+                <p class="muted">{{ route.strategy.retries }}</p>
+                <p class="muted">{{ route.strategy.capacity }}</p>
+                {% if route.origin_label == "Override" %}
+                  <p><a href="{% url 'admin-polling-settings' %}{{ route.strategy.edit_query }}">Edit Override</a></p>
+                {% endif %}
+              {% else %}
+                <p class="status-warning"><strong>{{ route.unavailable_label }}</strong></p>
+                <p class="muted">This route has no resolvable persisted strategy.</p>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      </article>
+    {% endfor %}
+  {% else %}
+    <p class="status-warning"><strong>No strategy configured.</strong> No provider/target route currently has a persisted Smart Polling strategy.</p>
+  {% endif %}
 </section>
 
 <section class="detail-panel">
-  <h2>Configured strategies</h2>
-  {% if polling_error %}
-    <p class="status-warning">Polling strategy configuration is temporarily unavailable. No changes were applied.</p>
-  {% elif polling_strategies %}
+  <div class="card-heading">
+    <div>
+      <span class="eyebrow">Persisted records</span>
+      <h2>Defaults and Overrides</h2>
+    </div>
+  </div>
+
+  {% if polling_strategies %}
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Provider</th><th>Source</th><th>Target</th><th>Engine</th><th>Timing</th><th>State</th><th>Capacity</th><th>Control</th>
+            <th>Role</th>
+            <th>Provider / Source</th>
+            <th>Target</th>
+            <th>Engine</th>
+            <th>Timing</th>
+            <th>Freshness</th>
+            <th>Retries</th>
+            <th>Capacity</th>
+            <th>State</th>
+            <th>Control</th>
           </tr>
         </thead>
         <tbody>
-          {% for strategy in polling_strategies %}
+          {% for item in polling_strategies %}
           <tr>
-            <td>{{ strategy.source.provider_id }}</td>
-            <td>{{ strategy.source.source_id }}</td>
-            <td>{{ strategy.target }}</td>
-            <td>{% if strategy.engine %}{{ strategy.engine }}{% else %}Provider default{% endif %}</td>
+            <td><strong>{{ item.role_label }}</strong></td>
+            <td>{{ item.strategy.source.provider_id }} / {{ item.strategy.source.source_id }}</td>
+            <td>{{ item.strategy.target.value|title }}</td>
             <td>
-              {% if strategy.market_refresh_points %}
-                {{ strategy.market_refresh_points|join:", " }} before event
-              {% elif strategy.market_interval %}
-                Every {{ strategy.market_interval }}
+              {% if item.strategy.engine == "bonus" %}
+                BonusEngine
+              {% elif item.strategy.engine == "sports_capital" %}
+                SportsCapitalEngine
               {% else %}
-                Result retry {{ strategy.result_retry_interval }}
+                All engines without Override
               {% endif %}
             </td>
-            <td>{% if strategy.enabled %}Enabled{% else %}Disabled{% endif %}</td>
-            <td>{{ strategy.capacity_class }} / {{ strategy.capacity_units|default_if_none:"unbounded" }} units</td>
+            <td>{{ item.timing }}</td>
+            <td>{{ item.freshness }}</td>
+            <td>{{ item.retries }}</td>
+            <td>{{ item.capacity }}</td>
+            <td>{% if item.strategy.enabled %}Enabled{% else %}Disabled{% endif %}</td>
             <td>
+              <p><a href="{% url 'admin-polling-settings' %}{{ item.edit_query }}">Edit</a></p>
               <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="toggle">
-                <input type="hidden" name="provider_id" value="{{ strategy.source.provider_id }}">
-                <input type="hidden" name="source_id" value="{{ strategy.source.source_id }}">
-                <input type="hidden" name="target" value="{{ strategy.target }}">
-                <input type="hidden" name="engine" value="{{ strategy.engine|default_if_none:'' }}">
-                <input type="hidden" name="enabled" value="{% if strategy.enabled %}false{% else %}true{% endif %}">
-                <button type="submit">{% if strategy.enabled %}Disable{% else %}Enable{% endif %}</button>
+                <input type="hidden" name="provider_id" value="{{ item.strategy.source.provider_id }}">
+                <input type="hidden" name="source_id" value="{{ item.strategy.source.source_id }}">
+                <input type="hidden" name="target" value="{{ item.strategy.target.value }}">
+                <input type="hidden" name="engine" value="{{ item.strategy.engine|default_if_none:'' }}">
+                <input type="hidden" name="enabled" value="{% if item.strategy.enabled %}false{% else %}true{% endif %}">
+                <button type="submit">{% if item.strategy.enabled %}Disable{% else %}Enable{% endif %}</button>
               </form>
             </td>
           </tr>
@@ -54,19 +161,108 @@
       </table>
     </div>
   {% else %}
-    <p class="muted">No persisted Smart Polling strategies yet.</p>
+    <p class="muted">No persisted Smart Polling records yet.</p>
   {% endif %}
 </section>
 
-{% if not polling_error %}
-<section class="detail-panel">
-  <h2>Create or update strategy</h2>
-  <p class="muted">Saving an existing provider/source/target/engine identity updates it. An engine-specific strategy overrides the provider/target default. Final Execution revalidation remains separate.</p>
+{% if polling_preview %}
+<section class="detail-panel" id="polling-preview">
+  <span class="eyebrow">Preview only · not saved</span>
+  <h2>Effective resolution after this change</h2>
+  <p>
+    <strong>{{ polling_preview.candidate.role_label }}</strong>
+    · {{ polling_preview.candidate.strategy.source.provider_id }}/{{ polling_preview.candidate.strategy.source.source_id }}
+    · {{ polling_preview.candidate.strategy.target.value|title }}
+    · {{ polling_preview.candidate.timing }}
+  </p>
+  {% if polling_preview.impacts %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Route</th><th>Current</th><th>After save</th></tr></thead>
+        <tbody>
+          {% for impact in polling_preview.impacts %}
+          <tr>
+            <td>{{ impact.route }}</td>
+            <td>{{ impact.before }}</td>
+            <td>{{ impact.after }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">No effective engine route would change. Saving would persist the same resolved behavior.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="detail-panel" id="polling-editor">
+  <div class="card-heading">
+    <div>
+      <span class="eyebrow">{% if polling_edit_identity %}Focused edit{% else %}New strategy{% endif %}</span>
+      <h2>{% if polling_edit_identity %}Edit persisted strategy{% else %}Create strategy{% endif %}</h2>
+    </div>
+    {% if polling_edit_identity %}
+      <a href="{% url 'admin-polling-settings' %}">Cancel edit</a>
+    {% endif %}
+  </div>
+
+  <p class="muted">
+    Explicit market refresh points are ordered far-to-near: for example
+    <code>1440,120,15</code> means T-24h, then T-2h, then T-15m.
+    Final Execution RequestHandler revalidation remains separate.
+  </p>
+
   <form method="post">
     {% csrf_token %}
+    {% if polling_edit_identity %}
+      <input type="hidden" name="edit_provider" value="{{ polling_edit_identity.provider_id }}">
+      <input type="hidden" name="edit_source" value="{{ polling_edit_identity.source_id }}">
+      <input type="hidden" name="edit_target" value="{{ polling_edit_identity.target.value }}">
+      <input type="hidden" name="edit_engine" value="{{ polling_edit_identity.engine|default_if_none:'' }}">
+    {% endif %}
+
+    <fieldset>
+      <legend>Preset timing</legend>
+      <label for="polling-preset">Preset</label>
+      <select id="polling-preset" name="preset">
+        {% for preset in polling_presets %}
+          <option value="{{ preset.key }}" {% if polling_selected_preset == preset.key %}selected{% endif %}>
+            {{ preset.label }}
+          </option>
+        {% endfor %}
+      </select>
+      <button type="submit" name="action" value="apply_preset">Apply preset values</button>
+      <ul>
+        {% for preset in polling_presets %}
+          <li>
+            <strong>{{ preset.label }}</strong>:
+            freshness {{ preset.freshness_minutes }} min;
+            market points
+            {% for point in preset.market_refresh_points_minutes %}{% if not forloop.first %}, {% endif %}T-{{ point }}m{% endfor %};
+            result retry {{ preset.result_retry_minutes }} min;
+            {{ preset.max_attempts }} attempts.
+            {{ preset.description }}
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="muted">Presets change timing and attempt values only. Capacity class/quota stays explicit and provider-specific.</p>
+    </fieldset>
+
     {{ polling_form.non_field_errors }}
     {{ polling_form.as_p }}
-    <button type="submit">Save Smart Polling strategy</button>
+
+    <div class="button-row">
+      <button type="submit" name="action" value="preview">Preview effective resolution</button>
+      {% if polling_preview %}
+        <button type="submit" name="action" value="save">Save reviewed Smart Polling strategy</button>
+      {% else %}
+        <span class="muted">Preview the effective engine routes before Save becomes available.</span>
+      {% endif %}
+      {% if polling_edit_identity %}
+        <a href="{% url 'admin-polling-settings' %}">Cancel without saving</a>
+      {% endif %}
+    </div>
   </form>
 </section>
 {% endif %}
