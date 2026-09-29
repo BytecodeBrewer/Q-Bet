@@ -105,6 +105,27 @@ The scheduler must remain unscheduled while the stable alias still serves a rele
 
 Normal CI never receives provider credentials and does not make live The Odds API calls. Integration tests inject deterministic collectors and use PostgreSQL state.
 
+## Staff strategy presets
+
+The staff Smart Polling settings surface resolves effective engine configuration with the same
+`PollingStrategyResolver` used by runtime policy. A provider/target Default applies only when an
+engine-specific Override is absent.
+
+The three Phase 3 presets are deterministic form helpers. They populate explicit typed values and
+do not create a hidden runtime mode:
+
+| Preset | Freshness | Market refresh points | Latest market boundary | Result retry | Max attempts |
+| --- | ---: | --- | ---: | ---: | ---: |
+| Conservative | 15 min | T-24h, T-2h, T-15m | T-5m | 20 min | 2 |
+| Standard | 5 min | T-24h, T-12h, T-2h, T-15m | T-1m | 10 min | 3 |
+| Frequent | 2 min | T-24h, T-12h, T-2h, T-30m, T-10m | T-1m | 5 min | 5 |
+
+Applying a preset changes timing and attempt values only. Provider capacity class, quota units,
+request-cost units, enabled state, source identity, target, and engine/default identity remain
+explicit settings. The operator can preview which current v1 engine routes would resolve
+differently before saving. Preview never mutates PostgreSQL state and never performs a provider
+request.
+
 ## Separation from RequestHandler
 
 Ordinary Smart Polling is Data Aggregation work. It must not become an alternative implementation of last-mile Execution revalidation.
