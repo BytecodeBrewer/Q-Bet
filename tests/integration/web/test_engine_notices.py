@@ -121,7 +121,7 @@ class ContextualEngineNoticeWebTests(TestCase):
                 self.assertContains(response, "data-provider-notice")
                 self.assertContains(response, title)
                 self.assertContains(response, level)
-                self.assertContains(response, "the_odds_api")
+                self.assertNotContains(response, "the_odds_api")
 
     def test_dashboard_renders_delayed_and_unavailable_provider_activity_notices(self) -> None:
         self.client.force_login(self.user)
@@ -155,7 +155,7 @@ class ContextualEngineNoticeWebTests(TestCase):
                 self.assertContains(response, "data-provider-notice")
                 self.assertContains(response, title)
                 self.assertContains(response, level)
-                self.assertContains(response, "the_odds_api")
+                self.assertNotContains(response, "the_odds_api")
 
     def test_ready_provider_activity_does_not_invent_notice(self) -> None:
         self.client.force_login(self.user)
