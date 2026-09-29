@@ -134,8 +134,9 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertIn(".home-flow-map,", visual_styles)
         self.assertIn("display: none;", visual_styles)
         self.assertIn(".home-flow-mobile {", visual_styles)
-        self.assertIn("@media (prefers-reduced-motion: reduce)", visual_styles)
-        reduced_motion = visual_styles.split("@media (prefers-reduced-motion: reduce)")[-1]
+        public_styles = visual_styles.split("/* Dashboard control strip */", maxsplit=1)[0]
+        self.assertIn("@media (prefers-reduced-motion: reduce)", public_styles)
+        reduced_motion = public_styles.split("@media (prefers-reduced-motion: reduce)")[-1]
         self.assertIn(".flow-motion-toggle { display: none; }", reduced_motion)
         self.assertIn(".flow-packet { display: none; }", reduced_motion)
         self.assertIn("transition: none !important;", reduced_motion)
