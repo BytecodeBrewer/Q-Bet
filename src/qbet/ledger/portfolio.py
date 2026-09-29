@@ -182,17 +182,20 @@ class PortfolioLedger(DomainModel):
                 return reject("insufficient_available_capital")
             balances["available"] -= amount
             balances["cost"] += amount
-        elif operation in {LedgerOperation.FUND, LedgerOperation.WITHDRAW}:
+        elif operation is LedgerOperation.FUND:
             if position is not None:
-                return reject("external_movement_dispatch_conflict")
+                return reject("funding_dispatch_conflict")
             if amount <= 0:
-                return reject("external_movement_amount_must_be_positive")
-            if operation is LedgerOperation.FUND:
-                balances["available"] += amount
-            else:
-                if amount > self.balance.available:
-                    return reject("insufficient_available_capital")
-                balances["available"] -= amount
+                return reject("funding_amount_must_be_positive")
+            balances["available"] += amount
+        elif operation is LedgerOperation.WITHDRAW:
+            if position is not None:
+                return reject("withdrawal_dispatch_conflict")
+            if amount <= 0:
+                return reject("withdrawal_amount_must_be_positive")
+            if amount > self.balance.available:
+                return reject("insufficient_available_capital")
+            balances["available"] -= amount
         else:
             if position is None:
                 return reject("unknown_dispatch")
