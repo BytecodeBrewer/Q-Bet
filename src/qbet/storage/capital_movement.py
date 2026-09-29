@@ -138,7 +138,12 @@ class CapitalMovementRepository:
 
                 stored = self._record_from_row(row)
                 canonical_stored = stored.model_copy(update={"duplicate": False})
-                canonical_incoming = incoming.model_copy(update={"duplicate": False})
+                canonical_incoming = incoming.model_copy(
+                    update={
+                        "performed_at": stored.performed_at,
+                        "duplicate": False,
+                    }
+                )
                 if canonical_stored != canonical_incoming:
                     raise CapitalMovementConflict("capital_movement_identity_conflict")
                 return stored.model_copy(update={"duplicate": True})
