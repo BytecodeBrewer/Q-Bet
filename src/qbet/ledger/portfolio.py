@@ -137,6 +137,22 @@ class PortfolioLedger(DomainModel):
             )
         )
 
+    def withdraw_external(
+        self, *, command_id: str, dispatch_id: str, correlation_id: str, amount: Decimal
+    ) -> tuple["PortfolioLedger", LedgerDecision]:
+        """Debit externally confirmed withdrawn capital after reconciliation."""
+
+        return self.apply(
+            _command(
+                command_id,
+                dispatch_id,
+                correlation_id,
+                self.balance.currency,
+                LedgerOperation.WITHDRAW,
+                amount,
+            )
+        )
+
     def apply(self, command: LedgerCommand) -> tuple["PortfolioLedger", LedgerDecision]:
         def reject(reason: str) -> tuple["PortfolioLedger", LedgerDecision]:
             return self, LedgerDecision(accepted=False, balance=self.balance, reason=reason)
@@ -166,12 +182,17 @@ class PortfolioLedger(DomainModel):
                 return reject("insufficient_available_capital")
             balances["available"] -= amount
             balances["cost"] += amount
-        elif operation is LedgerOperation.FUND:
+        elif operation in {LedgerOperation.FUND, LedgerOperation.WITHDRAW}:
             if position is not None:
-                return reject("funding_dispatch_conflict")
+                return reject("external_movement_dispatch_conflict")
             if amount <= 0:
-                return reject("funding_amount_must_be_positive")
-            balances["available"] += amount
+                return reject("external_movement_amount_must_be_positive")
+            if operation is LedgerOperation.FUND:
+                balances["available"] += amount
+            else:
+                if amount > self.balance.available:
+                    return reject("insufficient_available_capital")
+                balances["available"] -= amount
         else:
             if position is None:
                 return reject("unknown_dispatch")
