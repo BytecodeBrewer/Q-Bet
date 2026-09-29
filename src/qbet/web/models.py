@@ -135,6 +135,23 @@ class UserDisplayPreference(models.Model):
         db_table = "qbet_user_display_preferences"
 
 
+class UserAvatar(models.Model):
+    """User-owned pointer to a normalized image in durable object storage."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_avatar",
+    )
+    object_key = models.CharField(max_length=255, unique=True)
+    content_type = models.CharField(max_length=32, default="image/jpeg")
+    byte_size = models.PositiveIntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_user_avatars"
+
+
 class AccountVerification(models.Model):
     """Verification state for newly registered accounts."""
 

@@ -56,7 +56,7 @@
             aria-expanded="false"
             aria-label="Open account menu for {{ user.get_username }}"
           >
-            <span aria-hidden="true">{{ user.get_username|slice:":1"|upper }}</span>
+            <img src="{% url 'account-avatar' %}" alt="" width="40" height="40">
           </button>
           <div class="topbar-account-menu" data-account-menu-panel role="menu" hidden>
             <div class="account-menu-summary">

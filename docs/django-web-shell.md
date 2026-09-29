@@ -24,6 +24,7 @@ With the intended Q-Bet development configuration, local and hosted application 
 - `QBET_DJANGO_DEBUG`: `true` locally, `false` in deployed environments.
 - `QBET_DJANGO_ALLOWED_HOSTS`: comma-separated host allowlist.
 - `QBET_DATABASE_URL`: required PostgreSQL connection URL for every normal Q-Bet runtime. A Supabase transaction-pooler URL is appropriate for Vercel's serverless runtime; a session/direct connection can be used for administrative migration work where appropriate.
+- `QBET_SUPABASE_URL` and `QBET_SUPABASE_STORAGE_SECRET_KEY`: server-only configuration for private profile-avatar object storage. Keep the bucket private and configure the key only in the deployment environment's secret store; never expose it to templates, browser code, or logs. Avatar files are normalized before upload and served only through the authenticated Django account route.
 - `QBET_HOSTED_PREVIEW`: marks a hosted Vercel-style runtime so hosted security requirements such as SSL and disabled debug are enforced.
 - `QBET_SIMULATION_MODE_ENABLED`: bootstrap/default Simulation availability. Preview CI sets this to `false`; another deployed environment may explicitly enable it.
 - `QBET_TEST_DATABASE_URL`: disposable PostgreSQL connection used by pytest. Tests replace `QBET_DATABASE_URL` inside the pytest process with this value so they cannot accidentally mutate the shared Supabase database.
