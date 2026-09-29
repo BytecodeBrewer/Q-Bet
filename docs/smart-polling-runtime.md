@@ -42,7 +42,7 @@ The current connected Phase 3 polling target is SportsCapital Simulation through
 
 The explicit event start is decision-relevant scheduling data. Missing or invalid timing fails closed instead of inventing a polling schedule.
 
-Only persisted user intent inside the global SportsCapital Simulation guardrail creates active polling work. Removing that eligibility disables future work but keeps its durable history and latest normalized snapshot.
+Persisted user intent inside the global SportsCapital Simulation guardrail controls whether the shared provider market target is eligible to exist. Multiple eligible users do not multiply identical quotation requests. Removing all eligibility disables future work but keeps durable history and the latest normalized snapshot.
 
 ## Supabase Cron wake-up
 
