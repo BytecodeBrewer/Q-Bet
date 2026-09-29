@@ -30,6 +30,7 @@ from qbet.bank import (
 from qbet.data.models import DataSourceMetadata, SourceTransport
 from qbet.domain.models import Currency
 from qbet.ledger import PortfolioLedger
+from qbet.providers import GERMAN_JURISDICTION, ProviderStatus
 from qbet.storage.models import PortfolioLedgerRow, SportsbookProviderRow
 from qbet.web.models import PortfolioCapitalLocation, PortfolioLedgerAccess
 
@@ -62,7 +63,10 @@ class ProviderCapitalLocationForm(forms.Form):
         super().__init__(*args, **kwargs)
         provider_field = cast(forms.ModelChoiceField, self.fields["provider"])
         provider_field.queryset = SportsbookProviderRow.objects.filter(
-            sports_betting=True, online=True
+            jurisdiction=GERMAN_JURISDICTION,
+            sports_betting=True,
+            online=True,
+            status=ProviderStatus.ACTIVE.value,
         ).order_by("display_name", "provider_id")
 
 
@@ -132,7 +136,7 @@ def portfolio_central_refresh(request: HttpRequest) -> JsonResponse:
             {"status": "forbidden", "message": "This capital context is not available."},
             status=403,
         )
-    if user.is_staff and not PortfolioLedgerRow.objects.filter(
+    if not PortfolioLedgerRow.objects.filter(
         mode="execution", currency=currency
     ).exists():
         return JsonResponse(
