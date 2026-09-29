@@ -39,7 +39,7 @@
 
       if (provider) provider.value = button.dataset.providerId || "";
       if (currency) currency.value = button.dataset.currency || "";
-      if (amount) amount.value = button.dataset.amount || "0";
+      if (amount) amount.value = button.dataset.amount || "";
       if (note) note.value = button.dataset.note || "";
       if (name) {
         name.textContent = `${button.dataset.providerLabel || "Provider"} · ${button.dataset.currency || ""}`;
@@ -100,18 +100,68 @@
     });
   });
 
-  const filter = document.querySelector("[data-provider-filter]");
+  const list = document.querySelector("[data-provider-list]");
+  const search = document.querySelector("[data-provider-search]");
+  const sort = document.querySelector("[data-provider-sort]");
+  const pageSize = document.querySelector("[data-provider-page-size]");
+  const loadMore = document.querySelector("[data-provider-load-more]");
+  const count = document.querySelector("[data-provider-count]");
+  const empty = document.querySelector("[data-provider-empty]");
   const cards = Array.from(document.querySelectorAll("[data-provider-card]"));
-  const empty = document.querySelector("[data-provider-filter-empty]");
 
-  filter?.addEventListener("input", () => {
-    const term = filter.value.trim().toLowerCase();
-    let visible = 0;
-    cards.forEach((card) => {
-      const matches = !term || (card.dataset.providerName || "").includes(term);
-      card.hidden = !matches;
-      if (matches) visible += 1;
+  if (!list || cards.length === 0) {
+    if (loadMore) loadMore.hidden = true;
+    if (count) count.textContent = "";
+    return;
+  }
+
+  let visibleLimit = Number(pageSize?.value || 4);
+
+  const providerName = (card) => (card.dataset.providerName || "").trim();
+
+  const renderProviders = ({ resetLimit = false } = {}) => {
+    const term = (search?.value || "").trim().toLowerCase();
+    const direction = sort?.value || "name-asc";
+    const selectedPageSize = Number(pageSize?.value || 4);
+
+    if (resetLimit) visibleLimit = selectedPageSize;
+
+    const matching = cards.filter((card) => providerName(card).includes(term));
+    matching.sort((left, right) => {
+      const comparison = providerName(left).localeCompare(providerName(right), undefined, {
+        sensitivity: "base",
+      });
+      return direction === "name-desc" ? -comparison : comparison;
     });
-    if (empty) empty.hidden = visible !== 0;
+
+    const matchingSet = new Set(matching);
+    cards.forEach((card) => {
+      if (!matchingSet.has(card)) card.hidden = true;
+    });
+
+    matching.forEach((card, index) => {
+      list.append(card);
+      card.hidden = index >= visibleLimit;
+    });
+
+    const shown = Math.min(visibleLimit, matching.length);
+    if (count) {
+      count.textContent =
+        matching.length === 0
+          ? ""
+          : `Showing ${shown} of ${matching.length} providers`;
+    }
+    if (empty) empty.hidden = matching.length !== 0;
+    if (loadMore) loadMore.hidden = shown >= matching.length;
+  };
+
+  search?.addEventListener("input", () => renderProviders({ resetLimit: true }));
+  sort?.addEventListener("change", () => renderProviders());
+  pageSize?.addEventListener("change", () => renderProviders({ resetLimit: true }));
+  loadMore?.addEventListener("click", () => {
+    visibleLimit += Number(pageSize?.value || 4);
+    renderProviders();
   });
+
+  renderProviders({ resetLimit: true });
 })();
