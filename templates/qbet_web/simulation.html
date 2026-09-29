@@ -1,6 +1,6 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-{% load display_preferences %}
+{% load display_preferences static %}
 <section class="page-heading">
   <h1>Simulation</h1>
   <p>Simulation uses virtual capital only, follows the existing workflow path, and never calls live-money adapters.</p>
@@ -109,8 +109,8 @@
           <div><dt>Progress</dt><dd>{% if engine.latest_report_id %}Available in latest report{% else %}Unavailable{% endif %}</dd></div>
           <div><dt>Running / pending</dt><dd>{{ engine.running_matches }} / {{ engine.pending_matches }}</dd></div>
           <div><dt>Virtual capital</dt><dd>{% if engine.involved_capital is not None %}{% localized_money engine.involved_capital "EUR" display_preferences %}{% else %}Unavailable{% endif %}</dd></div>
-          <div><dt>Warnings / errors</dt><dd>{{ engine.warning_count }} / {{ engine.error_count }}</dd></div>
         </dl>
+        {% include "qbet_web/_engine_notices.html" with engine=engine %}
         {% if engine.latest_report_id %}
           <p>
             <a href="{% url 'report-detail' engine.latest_report_id %}">Open latest report</a>
@@ -123,6 +123,8 @@
       </article>
     {% endfor %}
   </section>
+  <p class="admin-metadata">Technical simulation history remains available in <a href="{% url 'monitoring' %}">Monitoring</a>.</p>
   <p class="download-status" data-download-status role="status"></p>
 </div>
+<script src="{% static 'qbet_web/engine_notices.js' %}" defer></script>
 {% endblock %}
