@@ -711,13 +711,22 @@
 /* Override the older native-drag visual from app.css. */
 .draggable-card { will-change: transform; }
 .draggable-card.is-dragging {
+  position: fixed !important;
+  z-index: 1000 !important;
   opacity: 1 !important;
   filter: none !important;
   border-style: solid !important;
   border-color: color-mix(in srgb, var(--primary) 58%, var(--border));
+  pointer-events: none;
   transform: translate(var(--drag-x, 0px), calc(var(--drag-y, 0px) - 5px)) scale(1.018);
   box-shadow: 0 24px 56px rgba(23, 33, 43, .18);
-  z-index: 10;
+}
+.dashboard-drag-placeholder {
+  min-width: 0;
+  border: 1px dashed color-mix(in srgb, var(--primary) 65%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary-soft) 68%, transparent);
+  transition: height .16s ease, opacity .16s ease;
 }
 .dashboard-engine-grid.is-reordering { cursor: grabbing; }
 .dashboard-engine-grid.is-reordering .draggable-card:not(.is-dragging) { transition: border-color .14s ease, box-shadow .14s ease; }
@@ -787,6 +796,7 @@
   .flow-station text { transition: none; }
   .engine-runtime-button,
   .drag-handle,
+  .dashboard-drag-placeholder,
   .draggable-card { transition: none !important; }
   .draggable-card.is-dragging { transform: translate(var(--drag-x, 0px), var(--drag-y, 0px)); }
 }
