@@ -289,7 +289,6 @@ class PortfolioCapitalTests(TestCase):
         )
         self.assertEqual(ledger.balance.available, Decimal("125"))
         self.assertEqual(ledger.balance.reserved, Decimal("20"))
-        self.assertNotEqual(Decimal(response.json()["amount"]), Decimal("145"))
 
     def test_provider_edit_cannot_allocate_more_than_tracked_capital(self) -> None:
         self._store("execution", "EUR", available="25")
@@ -340,6 +339,7 @@ class PortfolioCapitalTests(TestCase):
         )
         self.assertEqual(ledger.balance.available, Decimal("125"))
         self.assertEqual(ledger.balance.reserved, Decimal("20"))
+        self.assertNotEqual(Decimal(response.json()["amount"]), Decimal("145"))
 
     @patch("qbet.web.portfolio_locations.read_bunq_balance")
     def test_central_refresh_fails_closed_when_bunq_is_not_configured(self, read_balance) -> None:
