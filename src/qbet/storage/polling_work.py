@@ -19,13 +19,14 @@ class PollingWorkPersistenceError(RuntimeError):
 
 def _identity(work: PollingWork) -> dict[str, object]:
     return {
-        "owner_id": work.owner,
         "provider_id": work.source.provider_id,
         "source_id": work.source.source_id,
         "target": work.target.value,
         "engine": work.engine,
         "mode": work.mode,
+        "sport": work.sport,
         "match_id": work.match_id,
+        "market": work.market,
     }
 
 
@@ -138,23 +139,25 @@ class PostgresPollingWorkRepository:
     def load(
         self,
         *,
-        owner: str,
         provider_id: str,
         source_id: str,
         target: str,
         engine: str,
         mode: str,
+        sport: str,
         match_id: str,
+        market: str,
     ) -> PollingWork | None:
         try:
             row = PollingWorkRow.objects.filter(
-                owner_id=owner,
                 provider_id=provider_id,
                 source_id=source_id,
                 target=target,
                 engine=engine,
                 mode=mode,
+                sport=sport,
                 match_id=match_id,
+                market=market,
             ).first()
             return None if row is None else self._work_from_row(row)
         except (DatabaseError, ValidationError, ValueError) as error:
@@ -198,13 +201,14 @@ class PostgresPollingWorkRepository:
     def _work_from_row(row: PollingWorkRow) -> PollingWork:
         work = PollingWork.model_validate(row.payload)
         expected = (
-            work.owner,
             work.source.provider_id,
             work.source.source_id,
             work.target.value,
             work.engine,
             work.mode,
+            work.sport,
             work.match_id,
+            work.market,
             work.correlation_id,
             work.next_due_at,
             work.attempt,
@@ -215,13 +219,14 @@ class PostgresPollingWorkRepository:
             work.disabled,
         )
         stored = (
-            row.owner_id,
             row.provider_id,
             row.source_id,
             row.target,
             row.engine,
             row.mode,
+            row.sport,
             row.match_id,
+            row.market,
             row.correlation_id,
             row.next_due_at,
             row.attempt,
