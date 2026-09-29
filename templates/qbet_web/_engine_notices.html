@@ -1,0 +1,33 @@
+{% if engine.notices %}
+<section class="engine-notices" aria-label="{{ engine.name }} current notices" aria-live="polite">
+  {% for notice in engine.notices %}
+    <article
+      class="engine-notice engine-notice-{{ notice.severity }}"
+      data-engine-notice
+      data-notice-reason="{{ notice.reason_code|escape }}"
+      role="{% if notice.severity == 'error' %}alert{% else %}status{% endif %}"
+    >
+      <div class="engine-notice-icon" aria-hidden="true">
+        {% if notice.severity == "error" %}!{% elif notice.severity == "warning" %}⚠{% elif notice.severity == "success" %}✓{% else %}i{% endif %}
+      </div>
+      <div class="engine-notice-copy">
+        <span class="engine-notice-level">{{ notice.severity|title }}</span>
+        <strong>{{ notice.title }}</strong>
+        <p>{{ notice.detail }}</p>
+        {% if notice.action_url and notice.action_label %}
+          <a class="compact-link" href="{{ notice.action_url }}">{{ notice.action_label }}</a>
+        {% endif %}
+      </div>
+      {% if notice.dismissible %}
+        <button
+          type="button"
+          class="engine-notice-dismiss"
+          data-notice-dismiss
+          aria-label="Dismiss {{ notice.title|escape }}"
+          title="Dismiss"
+        >×</button>
+      {% endif %}
+    </article>
+  {% endfor %}
+</section>
+{% endif %}
