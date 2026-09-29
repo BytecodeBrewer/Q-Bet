@@ -185,13 +185,12 @@ def provider_activity_notice(activity: ProviderActivitySnapshot) -> EngineNotice
 
 
 def _provider_notice(activity: ProviderActivitySnapshot) -> EngineNotice | None:
-    provider = f" from {activity.provider}" if activity.provider else ""
     if activity.state == "working":
         return EngineNotice(
             severity="info",
             reason_code=activity.reason_code or "provider_refresh_working",
             title="Market data is being refreshed",
-            detail=f"A market-data request{provider} is currently running.",
+            detail="A market-data request is currently running.",
             dismissible=False,
             occurred_at=activity.occurred_at,
         )
@@ -200,7 +199,7 @@ def _provider_notice(activity: ProviderActivitySnapshot) -> EngineNotice | None:
             severity="success",
             reason_code=activity.reason_code or "provider_refresh_success",
             title="Market data updated",
-            detail=f"The latest market-data request{provider} completed successfully.",
+            detail="The latest market-data request completed successfully.",
             occurred_at=activity.occurred_at,
         )
     if activity.state == "delayed":
@@ -208,7 +207,7 @@ def _provider_notice(activity: ProviderActivitySnapshot) -> EngineNotice | None:
             severity="warning",
             reason_code=activity.reason_code or "provider_refresh_delayed",
             title="Market data refresh is delayed",
-            detail=f"The latest market-data request{provider} is delayed or rate-limited.",
+            detail="The latest market-data request is delayed or rate-limited.",
             occurred_at=activity.occurred_at,
         )
     if activity.state == "unavailable":
@@ -216,7 +215,7 @@ def _provider_notice(activity: ProviderActivitySnapshot) -> EngineNotice | None:
             severity="error",
             reason_code=activity.reason_code or "provider_unavailable",
             title="Market data source unavailable",
-            detail=f"The current market-data source{provider} is unavailable.",
+            detail="The current market-data source is unavailable.",
             occurred_at=activity.occurred_at,
         )
     if activity.state == "error":
@@ -224,7 +223,7 @@ def _provider_notice(activity: ProviderActivitySnapshot) -> EngineNotice | None:
             severity="error",
             reason_code=activity.reason_code or "provider_refresh_failed",
             title="Market data update failed",
-            detail=f"The latest market-data request{provider} failed.",
+            detail="The latest market-data request failed.",
             occurred_at=activity.occurred_at,
         )
     return None
