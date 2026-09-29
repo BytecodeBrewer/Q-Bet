@@ -576,16 +576,22 @@ def profile_avatar_update(request: HttpRequest) -> HttpResponse:
 @require_POST
 def profile_avatar_remove(request: HttpRequest) -> HttpResponse:
     user = cast(User, request.user)
-    avatar = UserAvatar.objects.filter(user=user).first()
-    if avatar is None:
+    with transaction.atomic():
+        avatar = UserAvatar.objects.select_for_update().filter(user=user).first()
+        object_key = avatar.object_key if avatar is not None else None
+        if avatar is not None:
+            avatar.delete()
+    if object_key is None:
         messages.success(request, "The generated profile picture is active.")
         return redirect("profile")
     try:
-        get_avatar_storage().delete(avatar.object_key)
+        get_avatar_storage().delete(object_key)
     except AvatarStorageError:
-        messages.error(request, "Avatar storage is unavailable. Please try again later.")
+        messages.warning(
+            request,
+            "Your generated profile picture is active, but stored image cleanup could not finish.",
+        )
         return redirect("profile")
-    avatar.delete()
     messages.success(request, "Profile picture removed.")
     return redirect("profile")
 
