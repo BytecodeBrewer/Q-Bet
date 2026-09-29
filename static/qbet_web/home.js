@@ -12,6 +12,8 @@
   const FUTURE_REVEAL_DELAY_MS = Number(flow.dataset.futureDelay || 3000);
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const desktopFlow = window.matchMedia("(min-width: 781px)");
+  const motionToggle = flow.querySelector("[data-flow-motion-toggle]");
+  const motionLabel = flow.querySelector("[data-flow-motion-label]");
   const pulseTimers = new WeakMap();
   const packetSpecs = Array.from(flow.querySelectorAll("[data-flow-packet]"))
     .map((packet) => {
@@ -103,6 +105,7 @@
   let lastTimestamp = null;
   let isVisible = true;
   let futureTimer = null;
+  let motionPaused = false;
 
   function tick(timestamp) {
     if (lastTimestamp !== null) {
@@ -114,7 +117,13 @@
   }
 
   function startAnimation() {
-    if (frameId !== null || reducedMotion.matches || !desktopFlow.matches || !isVisible) {
+    if (
+      frameId !== null
+      || motionPaused
+      || reducedMotion.matches
+      || !desktopFlow.matches
+      || !isVisible
+    ) {
       return;
     }
     lastTimestamp = null;
@@ -127,6 +136,26 @@
       frameId = null;
     }
     lastTimestamp = null;
+  }
+
+  function updateMotionControl() {
+    if (!motionToggle || !motionLabel) {
+      return;
+    }
+    motionToggle.setAttribute("aria-pressed", String(motionPaused));
+    motionLabel.textContent = motionPaused ? "Resume motion" : "Pause motion";
+  }
+
+  function setMotionPaused(paused) {
+    motionPaused = paused;
+    flow.classList.toggle("is-motion-paused", motionPaused);
+    if (motionPaused) {
+      stopAnimation();
+    } else {
+      resetPacketState();
+      startAnimation();
+    }
+    updateMotionControl();
   }
 
   function scheduleFutureReveal() {
@@ -170,6 +199,12 @@
     );
     observer.observe(flow);
   }
+
+  motionToggle?.addEventListener("click", () => {
+    setMotionPaused(!motionPaused);
+  });
+
+  updateMotionControl();
 
   reducedMotion.addEventListener("change", () => {
     scheduleFutureReveal();
