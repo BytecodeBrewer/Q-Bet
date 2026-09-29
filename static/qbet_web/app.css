@@ -613,6 +613,7 @@ body[data-theme="dark"] .portfolio-state-verified { background: #264238; color: 
 }
 .engine-notice-copy strong { display: block; }
 .engine-notice-copy p { margin: 4px 0 6px; color: var(--muted); font-size: 13px; }
+.engine-notice-time { display: block; margin: -1px 0 6px; color: var(--muted); font-size: 11px; }
 .engine-notice-dismiss {
   width: 30px;
   height: 30px;
