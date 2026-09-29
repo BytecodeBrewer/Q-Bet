@@ -17,6 +17,7 @@ def test_pull_request_vercel_gate_builds_without_deploying() -> None:
 
     assert "github.event_name == 'pull_request'" in block
     assert "github.event.pull_request.head.sha" in block
+    assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=preview" in block
     assert "vercel build --yes" in block
     assert "vercel deploy" not in block
@@ -30,6 +31,7 @@ def test_develop_cd_preflights_schema_and_updates_stable_alias() -> None:
     assert "github.event_name == 'push'" in block
     assert "refs/heads/develop" in block
     assert "python manage.py migrate --check" in block
+    assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=production" in block
     assert "vercel build --prod" in block
     assert "vercel deploy --prebuilt --prod --yes" in block
