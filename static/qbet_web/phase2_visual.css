@@ -420,7 +420,7 @@
     transform: none !important;
     transition: none !important;
   }
-  .flow-station.is-packet-hit circle { animation: none; }
+  .flow-station.is-packet-hit circle { animation: none !important; }
   .flow-station text { transition: none; }
   .engine-runtime-button,
   .drag-handle,
