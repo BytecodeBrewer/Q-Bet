@@ -225,6 +225,22 @@ class PollingWorkRow(models.Model):
         ordering = ("next_due_at", "id")
 
 
+class CapitalMovementRow(models.Model):
+    """Durable approval-gated capital movement and reconciliation state."""
+
+    movement_id = models.UUIDField(primary_key=True, editable=False)
+    proposal_id = models.UUIDField(unique=True, editable=False)
+    correlation_id = models.UUIDField(db_index=True)
+    state = models.CharField(max_length=32, db_index=True)
+    ledger_applied = models.BooleanField(default=False)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_capital_movements"
+        ordering = ("-updated_at",)
+
+
 class SandboxFundingOutcomeRow(models.Model):
     """Durable bunq sandbox provider outcome and Simulation ledger feedback state."""
 
