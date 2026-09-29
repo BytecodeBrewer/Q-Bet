@@ -8,9 +8,15 @@
   <div class="portfolio-location-meta"><span>{{ location.currency }}</span><span>Updated {% localized_datetime location.updated_at display_preferences %}</span></div>
   <details class="portfolio-history-context">
     <summary>Location details</summary>
+    {% if location.kind == "central" %}<dl class="portfolio-state-grid location-state-grid">
+      <div><dt>Available</dt><dd>{% localized_money location.available location.currency display_preferences %}</dd></div>
+      <div><dt>Reserved</dt><dd>{% localized_money location.reserved location.currency display_preferences %}</dd></div>
+      <div><dt>Locked</dt><dd>{% localized_money location.locked location.currency display_preferences %}</dd></div>
+      <div><dt>Pending</dt><dd>{% localized_money location.pending location.currency display_preferences %}</dd></div>
+    </dl>{% endif %}
     <div class="location-provenance">
       <span>Source</span><strong>{{ location.source }}</strong>
-      {% if location.kind == "provider" %}<p>Lifecycle states such as reserved or locked remain authoritative at portfolio level. This location records where the capital is held.</p>{% endif %}
+      {% if location.kind == "provider" %}<p>This manually reconciled amount records where capital is held. Lifecycle states remain authoritative at portfolio level until provider-level execution state is available.</p>{% endif %}
       {% if location.note %}<p>{{ location.note }}</p>{% endif %}
     </div>
   </details>
