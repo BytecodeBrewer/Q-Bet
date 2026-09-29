@@ -19,6 +19,7 @@ def test_pull_request_vercel_gate_builds_without_deploying() -> None:
     assert "!cancelled()" in block
     assert "github.event_name == 'pull_request'" in block
     assert "github.event.pull_request.head.sha" in block
+    assert "refs/heads/develop" in block
     assert "environment: preview" in block
     assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=preview" in block
@@ -66,6 +67,8 @@ def test_pull_request_vercel_build_runs_after_failed_quality_gates() -> None:
     assert "!cancelled()" in block
     assert "github.event_name == 'pull_request'" in block
     assert "github.event.pull_request.head.repo.full_name == github.repository" in block
+    assert "github.event_name == 'push'" in block
+    assert "refs/heads/develop" in block
     assert "vercel deploy" not in block
 
 
@@ -78,3 +81,7 @@ def test_hosted_deployment_routes_develop_to_preview_and_main_to_production() ->
     assert "vercel deploy --prebuilt --yes" in block
     assert "vercel deploy --prebuilt --prod --yes" in block
     assert "QBET_RELEASE_SHA: ${{ github.sha }}" in block
+    assert "needs.vercel-build-check.result == 'success'" in block
+    assert "always()" in block
+    assert "qbet_build_only" in block
+    assert "qbet-ci-build-only-secret" in block
