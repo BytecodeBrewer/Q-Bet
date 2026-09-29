@@ -536,7 +536,8 @@ body[data-theme="dark"] .portfolio-state-verified { background: #264238; color: 
 
 /* Portfolio account controls */
 .portfolio-account-section + .portfolio-account-section { margin-top: 28px; }
-.portfolio-central-grid { grid-template-columns: minmax(0, 1fr); max-width: 760px; }
+.portfolio-central-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.portfolio-reconciliation-note { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
 .compact-button { min-height: 34px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .compact-button:hover, .compact-button:focus-visible { border-color: var(--primary); color: var(--primary); }
 .compact-button:disabled { opacity: .62; cursor: progress; }
@@ -559,6 +560,7 @@ body[data-theme="dark"] .portfolio-state-verified { background: #264238; color: 
 .portfolio-editor-form .dialog-heading p { margin: 4px 0 0; color: var(--muted); }
 @media (max-width: 760px) {
   .portfolio-total-card dl { grid-template-columns: 1fr; }
+  .portfolio-central-grid { grid-template-columns: 1fr; }
   .provider-list-heading { align-items: stretch; }
   .provider-list-controls { width: 100%; justify-content: stretch; display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(84px, auto)); }
   .provider-search { width: auto; grid-column: 1 / -1; }
