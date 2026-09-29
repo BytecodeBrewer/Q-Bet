@@ -1,0 +1,33 @@
+{% load display_preferences %}
+{% if provider_notice %}
+<section class="engine-notices market-data-notices" aria-label="Market data current notice" aria-live="polite">
+  <article
+    class="engine-notice engine-notice-{{ provider_notice.severity }}"
+    data-engine-notice
+    data-provider-notice
+    data-notice-reason="{{ provider_notice.reason_code|escape }}"
+    role="{% if provider_notice.severity == 'error' %}alert{% else %}status{% endif %}"
+  >
+    <div class="engine-notice-icon" aria-hidden="true">
+      {% if provider_notice.severity == "error" %}!{% elif provider_notice.severity == "warning" %}⚠{% elif provider_notice.severity == "success" %}✓{% else %}i{% endif %}
+    </div>
+    <div class="engine-notice-copy">
+      <span class="engine-notice-level">{{ provider_notice.severity|title }} · Market data</span>
+      <strong>{{ provider_notice.title }}</strong>
+      <p>{{ provider_notice.detail }}</p>
+      {% if provider_notice.occurred_at %}
+        <small class="engine-notice-time">Updated {% localized_datetime provider_notice.occurred_at display_preferences %}</small>
+      {% endif %}
+    </div>
+    {% if provider_notice.dismissible %}
+      <button
+        type="button"
+        class="engine-notice-dismiss"
+        data-notice-dismiss
+        aria-label="Dismiss {{ provider_notice.title|escape }}"
+        title="Dismiss"
+      >×</button>
+    {% endif %}
+  </article>
+</section>
+{% endif %}

@@ -573,3 +573,71 @@ body[data-theme="dark"] .portfolio-state-verified { background: #264238; color: 
   .provider-list-footer { align-items: stretch; flex-direction: column; }
   .provider-load-more { width: 100%; }
 }
+
+
+/* Contextual engine notices */
+.engine-notices { display: grid; gap: 10px; margin-top: 14px; }
+.engine-notice {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.engine-notice-warning { border-left-color: var(--warning); }
+.engine-notice-error { border-left-color: var(--danger); }
+.engine-notice-success { border-left-color: var(--success); }
+.engine-notice-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-muted);
+  color: var(--text);
+  font-weight: 800;
+}
+.engine-notice-info .engine-notice-icon { color: var(--primary); }
+.engine-notice-warning .engine-notice-icon { color: var(--warning); }
+.engine-notice-error .engine-notice-icon { color: var(--danger); }
+.engine-notice-success .engine-notice-icon { color: var(--success); }
+.engine-notice-level {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.engine-notice-copy strong { display: block; }
+.engine-notice-copy p { margin: 4px 0 6px; color: var(--muted); font-size: 13px; }
+.engine-notice-time { display: block; margin: -1px 0 6px; color: var(--muted); font-size: 11px; }
+.engine-notice-dismiss {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 19px;
+  cursor: pointer;
+}
+.engine-notice-dismiss:hover,
+.engine-notice-dismiss:focus-visible {
+  border-color: var(--border);
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+.admin-metadata { margin: 8px 0 14px; color: var(--muted); font-size: 12px; }
+@media (max-width: 600px) {
+  .engine-notice { grid-template-columns: 28px minmax(0, 1fr) auto; padding: 10px; }
+  .engine-notice-icon { width: 26px; height: 26px; }
+}
