@@ -1,10 +1,11 @@
 {% extends "qbet_web/base.html" %}
+{% load static %}
 {% block content %}
 <section class="product-hero" aria-labelledby="home-heading">
   <div class="product-hero-copy">
-    <span class="eyebrow">Quantitative multi-engine platform</span>
-    <h1 id="home-heading">Separate strategies. One protected path from data to decision.</h1>
-    <p class="product-hero-lead">Q-Bet turns structured opportunity data into deterministic calculations, then keeps risk, liquidity, approval and capital boundaries in the path before Simulation or controlled Execution.</p>
+    <span class="eyebrow">Quantitative workflow</span>
+    <h1 id="home-heading">Market data in. Strategy result out.</h1>
+    <p class="product-hero-lead">Q-Bet collects structured market data, prepares it for the selected engine, runs deterministic calculations, and checks risk and liquidity before Simulation or controlled Execution.</p>
     <div class="hero-actions">
       {% if user.is_authenticated %}
         <a class="button-link" href="{% url 'dashboard' %}">Open Dashboard</a>
@@ -14,116 +15,169 @@
         <a class="secondary-link" href="{% url 'register' %}">Create account</a>
       {% endif %}
     </div>
-    <ul class="hero-facts" aria-label="Q-Bet product principles">
-      <li><strong>Engine-specific</strong><span>Each domain keeps its own data and preparation needs.</span></li>
-      <li><strong>Deterministic</strong><span>Calculations run from explicit, testable inputs.</span></li>
-      <li><strong>Protected</strong><span>Shared risk, liquidity and authority boundaries govern action.</span></li>
+    <ul class="hero-facts" aria-label="Q-Bet product status">
+      <li><strong>2 current engines</strong><span>BonusEngine and SportsCapitalEngine</span></li>
+      <li><strong>Simulation first</strong><span>Live actions stay behind approval and execution controls</span></li>
+      <li><strong>API-based data</strong><span>Structured provider data feeds the workflow</span></li>
     </ul>
   </div>
 
-  <aside class="product-status-card" aria-label="Q-Bet product status">
-    <span class="status-kicker">Phase 3 now</span>
-    <h2>Simulation and controlled operating boundaries are connected.</h2>
-    <p>SportsCapital Simulation, BonusEngine Simulation, Reporting, Monitoring, Notifications and protected execution boundaries are part of the current product surface.</p>
-    <div class="status-split">
+  <div class="home-flow-shell" data-home-flow data-future-delay="3000" aria-label="Q-Bet current and future engine workflow">
+    <div class="flow-legend" aria-hidden="true">
+      <span><i class="flow-legend-dot is-current"></i>Current</span>
+      <span><i class="flow-legend-dot is-future"></i>Future / planned</span>
+    </div>
+
+    <svg class="home-flow-map" viewBox="0 0 1120 640" role="img" aria-labelledby="home-flow-title home-flow-desc">
+      <title id="home-flow-title">Q-Bet engine workflow</title>
+      <desc id="home-flow-desc">BonusEngine and SportsCapitalEngine currently move structured data through preparation and calculation into shared risk, liquidity, approval, simulation or execution, settlement and reporting stages. Planned engines are shown separately in a muted future layer.</desc>
+      <defs>
+        <linearGradient id="flowCurrentLine" x1="0" x2="1">
+          <stop offset="0" stop-color="currentColor" stop-opacity=".32"/>
+          <stop offset="1" stop-color="currentColor" stop-opacity=".82"/>
+        </linearGradient>
+        <linearGradient id="flowSharedLine" x1="0" x2="1">
+          <stop offset="0" stop-color="currentColor" stop-opacity=".48"/>
+          <stop offset="1" stop-color="currentColor" stop-opacity=".9"/>
+        </linearGradient>
+      </defs>
+
+      <text class="flow-group-label" x="48" y="54">Current</text>
+      <text class="flow-engine-name" x="48" y="126">BonusEngine</text>
+      <text class="flow-engine-name" x="48" y="282">SportsCapitalEngine</text>
+
+      <path id="flow-bonus-path" class="flow-current-path" d="M176 118 H450 C496 118 501 210 548 210"/>
+      <path id="flow-sports-path" class="flow-current-path" d="M176 274 H450 C496 274 501 210 548 210"/>
+      <path id="flow-shared-path" class="flow-shared-path" d="M548 210 H970 V350 H782"/>
+
+      <g class="flow-station" data-flow-station="bonus-data" transform="translate(190 118)">
+        <circle r="25"/><text y="5" text-anchor="middle">Data</text>
+      </g>
+      <g class="flow-station" data-flow-station="bonus-prepare" transform="translate(320 118)">
+        <circle r="25"/><text y="5" text-anchor="middle">Prepare</text>
+      </g>
+      <g class="flow-station" data-flow-station="bonus-calc" transform="translate(450 118)">
+        <circle r="25"/><text y="5" text-anchor="middle">Calculate</text>
+      </g>
+
+      <g class="flow-station" data-flow-station="sports-data" transform="translate(190 274)">
+        <circle r="25"/><text y="5" text-anchor="middle">Data</text>
+      </g>
+      <g class="flow-station" data-flow-station="sports-prepare" transform="translate(320 274)">
+        <circle r="25"/><text y="5" text-anchor="middle">Prepare</text>
+      </g>
+      <g class="flow-station" data-flow-station="sports-calc" transform="translate(450 274)">
+        <circle r="25"/><text y="5" text-anchor="middle">Calculate</text>
+      </g>
+
+      <text class="flow-group-label" x="576" y="156">Shared stages</text>
+      <g class="flow-station flow-shared-station" data-flow-station="risk" transform="translate(620 210)">
+        <circle r="27"/><text y="5" text-anchor="middle">Risk</text>
+      </g>
+      <g class="flow-station flow-shared-station" data-flow-station="liquidity" transform="translate(735 210)">
+        <circle r="27"/><text y="5" text-anchor="middle">Liquidity</text>
+      </g>
+      <g class="flow-station flow-shared-station" data-flow-station="approval" transform="translate(850 210)">
+        <circle r="27"/><text y="5" text-anchor="middle">Approval</text>
+      </g>
+      <g class="flow-station flow-shared-station" data-flow-station="simulation-execution" transform="translate(970 210)">
+        <circle r="30"/><text y="-2" text-anchor="middle"><tspan x="0">Sim /</tspan><tspan x="0" dy="14">Execution</tspan></text>
+      </g>
+      <g class="flow-station flow-shared-station" data-flow-station="settlement" transform="translate(970 350)">
+        <circle r="27"/><text y="5" text-anchor="middle">Settle</text>
+      </g>
+      <g class="flow-station flow-shared-station" data-flow-station="reporting" transform="translate(782 350)">
+        <circle r="30"/><text y="-2" text-anchor="middle"><tspan x="0">Report /</tspan><tspan x="0" dy="14">Monitor</tspan></text>
+      </g>
+
+      <circle class="flow-packet flow-packet-current" r="6" data-flow-packet data-flow-path="flow-bonus-path" data-flow-duration="7000" data-flow-phase="0" data-flow-pulse="bonus-data:.05,bonus-prepare:.42,bonus-calc:.73"/>
+      <circle class="flow-packet flow-packet-current flow-packet-secondary" r="6" data-flow-packet data-flow-path="flow-sports-path" data-flow-duration="7000" data-flow-phase="3500" data-flow-pulse="sports-data:.05,sports-prepare:.42,sports-calc:.73"/>
+      <circle class="flow-packet flow-packet-shared" r="7" data-flow-packet data-flow-path="flow-shared-path" data-flow-duration="9000" data-flow-phase="0" data-flow-pulse="risk:.12,liquidity:.29,approval:.46,simulation-execution:.63,settlement:.80,reporting:1"/>
+
+      <g class="flow-future-layer" data-future-layer>
+        <text class="flow-group-label flow-future-label" x="48" y="454">Future / planned</text>
+        <path class="flow-future-path" d="M94 504 H1032"/>
+        <path class="flow-future-path" d="M548 504 V404 C548 370 590 350 640 350"/>
+
+        <g class="flow-future-engine" transform="translate(130 522)">
+          <rect x="-84" y="-24" width="168" height="48" rx="12"/>
+          <text text-anchor="middle" y="-3"><tspan x="0">SportsExchange</tspan><tspan x="0" dy="15">Engine</tspan></text>
+        </g>
+        <g class="flow-future-engine" transform="translate(350 522)">
+          <rect x="-84" y="-24" width="168" height="48" rx="12"/>
+          <text text-anchor="middle" y="5">TicketEngine</text>
+        </g>
+        <g class="flow-future-engine" transform="translate(570 522)">
+          <rect x="-84" y="-24" width="168" height="48" rx="12"/>
+          <text text-anchor="middle" y="-3"><tspan x="0">PredictionMarket</tspan><tspan x="0" dy="15">Engine</tspan></text>
+        </g>
+        <g class="flow-future-engine" transform="translate(790 522)">
+          <rect x="-84" y="-24" width="168" height="48" rx="12"/>
+          <text text-anchor="middle" y="5">CryptoYieldEngine</text>
+        </g>
+        <g class="flow-future-engine" transform="translate(1010 522)">
+          <rect x="-84" y="-24" width="168" height="48" rx="12"/>
+          <text text-anchor="middle" y="5">MLEdgeLayer</text>
+        </g>
+        <text class="flow-future-note" x="548" y="590" text-anchor="middle">Planned components will feed the same shared checks when they are implemented.</text>
+      </g>
+    </svg>
+
+    <div class="home-flow-mobile" aria-label="Q-Bet workflow summary">
       <div>
         <span class="capability-badge is-current">Current</span>
-        <strong>Protected workflow</strong>
-        <span>Risk, liquidity, approvals, reports and monitoring.</span>
+        <strong>BonusEngine</strong>
+        <small>Data → preparation → calculation → shared checks</small>
       </div>
       <div>
-        <span class="capability-badge is-planned">Planned</span>
-        <strong>Broader automation</strong>
-        <span>More engines and higher execution authority arrive later.</span>
+        <span class="capability-badge is-current">Current</span>
+        <strong>SportsCapitalEngine</strong>
+        <small>Data → preparation → calculation → shared checks</small>
       </div>
-    </div>
-  </aside>
-</section>
-
-<section class="product-architecture" aria-labelledby="architecture-heading">
-  <div class="section-heading section-heading-spacious">
-    <div>
-      <span class="eyebrow">How Q-Bet scales</span>
-      <h2 id="architecture-heading">Different engines enter through different lanes. The safeguards stay shared.</h2>
-      <p class="muted">Each domain can ingest and prepare data differently. Once an engine produces a proposal, the same protected Q-Bet workflow governs what happens next.</p>
+      <div class="home-flow-mobile-shared">
+        <strong>Shared stages</strong>
+        <small>Risk → Liquidity → Approval → Simulation / Execution → Settlement → Reporting / Monitoring</small>
+      </div>
+      <div class="home-flow-mobile-future">
+        <span class="capability-badge is-planned">Future</span>
+        <strong>SportsExchangeEngine · TicketEngine · PredictionMarketEngine · CryptoYieldEngine · MLEdgeLayer</strong>
+      </div>
     </div>
   </div>
+</section>
 
-  <div class="architecture-frame" data-workflow-motion="sequential" aria-label="Q-Bet multi-engine architecture">
-    <div class="architecture-lanes" aria-label="Independent engine pipelines">
-      <article class="engine-lane" data-workflow-lane="bonus">
-        <div class="engine-lane-heading">
-          <div>
-            <span class="capability-badge is-current">Current</span>
-            <h3>BonusEngine</h3>
-          </div>
-          <p>Promotion terms stay separate from live sportsbook quotations.</p>
-        </div>
-        <ol class="engine-lane-flow" aria-label="BonusEngine data path">
-          <li data-workflow-step="data"><span>Data</span><strong>Promotions + sports market data</strong></li>
-          <li data-workflow-step="preparation"><span>Preparation</span><strong>Promotion-aware fixed-odds setup</strong></li>
-          <li data-workflow-step="calculation"><span>Calculation</span><strong>BonusEngine</strong></li>
-        </ol>
-      </article>
-
-      <article class="engine-lane" data-workflow-lane="sports-capital">
-        <div class="engine-lane-heading">
-          <div>
-            <span class="capability-badge is-current">Current</span>
-            <h3>SportsCapitalEngine</h3>
-          </div>
-          <p>Own-capital strategies use a market-focused preparation path.</p>
-        </div>
-        <ol class="engine-lane-flow" aria-label="SportsCapitalEngine data path">
-          <li data-workflow-step="data"><span>Data</span><strong>Structured odds and market data</strong></li>
-          <li data-workflow-step="preparation"><span>Preparation</span><strong>Match and market preparation</strong></li>
-          <li data-workflow-step="calculation"><span>Calculation</span><strong>SportsCapitalEngine</strong></li>
-        </ol>
-      </article>
-
-      <article class="engine-lane is-future" data-workflow-lane="future">
-        <div class="engine-lane-heading">
-          <div>
-            <span class="capability-badge is-planned">Planned</span>
-            <h3>Future engines</h3>
-          </div>
-          <p>New domains can bring their own ingestion and preparation without replacing the shared control model.</p>
-        </div>
-        <ol class="engine-lane-flow" aria-label="Planned engine data path">
-          <li data-workflow-step="data"><span>Data</span><strong>Domain-specific sources</strong></li>
-          <li data-workflow-step="preparation"><span>Preparation</span><strong>Domain-specific preparation</strong></li>
-          <li data-workflow-step="calculation"><span>Calculation</span><strong>Future engine</strong></li>
-        </ol>
-      </article>
+<section class="product-principles" aria-labelledby="principles-heading">
+  <div class="section-heading section-heading-spacious">
+    <div>
+      <span class="eyebrow">Pipeline</span>
+      <h2 id="principles-heading">Different inputs, shared checks after calculation.</h2>
     </div>
-
-    <div class="architecture-merge" aria-hidden="true">
-      <span data-workflow-merge="bonus"></span><span data-workflow-merge="sports-capital"></span><span data-workflow-merge="future"></span>
-    </div>
-
-    <div class="protected-workflow" aria-labelledby="protected-workflow-heading">
-      <div class="protected-workflow-heading">
-        <span class="eyebrow">Shared protected Q-Bet workflow</span>
-        <h3 id="protected-workflow-heading">Every proposal passes the same control envelope.</h3>
-      </div>
-      <ol class="protected-workflow-stages">
-        <li data-workflow-stage="risk"><span>01</span><strong>Domain Risk</strong><small>Freshness, account state and strategy-specific safety.</small></li>
-        <li data-workflow-stage="liquidity"><span>02</span><strong>Liquidity Check</strong><small>Capital, limits and available liquidity must support the proposal.</small></li>
-        <li data-workflow-stage="authority"><span>03</span><strong>User authority</strong><small>Notification, approval and configured authority stay explicit.</small></li>
-        <li data-workflow-stage="simulation-execution"><span>04</span><strong>Simulation or Execution</strong><small>Virtual and controlled live paths remain separate.</small></li>
-        <li data-workflow-stage="settlement"><span>05</span><strong>Settlement</strong><small>Results are validated before financial state changes.</small></li>
-        <li data-workflow-stage="reporting"><span>06</span><strong>Portfolio, Reporting & Monitoring</strong><small>Capital state and results remain observable after the decision.</small></li>
-      </ol>
-    </div>
+  </div>
+  <div class="product-principle-grid">
+    <article>
+      <span class="principle-index">01</span>
+      <h3>Prepare the data</h3>
+      <p>Each engine gets the data and preparation steps it needs instead of forcing every strategy through the same input format.</p>
+    </article>
+    <article>
+      <span class="principle-index">02</span>
+      <h3>Run the calculation</h3>
+      <p>Engine calculations use explicit inputs and return a proposal that can be checked independently.</p>
+    </article>
+    <article>
+      <span class="principle-index">03</span>
+      <h3>Check before action</h3>
+      <p>Risk, liquidity and approval checks sit between an engine result and Simulation or controlled Execution.</p>
+    </article>
   </div>
 </section>
 
 <section class="authority-section" aria-labelledby="authority-heading">
   <div class="section-heading section-heading-spacious">
     <div>
-      <span class="eyebrow">User-controlled authority</span>
-      <h2 id="authority-heading">Automation is a setting, not a hidden assumption.</h2>
-      <p class="muted">Q-Bet separates finding a valid opportunity from deciding how much authority the system has to act on it.</p>
+      <span class="eyebrow">Execution settings</span>
+      <h2 id="authority-heading">The user decides how far an action may go.</h2>
+      <p class="muted">Finding an opportunity and acting on it are separate steps.</p>
     </div>
   </div>
 
@@ -131,23 +185,23 @@
     <article>
       <span class="capability-badge is-current">Current</span>
       <h3>Notify only</h3>
-      <p>Surface the opportunity and bring the user back to Q-Bet or a manual provider action.</p>
+      <p>Show the opportunity and leave the action to the user.</p>
     </article>
     <article>
       <span class="capability-badge is-current">Current</span>
-      <h3>Approval before action</h3>
-      <p>Require an explicit human decision before a supported controlled action can proceed.</p>
+      <h3>Approval required</h3>
+      <p>A supported action can continue only after an explicit approval.</p>
     </article>
     <article>
       <span class="capability-badge is-planned">Planned</span>
       <h3>Bounded automation</h3>
-      <p>Allow configured actions only inside explicit risk, capital and provider limits.</p>
+      <p>Allow supported actions inside configured capital and risk limits.</p>
     </article>
     <article class="authority-warning-card">
       <span class="capability-badge is-future">Future</span>
       <h3>Higher automation</h3>
-      <p>More authority may be delegated later when execution isolation and controls are mature.</p>
-      <p class="authority-warning"><strong>Risk warning:</strong> removing human approval allows configured actions to execute without an individual confirmation step. Strict limits and monitoring are required.</p>
+      <p>More execution authority may be added after isolation and recovery controls are mature.</p>
+      <p class="authority-warning"><strong>Risk:</strong> automated actions can run without an individual confirmation, so limits and monitoring remain required.</p>
     </article>
   </div>
 </section>
@@ -156,28 +210,29 @@
   <div class="section-heading section-heading-spacious">
     <div>
       <span class="eyebrow">Current vs future</span>
-      <h2 id="current-future-heading">What exists now, and what Q-Bet is building toward.</h2>
+      <h2 id="current-future-heading">Implemented now and planned next.</h2>
     </div>
   </div>
   <div class="current-future-grid">
     <article>
       <span class="capability-badge is-current">Current</span>
-      <h3>Phase 3 product surface</h3>
+      <h3>Phase 3</h3>
       <ul>
         <li>BonusEngine and SportsCapitalEngine Simulation paths</li>
-        <li>Domain Risk and Liquidity boundaries</li>
+        <li>Domain Risk and Liquidity checks</li>
         <li>Approval, Reporting, Monitoring and Notifications</li>
         <li>Controlled Execution boundaries for supported workflows</li>
       </ul>
     </article>
-    <article>
-      <span class="capability-badge is-planned">Planned</span>
-      <h3>Future operating model</h3>
+    <article class="future-summary-card">
+      <span class="capability-badge is-planned">Future</span>
+      <h3>Planned engines and ML layer</h3>
       <ul>
-        <li>Additional domain engines and data lanes</li>
-        <li>Broader provider execution support</li>
-        <li>Higher automation within explicit user-configured limits</li>
-        <li>Stronger multi-user execution and capital isolation</li>
+        <li>SportsExchangeEngine</li>
+        <li>TicketEngine</li>
+        <li>PredictionMarketEngine</li>
+        <li>CryptoYieldEngine</li>
+        <li>MLEdgeLayer</li>
       </ul>
     </article>
   </div>
@@ -186,8 +241,8 @@
 <section class="product-cta surface-panel" aria-labelledby="home-cta-heading">
   <div>
     <span class="eyebrow">Q-Bet workspace</span>
-    <h2 id="home-cta-heading">The operational detail starts after sign-in.</h2>
-    <p class="muted">Runtime state, engine controls, approvals, reports and technical monitoring stay inside the authenticated product surface.</p>
+    <h2 id="home-cta-heading">Detailed controls stay inside the app.</h2>
+    <p class="muted">Engine state, approvals, reports and monitoring are available after sign-in.</p>
   </div>
   {% if user.is_authenticated %}
     <a class="button-link" href="{% url 'dashboard' %}">Go to Dashboard</a>
@@ -195,4 +250,5 @@
     <a class="button-link" href="{% url 'register' %}">Create account</a>
   {% endif %}
 </section>
+<script src="{% static 'qbet_web/home.js' %}"></script>
 {% endblock %}
