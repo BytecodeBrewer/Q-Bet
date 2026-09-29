@@ -87,7 +87,7 @@
         if (amount) amount.textContent = formatMoney(payload.amount, payload.currency);
         if (updated) updated.textContent = formatObservedAt(payload.observed_at);
         if (source) source.textContent = "bunq";
-        if (message) message.textContent = "Fresh read-only balance. PortfolioLedger was not changed.";
+        if (message) message.textContent = "Balance refreshed from bunq. No transfer was made.";
       } catch (error) {
         if (message) {
           message.textContent =
