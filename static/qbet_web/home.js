@@ -146,25 +146,32 @@
     motionLabel.textContent = motionPaused ? "Resume motion" : "Pause motion";
   }
 
+  function cancelFutureReveal() {
+    if (futureTimer !== null) {
+      window.clearTimeout(futureTimer);
+      futureTimer = null;
+    }
+  }
+
   function setMotionPaused(paused) {
     motionPaused = paused;
     flow.classList.toggle("is-motion-paused", motionPaused);
     if (motionPaused) {
       stopAnimation();
+      cancelFutureReveal();
     } else {
       resetPacketState();
       startAnimation();
+      if (!flow.classList.contains("is-future-visible")) {
+        scheduleFutureReveal();
+      }
     }
     updateMotionControl();
   }
 
   function scheduleFutureReveal() {
-    if (futureTimer !== null) {
-      window.clearTimeout(futureTimer);
-      futureTimer = null;
-    }
+    cancelFutureReveal();
 
-    flow.classList.remove("is-future-visible");
     if (reducedMotion.matches) {
       flow.classList.remove("has-motion");
       flow.classList.add("is-future-visible");
@@ -172,9 +179,15 @@
     }
 
     flow.classList.add("has-motion");
+    if (motionPaused || flow.classList.contains("is-future-visible")) {
+      return;
+    }
+
     futureTimer = window.setTimeout(() => {
-      flow.classList.add("is-future-visible");
       futureTimer = null;
+      if (!motionPaused) {
+        flow.classList.add("is-future-visible");
+      }
     }, FUTURE_REVEAL_DELAY_MS);
   }
 
