@@ -432,3 +432,45 @@ def test_deterministic_sandbox_acknowledges_only_approved_proposals_idempotently
     )
     assert not conflict.accepted
     assert conflict.reason_code == "acknowledgement_conflict"
+
+
+def test_requirement_backed_approval_requires_prior_attention_notice() -> None:
+    requirement_id = UUID("11111111-2222-3333-4444-555555555555")
+    missing = awaiting_approval(requirement_id=requirement_id)
+    future_attention = awaiting_approval(
+        requirement_id=requirement_id,
+        attention_created_at=NOW + timedelta(minutes=1),
+    )
+    ready = awaiting_approval(
+        requirement_id=requirement_id,
+        attention_created_at=NOW - timedelta(seconds=30),
+    )
+
+    missing_outcome = service().approve(
+        missing,
+        approver=FundingApprover(identity="staff-1", is_authenticated=True),
+        approved_at=NOW,
+        balance=balance(),
+        ledger=ledger(),
+        capital_context=CAPITAL_CONTEXT,
+    )
+    future_outcome = service().approve(
+        future_attention,
+        approver=FundingApprover(identity="staff-1", is_authenticated=True),
+        approved_at=NOW,
+        balance=balance(),
+        ledger=ledger(),
+        capital_context=CAPITAL_CONTEXT,
+    )
+    accepted = service().approve(
+        ready,
+        approver=FundingApprover(identity="staff-1", is_authenticated=True),
+        approved_at=NOW,
+        balance=balance(),
+        ledger=ledger(),
+        capital_context=CAPITAL_CONTEXT,
+    )
+
+    assert missing_outcome.reason_code == "funding_attention_required"
+    assert future_outcome.reason_code == "approval_before_funding_attention"
+    assert accepted.accepted
