@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
+from uuid import UUID
 
 from django.test import TestCase, override_settings
 
@@ -263,7 +264,7 @@ class PollingTickEndpointTests(TestCase):
         self.assertTrue(stored.disabled)
         self.assertFalse(stored.terminal)
 
-    def test_tick_work_count_is_bounded(self) -> None:
+    def test_multiple_eligible_users_share_one_provider_polling_item(self) -> None:
         collector = RecordingCollector()
         UserRoutingPreferenceRepository().save(
             "second-owner",
@@ -272,21 +273,96 @@ class PollingTickEndpointTests(TestCase):
             ),
         )
         now = datetime.now(UTC)
+        with self.settings(**self.source_settings):
+            candidates = configured_polling_work(now=now)
+            self.assertEqual(len(candidates), 1)
+            due = candidates[0].model_copy(
+                update={
+                    "next_due_at": now - timedelta(minutes=2),
+                    "last_outcome": "scheduled",
+                    "last_reason": "market_refresh_due",
+                }
+            )
+            PostgresPollingWorkRepository().synchronize((due,))
+            with patch("qbet.web.polling_tick.TheOddsApiAdapter", return_value=collector):
+                response = self.client.post(
+                    "/internal/polling/tick/",
+                    HTTP_AUTHORIZATION="Bearer test-polling-token",
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["provider_requests"], 1)
+        self.assertEqual(len(collector.requests), 1)
+        self.assertEqual(len(PostgresPollingWorkRepository().list()), 1)
+
+    def test_changing_market_does_not_reuse_previous_freshness_or_snapshot(self) -> None:
+        collector = RecordingCollector()
+        now = datetime.now(UTC)
+        with self.settings(**self.source_settings):
+            candidate = configured_polling_work(now=now)[0].model_copy(
+                update={
+                    "next_due_at": now - timedelta(minutes=2),
+                    "last_outcome": "scheduled",
+                    "last_reason": "market_refresh_due",
+                }
+            )
+            PostgresPollingWorkRepository().synchronize((candidate,))
+            with patch("qbet.web.polling_tick.TheOddsApiAdapter", return_value=collector):
+                response = self.client.post(
+                    "/internal/polling/tick/",
+                    HTTP_AUTHORIZATION="Bearer test-polling-token",
+                )
+
+        self.assertEqual(response.status_code, 200)
+        previous = PostgresPollingWorkRepository().list()[0]
+        self.assertEqual(previous.market, "h2h")
+        self.assertIsNotNone(previous.last_success_at)
+        self.assertIsNotNone(previous.latest_snapshot)
+
+        changed_settings = dict(self.source_settings)
+        changed_settings["QBET_SIMULATION_ODDS_MARKET"] = "spreads"
+        with self.settings(**changed_settings):
+            replacement = configured_polling_work(now=datetime.now(UTC))[0]
+            PostgresPollingWorkRepository().synchronize((replacement,))
+
+        stored = PostgresPollingWorkRepository().list()
+        self.assertEqual(len(stored), 2)
+        old = next(item for item in stored if item.market == "h2h")
+        new = next(item for item in stored if item.market == "spreads")
+        self.assertTrue(old.disabled)
+        self.assertFalse(new.disabled)
+        self.assertIsNotNone(old.latest_snapshot)
+        self.assertIsNone(new.last_success_at)
+        self.assertIsNone(new.latest_snapshot)
+        self.assertNotEqual(old.identity, new.identity)
+        self.assertNotEqual(old.correlation_id, new.correlation_id)
+
+    def test_tick_work_count_is_bounded(self) -> None:
+        collector = RecordingCollector()
+        now = datetime.now(UTC)
         settings_values = dict(self.source_settings)
         settings_values["QBET_POLLING_TICK_MAX_WORK"] = 1
         with self.settings(**settings_values):
-            candidates = tuple(
-                candidate.model_copy(
-                    update={
-                        "next_due_at": now - timedelta(minutes=2),
-                        "last_outcome": "scheduled",
-                        "last_reason": "market_refresh_due",
-                    }
-                )
-                for candidate in configured_polling_work(now=now)
+            first = configured_polling_work(now=now)[0].model_copy(
+                update={
+                    "next_due_at": now - timedelta(minutes=2),
+                    "last_outcome": "scheduled",
+                    "last_reason": "market_refresh_due",
+                }
             )
-            PostgresPollingWorkRepository().synchronize(candidates)
-            with patch("qbet.web.polling_tick.TheOddsApiAdapter", return_value=collector):
+            second = first.model_copy(
+                update={
+                    "market": "spreads",
+                    "correlation_id": UUID("42345678-1234-5678-1234-567812345678"),
+                }
+            )
+            with (
+                patch(
+                    "qbet.web.polling_tick.configured_polling_work",
+                    return_value=(first, second),
+                ),
+                patch("qbet.web.polling_tick.TheOddsApiAdapter", return_value=collector),
+            ):
                 response = self.client.post(
                     "/internal/polling/tick/",
                     HTTP_AUTHORIZATION="Bearer test-polling-token",
