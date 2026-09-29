@@ -41,8 +41,11 @@ def test_develop_cd_deploys_preview_only() -> None:
     assert "Validate deployment configuration" in block
     assert "QBET_MIGRATION_DATABASE_URL" not in block
     assert "'production' || 'preview'" in block
-    assert "qbet_polling_tick_token" in block
-    assert 'vercel env run -e "$VERCEL_ENVIRONMENT" -- python' in block
+    assert "qbet_polling_tick_token" not in block
+    assert "vercel env run" not in block
+    assert "psycopg.connect" not in block
+    assert "QBET_POLLING_TICK_TOKEN" not in block
+    assert "python -m pip install ." not in block
     assert "python-dotenv" not in block
     assert "python -m pip install uv" in block
     assert 'vercel pull --yes --environment="$VERCEL_ENVIRONMENT"' in block
@@ -64,3 +67,14 @@ def test_pull_request_vercel_build_runs_after_failed_quality_gates() -> None:
     assert "github.event_name == 'pull_request'" in block
     assert "github.event.pull_request.head.repo.full_name == github.repository" in block
     assert "vercel deploy" not in block
+
+
+def test_hosted_deployment_routes_develop_to_preview_and_main_to_production() -> None:
+    block = _job("deploy", None)
+
+    assert "refs/heads/develop" in block
+    assert "refs/heads/main" in block
+    assert "name: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}" in block
+    assert "vercel deploy --prebuilt --yes" in block
+    assert "vercel deploy --prebuilt --prod --yes" in block
+    assert "QBET_RELEASE_SHA: ${{ github.sha }}" in block

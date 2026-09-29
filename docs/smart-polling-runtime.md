@@ -48,7 +48,7 @@ Persisted user intent inside the global SportsCapital Simulation guardrail contr
 
 Supabase's current hosted Cron capability is backed by `pg_cron`. Its documented `pg_net` integration can send asynchronous HTTP POST requests, and Supabase recommends Vault for scheduler authorization material.
 
-The connected Supabase project is prepared for this runtime: Vault stores the protected tick URL/token and the required `pg_cron` / `pg_net` extensions are enabled. The bearer token is loaded from Vault into the hosted Vercel deployment boundary without being committed or rendered.
+The connected Supabase project is prepared for this runtime: Vault stores the protected tick URL/token and the required `pg_cron` / `pg_net` extensions are enabled. Configure the same `QBET_POLLING_TICK_TOKEN` directly in the Vercel Preview and Production environments. GitHub Actions does not query Supabase or transfer database secrets during deployment.
 
 The recurring job must only be active when the public stable Q-Bet deployment actually contains the polling endpoint. Preview deployments are protected by Vercel Authentication and therefore are not valid scheduler targets. Activation is intentionally tied to the deployed stable release rather than to a protected preview URL.
 
@@ -95,7 +95,7 @@ Before enabling the recurring schedule on the stable public alias:
 
 1. deploy the accepted release and apply its migrations;
 2. verify `/health/` reports that exact release with persistence ready;
-3. verify the deployment receives `QBET_POLLING_TICK_TOKEN` from the existing Vault-backed deployment bridge;
+3. verify `QBET_POLLING_TICK_TOKEN` is configured in the Vercel environment;
 4. POST the protected polling endpoint and verify a bounded JSON response;
 5. confirm `qbet_polling_work` and Monitoring records change as expected;
 6. activate `qbet-smart-polling-wake` only after that exact stable endpoint succeeds;

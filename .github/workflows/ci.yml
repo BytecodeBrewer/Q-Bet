@@ -261,9 +261,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install runtime dependencies for deployment preflight
+      - name: Install Vercel Python build tooling
         run: |
-          python -m pip install .
           python -m pip install uv
 
       - name: Validate deployment configuration
@@ -281,33 +280,6 @@ jobs:
 
       - name: Pull Vercel environment configuration
         run: vercel pull --yes --environment="$VERCEL_ENVIRONMENT" --token "$VERCEL_TOKEN"
-
-      - name: Load protected polling token from Supabase Vault
-        shell: bash
-        run: |
-          token="$(vercel env run -e "$VERCEL_ENVIRONMENT" -- python -c '
-          import os
-          import psycopg
-
-          with psycopg.connect(os.environ["QBET_DATABASE_URL"]) as connection:
-              with connection.cursor() as cursor:
-                  cursor.execute(
-                      """
-                      select decrypted_secret
-                      from vault.decrypted_secrets
-                      where name = %s
-                      """,
-                      ("qbet_polling_tick_token",),
-                  )
-                  row = cursor.fetchone()
-
-          if row is None or not str(row[0]).strip():
-              raise SystemExit("Q-Bet polling tick token is missing from Supabase Vault")
-
-          print(row[0])
-          ')"
-          echo "::add-mask::$token"
-          echo "QBET_POLLING_TICK_TOKEN=$token" >> "$GITHUB_ENV"
 
       - name: Build Vercel preview artifacts
         if: github.ref == 'refs/heads/develop'
@@ -340,7 +312,6 @@ jobs:
               --env QBET_HOSTED_PREVIEW=true \
               --env QBET_DJANGO_DEBUG=false \
               --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app \
-              --env QBET_POLLING_TICK_TOKEN="$QBET_POLLING_TICK_TOKEN" \
               --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
               --env QBET_SIMULATION_MODE_ENABLED=false
           )"
@@ -358,7 +329,6 @@ jobs:
               --env QBET_HOSTED_PREVIEW=false \
               --env QBET_DJANGO_DEBUG=false \
               --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app \
-              --env QBET_POLLING_TICK_TOKEN="$QBET_POLLING_TICK_TOKEN" \
               --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
               --env QBET_SIMULATION_MODE_ENABLED=false
           )"
