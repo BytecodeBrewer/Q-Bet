@@ -188,9 +188,27 @@ class PortfolioCapitalTests(TestCase):
         self.assertIsNone(provider.amount)
         self.assertEqual(provider.status, "not_recorded")
 
-    def test_page_uses_plain_account_copy_and_per_provider_editing(self) -> None:
+    def test_page_uses_plain_account_copy_and_consistent_provider_controls(self) -> None:
+        second = SportsbookProviderRow.objects.create(
+            provider_id="another-book",
+            legal_name="Another Book GmbH",
+            display_name="Another Book",
+            jurisdiction="DE",
+            sports_betting=True,
+            online=True,
+            source_url="https://another.invalid",
+            whitelist_snapshot_date="2026-09-07",
+            status="active",
+        )
         self._store("execution", "EUR", available="125", reserved="20", locked="5", pending="3")
         self._grant(self.user, "execution", "EUR")
+        PortfolioCapitalLocation.objects.create(
+            user=self.user,
+            provider=self.provider,
+            mode="execution",
+            currency="EUR",
+            amount=Decimal("40"),
+        )
         self.client.force_login(self.user)
 
         response = self.client.get("/portfolio/")
@@ -200,12 +218,23 @@ class PortfolioCapitalTests(TestCase):
         self.assertContains(response, "bunq")
         self.assertContains(response, "Providers")
         self.assertContains(response, "Licensed Book")
+        self.assertContains(response, second.display_name)
         self.assertContains(response, "Free")
         self.assertContains(response, "Reserved")
         self.assertContains(response, "In use")
-        self.assertContains(response, "Set balance")
+        self.assertContains(response, 'data-provider-edit', count=2)
+        self.assertContains(response, 'aria-label="Edit balance for Licensed Book"')
+        self.assertContains(response, 'aria-label="Edit balance for Another Book"')
+        self.assertContains(response, "Search providers")
+        self.assertContains(response, 'data-provider-sort')
+        self.assertContains(response, 'data-provider-page-size')
+        self.assertContains(response, '<option value="4" selected>4</option>', html=True)
+        self.assertContains(response, '<option value="8">8</option>', html=True)
+        self.assertContains(response, '<option value="12">12</option>', html=True)
+        self.assertContains(response, "Load more")
         self.assertContains(response, "Refresh")
         self.assertContains(response, "Details")
+        self.assertNotContains(response, "Set balance")
         self.assertNotContains(response, "Edit locations")
         self.assertNotContains(response, ">Manual<")
         self.assertNotContains(response, "Where the money is")
