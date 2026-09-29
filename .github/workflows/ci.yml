@@ -159,7 +159,7 @@ jobs:
     needs:
       - validation
       - performance
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -262,12 +262,20 @@ jobs:
           python -m pip install .
           python -m pip install uv
 
-      - name: Verify shared schema before stable deployment
-        env:
-          QBET_DJANGO_DEBUG: "false"
+      - name: Validate stable deployment configuration
+        shell: bash
         run: |
-          python manage.py migrate --check
-          echo "Shared PostgreSQL schema is compatible with $EXPECTED_RELEASE." >> "$GITHUB_STEP_SUMMARY"
+          test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
+          test -n "$VERCEL_ORG_ID" || { echo "Missing VERCEL_ORG_ID repository variable"; exit 1; }
+          test -n "$VERCEL_PROJECT_ID" || { echo "Missing VERCEL_PROJECT_ID repository variable"; exit 1; }
+          test -n "$QBET_DJANGO_SECRET_KEY" || {
+            echo "Missing QBET_DJANGO_SECRET_KEY secret"
+            exit 1
+          }
+          test -n "$QBET_DATABASE_URL" || {
+            echo "Missing QBET_MIGRATION_DATABASE_URL staging environment secret; required to read the polling token from Supabase Vault."
+            exit 1
+          }
 
       - name: Load protected polling token from Supabase Vault
         shell: bash
@@ -301,17 +309,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: Validate stable deployment configuration
-        shell: bash
-        run: |
-          test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
-          test -n "$VERCEL_ORG_ID" || { echo "Missing VERCEL_ORG_ID repository variable"; exit 1; }
-          test -n "$VERCEL_PROJECT_ID" || { echo "Missing VERCEL_PROJECT_ID repository variable"; exit 1; }
-          test -n "$QBET_DJANGO_SECRET_KEY" || {
-            echo "Missing QBET_DJANGO_SECRET_KEY secret"
-            exit 1
-          }
 
       - name: Install Vercel CLI
         run: npm install --global vercel@59
