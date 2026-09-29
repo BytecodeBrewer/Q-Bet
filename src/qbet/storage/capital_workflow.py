@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
