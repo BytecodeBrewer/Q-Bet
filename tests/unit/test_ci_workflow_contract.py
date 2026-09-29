@@ -20,6 +20,8 @@ def test_pull_request_vercel_gate_builds_without_deploying() -> None:
     assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=preview" in block
     assert "vercel build --yes" in block
+    assert "postgresql://qbet:qbet@127.0.0.1:5432/qbet_build_only" in block
+    assert "qbet-ci-build-only-secret" in block
     assert "vercel deploy" not in block
     assert "qbet_polling_tick_token" not in block
     assert "QBET_MIGRATION_DATABASE_URL" not in block
@@ -33,6 +35,7 @@ def test_develop_cd_preflights_schema_and_updates_stable_alias() -> None:
     assert "python manage.py migrate --check" in block
     assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=production" in block
+    assert "QBET_HOSTED_PREVIEW: \"false\"" in block
     assert "vercel build --prod" in block
     assert "vercel deploy --prebuilt --prod --yes" in block
     assert "qbet_polling_tick_token" in block
