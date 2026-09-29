@@ -27,12 +27,15 @@ def test_pull_request_vercel_gate_builds_without_deploying() -> None:
     assert "QBET_MIGRATION_DATABASE_URL" not in block
 
 
-def test_develop_cd_preflights_schema_and_updates_stable_alias() -> None:
+def test_develop_cd_validates_config_and_updates_stable_alias() -> None:
     block = _job("deploy-develop")
 
     assert "github.event_name == 'push'" in block
     assert "refs/heads/develop" in block
-    assert "python manage.py migrate --check" in block
+    assert "python manage.py migrate --check" not in block
+    assert "Validate stable deployment configuration" in block
+    assert "QBET_MIGRATION_DATABASE_URL" in block
+    assert "qbet_polling_tick_token" in block
     assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=production" in block
     assert "QBET_HOSTED_PREVIEW: \"false\"" in block
@@ -42,3 +45,13 @@ def test_develop_cd_preflights_schema_and_updates_stable_alias() -> None:
     assert "https://q-bet.vercel.app" in block
     assert '"release": "$EXPECTED_RELEASE"' not in block
     assert 'grep -Fq "\\\"release\\\": \\"$EXPECTED_RELEASE\\\""' in block
+
+
+def test_pull_request_vercel_build_runs_after_failed_quality_gates() -> None:
+    block = _job("vercel-build-check", "deploy-develop")
+
+    assert "needs:\n      - validation\n      - performance" in block
+    assert "!cancelled()" in block
+    assert "github.event_name == 'pull_request'" in block
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in block
+    assert "vercel deploy" not in block
