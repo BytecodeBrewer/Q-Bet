@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from typing import cast
@@ -64,6 +65,7 @@ from qbet.web.account_security import (
     email_verification_token,
     remove_expired_unverified_accounts,
 )
+from qbet.web.engine_notices import bonus_input_snapshot, contextual_engine_statuses
 from qbet.web.display_preferences import (
     DisplayPreferenceRepository,
     DisplayPreferences,
@@ -301,14 +303,27 @@ def _dashboard_context(
         configuration_available=routing_available and execution_activity_available,
         runtime_activity=execution_activity,
     )
+    user = cast(User, request.user)
+    bonus_input = bonus_input_snapshot(user_id=cast(int, user.pk))
+    provider_activity = _provider_activity()
+    execution_engines = contextual_engine_statuses(
+        execution.engines,
+        bonus_input=bonus_input,
+        bonus_offers_url=reverse("bonus-offer-list"),
+    )
     values: dict[str, object] = {
         "execution_monitoring": execution,
-        "execution_engines": _ordered_engines(execution.engines, layout.execution),
+        "execution_engines": _ordered_engines(execution_engines, layout.execution),
+        "execution_attention": any(
+            notice.severity in {"warning", "error"}
+            for engine in execution_engines
+            for notice in engine.notices
+        ),
         "execution_layer_active": execution.summary.active_engines > 0,
         "execution_layer_running": execution.summary.running_engines > 0,
         "dashboard_layout": layout,
         "routing_available": routing_available,
-        "provider_activity": _provider_activity(),
+        "provider_activity": provider_activity,
         "simulation_enabled": False,
     }
     if _is_staff(request.user) and _simulation_enabled():
@@ -318,11 +333,17 @@ def _dashboard_context(
             runtime_available=routing_available,
             runtime_activity=_simulation_runtime_activity(simulation_control),
         )
+        simulation_engines = contextual_engine_statuses(
+            simulation_monitoring.engines,
+            bonus_input=bonus_input,
+            runs=simulation_control.runs,
+            bonus_offers_url=reverse("bonus-offer-list"),
+        )
         values.update(
             simulation_enabled=True,
             simulation_monitoring=simulation_monitoring,
             simulation_engines=_ordered_engines(
-                simulation_monitoring.engines,
+                simulation_engines,
                 layout.simulation,
             ),
             simulation_layer_active=simulation_monitoring.summary.active_engines > 0,
@@ -543,8 +564,14 @@ def engine_detail(request: HttpRequest, engine_id: str) -> HttpResponse:
         configuration_available=routing_available and execution_activity_available,
         runtime_activity=execution_activity,
     )
+    user = cast(User, request.user)
+    enriched = contextual_engine_statuses(
+        snapshot.engines,
+        bonus_input=bonus_input_snapshot(user_id=cast(int, user.pk)),
+        bonus_offers_url=reverse("bonus-offer-list"),
+    )
     engine = next(
-        (candidate for candidate in snapshot.engines if candidate.engine_id == engine_id),
+        (candidate for candidate in enriched if candidate.engine_id == engine_id),
         None,
     )
     if engine is None:
@@ -565,16 +592,27 @@ def simulation(request: HttpRequest) -> HttpResponse:
         raise Http404("Simulation visibility is disabled.")
     routing_configuration, routing_available = _routing_configuration()
     auto_run = request.GET.get("autostart", "")
+    monitoring = MONITORING_SERVICE.snapshot(
+        runtime_configuration=routing_configuration,
+        runtime_available=routing_available,
+        runtime_activity=_simulation_runtime_activity(control),
+    )
+    user = cast(User, request.user)
+    monitoring = replace(
+        monitoring,
+        engines=contextual_engine_statuses(
+            monitoring.engines,
+            bonus_input=bonus_input_snapshot(user_id=cast(int, user.pk)),
+            runs=control.runs,
+            bonus_offers_url=reverse("bonus-offer-list"),
+        ),
+    )
     return render(
         request,
         "qbet_web/simulation.html",
         _context(
             request,
-            monitoring=MONITORING_SERVICE.snapshot(
-                runtime_configuration=routing_configuration,
-                runtime_available=routing_available,
-                runtime_activity=_simulation_runtime_activity(control),
-            ),
+            monitoring=monitoring,
             simulation_control=control,
             start_form=SimulationStartForm(),
             pipeline_dry_run_form=PipelineDryRunForm(),
