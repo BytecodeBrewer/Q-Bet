@@ -54,6 +54,14 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertContains(response, 'data-flow-station="approval"')
         self.assertContains(response, 'data-flow-station="execution"')
         self.assertNotContains(response, 'data-flow-station="simulation-execution"')
+        self.assertContains(
+            response,
+            "work either enters Simulation directly or goes through Approval before controlled Execution",
+        )
+        self.assertContains(
+            response,
+            "both routes → Settlement → Reporting / Monitoring",
+        )
         self.assertContains(response, "data-flow-packet", count=4)
         self.assertContains(response, "qbet_web/home.js")
         self.assertContains(response, "Sign in")
