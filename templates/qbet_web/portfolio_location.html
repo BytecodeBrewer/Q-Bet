@@ -18,7 +18,7 @@
       >Refresh</button>
     {% elif location.kind == "provider" and location.mode == "execution" %}
       <button
-        class="button compact-button"
+        class="provider-edit-button"
         type="button"
         data-provider-edit
         data-provider-id="{{ location.provider_id|escape }}"
@@ -26,7 +26,16 @@
         data-currency="{{ location.currency }}"
         data-amount="{% if location.status == 'recorded' %}{{ location.amount }}{% endif %}"
         data-note="{{ location.note|escape }}"
-      >{% if location.status == "recorded" %}Edit{% else %}Set balance{% endif %}</button>
+        aria-label="Edit balance for {{ location.label|escape }}"
+        title="Edit balance"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M4 20h4.25L19.7 8.55a2.1 2.1 0 0 0 0-2.97l-1.28-1.28a2.1 2.1 0 0 0-2.97 0L4 15.75V20Z"></path>
+          <path d="m13.9 5.9 4.2 4.2"></path>
+          <path d="M4 20h16"></path>
+        </svg>
+        <span class="visually-hidden">Edit</span>
+      </button>
     {% endif %}
   </div>
 
