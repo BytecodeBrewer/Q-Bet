@@ -5,7 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from django.db import DatabaseError, transaction
-from pydantic import ValidationError
+from pydantic import AwareDatetime, ValidationError
 
 from qbet.bank.funding import BankFundingProposal, FundingDirection
 from qbet.bank.movement import (
@@ -36,7 +36,7 @@ class CapitalMovementRepository:
         self,
         proposal: BankFundingProposal,
         *,
-        performed_at,
+        performed_at: AwareDatetime,
     ) -> CapitalMovementRecord:
         return self._save_pending(
             self._service.mark_manual_performed(proposal, performed_at=performed_at)
@@ -47,7 +47,7 @@ class CapitalMovementRepository:
         proposal: BankFundingProposal,
         *,
         provider_reference: str,
-        acknowledged_at,
+        acknowledged_at: AwareDatetime,
     ) -> CapitalMovementRecord:
         return self._save_pending(
             self._service.acknowledge_adapter(
@@ -62,7 +62,7 @@ class CapitalMovementRepository:
         proposal: BankFundingProposal,
         *,
         reason_code: str,
-        failed_at,
+        failed_at: AwareDatetime,
     ) -> CapitalMovementRecord:
         return self._save_pending(
             self._service.adapter_failed(
