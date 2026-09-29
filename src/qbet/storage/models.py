@@ -225,6 +225,23 @@ class PollingWorkRow(models.Model):
         ordering = ("next_due_at", "id")
 
 
+class CapitalFundingProposalRow(models.Model):
+    """Durable owner-scoped capital proposal and operator-attention state."""
+
+    proposal_id = models.UUIDField(primary_key=True, editable=False)
+    owner_id = models.CharField(max_length=255, db_index=True)
+    correlation_id = models.UUIDField(db_index=True)
+    state = models.CharField(max_length=32, db_index=True)
+    action_method = models.CharField(max_length=32)
+    attention_published = models.BooleanField(default=False)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_capital_funding_proposals"
+        ordering = ("-updated_at",)
+
+
 class CapitalMovementRow(models.Model):
     """Durable approval-gated capital movement and reconciliation state."""
 
