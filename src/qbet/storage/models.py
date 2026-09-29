@@ -175,6 +175,29 @@ class PollingStrategyRow(models.Model):
         ordering = ("provider_id", "source_id", "target", "engine")
 
 
+class PollingWorkRow(models.Model):
+    """Durable hosted Smart Polling work and latest normalized result."""
+
+    work_id = models.UUIDField(primary_key=True, editable=False)
+    identity_key = models.CharField(max_length=64, unique=True)
+    correlation_id = models.UUIDField(db_index=True)
+    provider_id = models.CharField(max_length=255)
+    source_id = models.CharField(max_length=255)
+    target = models.CharField(max_length=16)
+    engine = models.CharField(max_length=64)
+    mode = models.CharField(max_length=16)
+    owner = models.CharField(max_length=255)
+    state = models.CharField(max_length=16, db_index=True)
+    next_due_at = models.DateTimeField(db_index=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    payload = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_polling_work"
+        ordering = ("next_due_at", "work_id")
+
+
 class SandboxFundingOutcomeRow(models.Model):
     """Durable bunq sandbox provider outcome and Simulation ledger feedback state."""
 

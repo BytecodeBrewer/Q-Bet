@@ -328,6 +328,22 @@ class UserRoutingPreferenceRepository:
                 "user routing preferences are unavailable"
             ) from error
 
+    def list(self) -> tuple[tuple[str, UserRoutingPreferences], ...]:
+        """Return validated persisted user intent for hosted route composition."""
+
+        try:
+            rows = UserRoutingPreferenceRow.objects.order_by("user_id").values_list(
+                "user_id", "payload"
+            )
+            return tuple(
+                (user_id, UserRoutingPreferences.model_validate(payload))
+                for user_id, payload in rows
+            )
+        except (DatabaseError, ValidationError) as error:
+            raise UserRoutingPreferencePersistenceError(
+                "user routing preferences are unavailable"
+            ) from error
+
     def save(
         self,
         user_id: str,
