@@ -241,8 +241,6 @@ class CapitalMovementRecord(DomainModel):
         assert approval is not None
         if self.performed_at < approval.approved_at:
             raise ValueError("capital movement cannot precede approval")
-        if self.performed_at >= self.proposal.expires_at:
-            raise ValueError("capital movement cannot start after proposal expiry")
         if self.method is CapitalMovementMethod.MANUAL and self.provider_reference is not None:
             raise ValueError("manual capital movement cannot carry a provider reference")
         if self.method is CapitalMovementMethod.SANDBOX_ADAPTER:
@@ -281,6 +279,8 @@ class CapitalMovementService:
     ) -> CapitalMovementRecord:
         if self.manual_instruction(proposal) is None:
             raise ValueError("capital_movement_instruction_unavailable")
+        if performed_at >= proposal.expires_at:
+            raise ValueError("capital_movement_proposal_expired")
         return CapitalMovementRecord(
             id=_movement_id(proposal.id),
             proposal=proposal,
