@@ -48,7 +48,9 @@ Persisted user intent inside the global SportsCapital Simulation guardrail contr
 
 Supabase's current hosted Cron capability is backed by `pg_cron`. Its documented `pg_net` integration can send asynchronous HTTP POST requests, and Supabase recommends Vault for scheduler authorization material.
 
-For this ticket, production scheduler mutation is intentionally **not** performed automatically. The repository ships the protected endpoint and this operator recipe; applying it to the connected Supabase project requires separate environment authorization.
+The connected Supabase project is prepared for this runtime: Vault stores the protected tick URL/token and the required `pg_cron` / `pg_net` extensions are enabled. The bearer token is loaded from Vault into the hosted Vercel deployment boundary without being committed or rendered.
+
+The recurring job must only be active when the public stable Q-Bet deployment actually contains the polling endpoint. Preview deployments are protected by Vercel Authentication and therefore are not valid scheduler targets. Activation is intentionally tied to the deployed stable release rather than to a protected preview URL.
 
 Store the endpoint URL and bearer token in Supabase Vault using the Dashboard or another approved secret-management workflow. Suggested Vault names:
 
@@ -57,7 +59,7 @@ qbet_polling_tick_url
 qbet_polling_tick_token
 ```
 
-After `pg_cron` and `pg_net` are enabled for the project, an operator can create a one-minute wake-up job without embedding either value in the cron command:
+The one-minute wake-up job uses only Vault lookups in its SQL command, so neither URL nor bearer token is embedded in the job definition:
 
 ```sql
 select cron.schedule(
@@ -89,15 +91,17 @@ A one-minute wake cadence is deliberately more frequent than many configured pro
 
 ## Safe verification
 
-Before enabling a production schedule:
+Before enabling the recurring schedule on the stable public alias:
 
-1. deploy the branch/accepted change and migrations;
-2. configure the Vercel deployment secret `QBET_POLLING_TICK_TOKEN`;
-3. configure the matching scheduler token in Supabase Vault;
-4. POST the endpoint manually with the correct token and verify a bounded JSON response;
+1. deploy the accepted release and apply its migrations;
+2. verify `/health/` reports that exact release with persistence ready;
+3. verify the deployment receives `QBET_POLLING_TICK_TOKEN` from the existing Vault-backed deployment bridge;
+4. POST the protected polling endpoint and verify a bounded JSON response;
 5. confirm `qbet_polling_work` and Monitoring records change as expected;
-6. create the Cron wake-up only after the protected endpoint has been verified;
+6. activate `qbet-smart-polling-wake` only after that exact stable endpoint succeeds;
 7. inspect Supabase Cron job history and Q-Bet Monitoring for failures without exposing secret values.
+
+The scheduler must remain unscheduled while the stable alias still serves a release without the polling endpoint. This avoids intentionally generating repeated 404 traffic during review.
 
 Normal CI never receives provider credentials and does not make live The Odds API calls. Integration tests inject deterministic collectors and use PostgreSQL state.
 
