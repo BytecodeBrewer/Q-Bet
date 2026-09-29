@@ -17,6 +17,11 @@ from qbet.bank.bunq import (
     BunqOperatingMode,
 )
 from qbet.bank.funding import FundingApprover
+from qbet.bank.movement import (
+    CapitalMovementObservation,
+    CapitalMovementObservationStatus,
+    CapitalMovementState,
+)
 from qbet.data.models import DataSourceMetadata, DataTarget, SourceTransport
 from qbet.data.results import ResultCollectionRequest, ResultProviderTarget
 from qbet.data.the_odds_api import THE_ODDS_API_PROVIDER_ID, TheOddsApiAdapter
@@ -42,6 +47,7 @@ from qbet.simulation.opportunity_source import (
     TheOddsApiSportsSimulationConfig,
     TheOddsApiSportsSimulationOpportunitySource,
 )
+from qbet.storage.capital_movement import CapitalMovementRepository
 from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
@@ -392,13 +398,42 @@ class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
             approved_at=NOW + timedelta(minutes=2),
             expires_at=NOW + timedelta(minutes=20),
         )
+        pending_funding = CapitalMovementRepository().load_by_proposal(
+            first_funding.proposal.id
+        )
+        simulation_while_pending = PortfolioLedgerRepository().load(
+            mode="simulation",
+            currency="EUR",
+        )
+        self.assertFalse(first_funding.ledger_applied)
+        self.assertTrue(repeated_funding.duplicate)
+        self.assertEqual(bunq.payment_calls, 1)
+        self.assertIsNotNone(pending_funding)
+        self.assertIsNotNone(simulation_while_pending)
+        assert pending_funding is not None and simulation_while_pending is not None
+        self.assertEqual(pending_funding.state, CapitalMovementState.PENDING)
+        self.assertEqual(
+            simulation_while_pending.balance.available,
+            simulation_before_funding.balance.available,
+        )
+
+        reconciled_funding = CapitalMovementRepository().reconcile(
+            pending_funding.id,
+            CapitalMovementObservation(
+                status=CapitalMovementObservationStatus.CONFIRMED,
+                observed_at=pending_funding.performed_at + timedelta(seconds=1),
+                amount=first_funding.proposal.amount,
+                currency=first_funding.proposal.currency,
+                source_location=first_funding.proposal.source_location,
+                destination_location=first_funding.proposal.destination_location,
+            ),
+        )
         simulation_after_funding = PortfolioLedgerRepository().load(
             mode="simulation",
             currency="EUR",
         )
-        self.assertTrue(first_funding.ledger_applied)
-        self.assertTrue(repeated_funding.duplicate)
-        self.assertEqual(bunq.payment_calls, 1)
+        self.assertEqual(reconciled_funding.state, CapitalMovementState.RECONCILED)
+        self.assertTrue(reconciled_funding.ledger_applied)
         self.assertIsNotNone(simulation_after_funding)
         assert simulation_after_funding is not None
         self.assertEqual(
