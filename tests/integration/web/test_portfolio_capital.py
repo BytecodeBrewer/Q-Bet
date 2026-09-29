@@ -7,8 +7,8 @@ from django.test import TestCase
 
 from qbet.domain.ledger import PortfolioBalance
 from qbet.ledger import PortfolioLedger
-from qbet.storage.models import PortfolioLedgerRow
-from qbet.web.models import PortfolioLedgerAccess
+from qbet.storage.models import PortfolioLedgerRow, SportsbookProviderRow
+from qbet.web.models import PortfolioCapitalLocation, PortfolioLedgerAccess
 from qbet.web.portfolio import PortfolioCapitalReadService
 
 
@@ -17,126 +17,153 @@ class PortfolioCapitalTests(TestCase):
         self.user = User.objects.create_user("member", password="Strong-pass-123")
         self.other = User.objects.create_user("other", password="Strong-pass-123")
         self.staff = User.objects.create_user("staff", password="Strong-pass-123", is_staff=True)
+        self.provider = SportsbookProviderRow.objects.create(
+            provider_id="licensed-book",
+            legal_name="Licensed Book GmbH",
+            display_name="Licensed Book",
+            jurisdiction="DE",
+            sports_betting=True,
+            online=True,
+            source_url="https://example.invalid",
+            whitelist_snapshot_date="2026-09-07",
+            status="active",
+        )
 
-    def _store(
-        self,
-        mode: str,
-        currency: str,
-        *,
-        available: str,
-        reserved: str = "0",
-        locked: str = "0",
-        pending: str = "0",
-        settled: str = "0",
-        cost: str = "0",
-    ) -> None:
+    def _store(self, mode: str, currency: str, *, available: str, reserved: str = "0",
+               locked: str = "0", pending: str = "0", settled: str = "0",
+               cost: str = "0") -> None:
         ledger = PortfolioLedger(
             balance=PortfolioBalance(
-                mode=mode,
-                currency=currency,
-                available=Decimal(available),
-                reserved=Decimal(reserved),
-                locked=Decimal(locked),
-                pending=Decimal(pending),
-                settled=Decimal(settled),
-                cost=Decimal(cost),
+                mode=mode, currency=currency, available=Decimal(available),
+                reserved=Decimal(reserved), locked=Decimal(locked),
+                pending=Decimal(pending), settled=Decimal(settled), cost=Decimal(cost),
             )
         )
         PortfolioLedgerRow.objects.create(
-            mode=mode,
-            currency=currency,
-            payload=ledger.model_dump(mode="json"),
+            mode=mode, currency=currency, payload=ledger.model_dump(mode="json")
         )
 
     def _grant(self, user: User, mode: str, currency: str) -> None:
         PortfolioLedgerAccess.objects.create(user=user, mode=mode, currency=currency)
 
-    def test_totals_count_current_capital_once_and_preserve_locked_state(self) -> None:
-        self._store(
-            "execution",
-            "EUR",
-            available="700",
-            reserved="40",
-            locked="20",
-            pending="30",
-            settled="500",
-            cost="10",
-        )
+    def test_provider_location_partitions_ledger_and_central_account_is_remainder(self) -> None:
+        self._store("execution", "EUR", available="700", reserved="40", locked="20", pending="30")
         self._grant(self.user, "execution", "EUR")
-
+        PortfolioCapitalLocation.objects.create(
+            user=self.user, provider=self.provider, mode="execution", currency="EUR",
+            amount=Decimal("170"), note="Checked against provider balance",
+        )
         snapshot = PortfolioCapitalReadService().snapshot(user_id=self.user.pk)
+        central, provider = snapshot.execution
+        self.assertEqual(central.label, "Central payment account")
+        self.assertEqual(central.amount, Decimal("620"))
+        self.assertEqual(provider.label, "Licensed Book")
+        self.assertEqual(provider.amount, Decimal("170"))
+        self.assertEqual(provider.status, "manual")
+        self.assertEqual(snapshot.execution_totals[0].tracked_total, Decimal("790"))
 
-        total = snapshot.execution_totals[0]
-        self.assertEqual(total.tracked_total, Decimal("790"))
-        self.assertEqual(total.available, Decimal("700"))
-        self.assertEqual(total.reserved, Decimal("40"))
-        self.assertEqual(total.locked, Decimal("20"))
-        self.assertEqual(total.pending, Decimal("30"))
+    def test_location_overallocation_fails_closed(self) -> None:
+        self._store("execution", "EUR", available="100")
+        self._grant(self.user, "execution", "EUR")
+        PortfolioCapitalLocation.objects.create(
+            user=self.user, provider=self.provider, mode="execution", currency="EUR",
+            amount=Decimal("101"),
+        )
+        snapshot = PortfolioCapitalReadService().snapshot(user_id=self.user.pk)
+        self.assertFalse(snapshot.available)
+        self.assertIn("exceed", snapshot.message or "")
 
-    def test_currency_and_mode_boundaries_are_not_combined(self) -> None:
+    def test_currency_and_mode_boundaries_remain_separate(self) -> None:
         self._store("execution", "EUR", available="100")
         self._store("execution", "USD", available="200")
         self._store("simulation", "EUR", available="900")
         for mode, currency in (("execution", "EUR"), ("execution", "USD"), ("simulation", "EUR")):
             self._grant(self.user, mode, currency)
-
         snapshot = PortfolioCapitalReadService().snapshot(user_id=self.user.pk)
-
         self.assertEqual(
             [(item.currency, item.tracked_total) for item in snapshot.execution_totals],
             [("EUR", Decimal("100")), ("USD", Decimal("200"))],
         )
         self.assertEqual(snapshot.simulation_totals[0].tracked_total, Decimal("900"))
 
-    def test_user_can_read_only_explicitly_granted_ledger_contexts(self) -> None:
+    def test_cross_user_locations_are_not_visible(self) -> None:
         self._store("execution", "EUR", available="125")
-        self._store("simulation", "EUR", available="900")
         self._grant(self.user, "execution", "EUR")
-        self._grant(self.other, "simulation", "EUR")
-
-        member = PortfolioCapitalReadService().snapshot(user_id=self.user.pk)
-        other = PortfolioCapitalReadService().snapshot(user_id=self.other.pk)
-
-        self.assertEqual(member.execution_totals[0].available, Decimal("125"))
-        self.assertFalse(member.simulation)
-        self.assertFalse(other.execution)
-        self.assertEqual(other.simulation_totals[0].available, Decimal("900"))
-
-    def test_staff_read_is_explicitly_broader(self) -> None:
-        self._store("execution", "EUR", available="125")
-        snapshot = PortfolioCapitalReadService().snapshot(user_id=self.staff.pk, is_staff=True)
-        self.assertEqual(snapshot.execution_totals[0].available, Decimal("125"))
-
-    def test_portfolio_page_is_authenticated_and_hides_ungranted_capital(self) -> None:
-        self._store("execution", "EUR", available="125")
-        self.assertRedirects(
-            self.client.get("/portfolio/"),
-            "/accounts/login/?next=/portfolio/",
-            fetch_redirect_response=False,
+        self._grant(self.other, "execution", "EUR")
+        PortfolioCapitalLocation.objects.create(
+            user=self.other, provider=self.provider, mode="execution", currency="EUR",
+            amount=Decimal("50"),
         )
+        snapshot = PortfolioCapitalReadService().snapshot(user_id=self.user.pk)
+        self.assertEqual(len(snapshot.execution), 1)
+        self.assertEqual(snapshot.execution[0].label, "Central payment account")
+        self.assertEqual(snapshot.execution[0].amount, Decimal("125"))
 
-        self.client.force_login(self.user)
-        hidden = self.client.get("/portfolio/")
-        self.assertEqual(hidden.status_code, 200)
-        self.assertNotContains(hidden, "125,00 EUR")
-        self.assertContains(hidden, "Execution capital is not available for this account")
-        self.assertNotContains(hidden, "no live-capital context")
-
+    def test_page_shows_locations_expandable_details_and_editor(self) -> None:
+        self._store("execution", "EUR", available="125", reserved="20", locked="5", pending="3")
         self._grant(self.user, "execution", "EUR")
-        visible = self.client.get("/portfolio/")
-        self.assertContains(visible, "125,00 EUR")
-        self.assertContains(visible, "Locked")
-        self.assertContains(visible, "Account-level balances are not configured yet")
+        self.client.force_login(self.user)
+        response = self.client.get("/portfolio/")
+        self.assertContains(response, "Central payment account")
+        self.assertContains(response, "Location details")
+        self.assertContains(response, "Available")
+        self.assertContains(response, "Reserved")
+        self.assertContains(response, "Locked")
+        self.assertContains(response, "Pending")
+        self.assertContains(response, "Edit locations")
+        self.assertContains(response, "Save correction")
+
+    def test_manual_correction_updates_location_without_changing_ledger_total(self) -> None:
+        self._store("execution", "EUR", available="125", reserved="20")
+        self._grant(self.user, "execution", "EUR")
+        self.client.force_login(self.user)
+        response = self.client.post(
+            "/portfolio/locations/update/",
+            {"provider": self.provider.provider_id, "currency": "EUR",
+             "amount": "60", "note": "Manual reconciliation"},
+        )
+        self.assertRedirects(response, "/portfolio/")
+        location = PortfolioCapitalLocation.objects.get(user=self.user, provider=self.provider)
+        self.assertEqual(location.amount, Decimal("60"))
+        ledger = PortfolioLedger.model_validate(
+            PortfolioLedgerRow.objects.get(mode="execution", currency="EUR").payload
+        )
+        self.assertEqual(ledger.balance.available, Decimal("125"))
+        self.assertEqual(ledger.balance.reserved, Decimal("20"))
+
+    def test_manual_correction_cannot_allocate_more_than_tracked_capital(self) -> None:
+        self._store("execution", "EUR", available="25")
+        self._grant(self.user, "execution", "EUR")
+        self.client.force_login(self.user)
+        self.client.post(
+            "/portfolio/locations/update/",
+            {"provider": self.provider.provider_id, "currency": "EUR", "amount": "26", "note": ""},
+        )
+        self.assertFalse(PortfolioCapitalLocation.objects.exists())
+
+    def test_ungranted_user_sees_no_amount_or_foreign_location(self) -> None:
+        self._store("execution", "EUR", available="125")
+        self._grant(self.other, "execution", "EUR")
+        PortfolioCapitalLocation.objects.create(
+            user=self.other, provider=self.provider, mode="execution", currency="EUR",
+            amount=Decimal("50"),
+        )
+        self.client.force_login(self.user)
+        response = self.client.get("/portfolio/")
+        self.assertNotContains(response, "125,00 EUR")
+        self.assertNotContains(response, "Licensed Book")
+        self.assertContains(response, "Capital locations are not available for this account")
+        portfolio = PortfolioCapitalReadService().snapshot(user_id=self.user.pk)
+        self.assertFalse(portfolio.execution)
+        self.assertFalse(portfolio.execution_totals)
 
     def test_normal_user_does_not_receive_simulation_plane_but_staff_does(self) -> None:
         self._store("simulation", "EUR", available="900")
         self._grant(self.user, "simulation", "EUR")
-
         self.client.force_login(self.user)
         response = self.client.get("/portfolio/")
         self.assertNotContains(response, "Sandbox only")
         self.assertNotContains(response, "900,00 EUR")
-
         self.client.force_login(self.staff)
         response = self.client.get("/portfolio/")
         self.assertContains(response, "Sandbox only")
