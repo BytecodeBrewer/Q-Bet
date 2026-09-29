@@ -1,6 +1,6 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-{% load display_preferences %}
+{% load display_preferences static %}
 <section class="page-heading dashboard-heading">
   <span class="eyebrow">Portfolio workspace</span>
   <div class="page-heading-row">
@@ -9,7 +9,7 @@
       <p>Scan engine activity, match state, capital coverage, and issues before opening deeper detail.</p>
     </div>
     <div class="dashboard-health" aria-label="Execution health summary">
-      {% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %}
+      {% if execution_attention %}
         <span class="status status-red" aria-hidden="true"></span><strong>Attention required</strong>
       {% elif execution_layer_running %}
         <span class="status status-green" aria-hidden="true"></span><strong>Execution running</strong>
@@ -43,11 +43,10 @@
       <article class="summary-item summary-item-primary"><span>Running matches</span><strong>{{ execution_monitoring.summary.active_matches }}</strong><small>running now</small></article>
       <article class="summary-item"><span>Pending matches</span><strong>{{ execution_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
       <article class="summary-item"><span>Recorded capital</span><strong>{% if execution_monitoring.summary.involved_capital is not None %}{{ execution_monitoring.summary.involved_capital }}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>tracked execution state</small></article>
-      <article class="summary-item incident-summary{% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %} has-incidents{% endif %}">
-        <span>Warnings / errors</span><strong>{{ execution_monitoring.summary.warning_count }} / {{ execution_monitoring.summary.error_count }}</strong>
-        <small>{% if execution_monitoring.summary.error_count or execution_monitoring.summary.warning_count %}needs attention{% else %}No known issues{% endif %}</small>
-      </article>
     </section>
+    {% if user.is_staff %}
+      <p class="admin-metadata">Technical history: {{ execution_monitoring.summary.warning_count }} warning(s), {{ execution_monitoring.summary.error_count }} error(s). <a href="{% url 'monitoring' %}">Open Monitoring</a></p>
+    {% endif %}
 
     <div class="dashboard-support-row">
       <section class="capital-coverage" aria-label="Execution capital coverage"><span class="support-label">Capital coverage</span><p><span class="status status-{{ execution_monitoring.capital_coverage.status }}" aria-hidden="true"></span>{{ execution_monitoring.capital_coverage.detail }}</p></section>
@@ -92,14 +91,9 @@
               <div><span>Pending</span><strong>{{ engine.pending_matches }}</strong></div>
               <div><span>Capital</span><strong>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}—{% endif %}</strong></div>
             </div>
-            {% if engine.warning_count or engine.error_count %}
-              <div class="issue-badges" aria-label="{{ engine.name }} warnings and errors">
-                {% if engine.warning_count %}<span class="issue-badge warning-badge">⚠ {{ engine.warning_count }}</span>{% endif %}
-                {% if engine.error_count %}<span class="issue-badge error-badge">! {{ engine.error_count }}</span>{% endif %}
-              </div>
-            {% endif %}
             <div class="engine-secondary-metrics"><span>State <strong>{{ engine.live_state }}</strong></span><span>Total activity <strong>{{ engine.total_activity }}</strong></span></div>
           </a>
+          {% include "qbet_web/_engine_notices.html" with engine=engine %}
         </article>
       {% endfor %}
     </div>
@@ -114,8 +108,8 @@
         <article class="summary-item"><span>Pending matches</span><strong>{{ simulation_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
         <article class="summary-item"><span>Recorded runs</span><strong>{{ simulation_monitoring.summary.recorded_activity }}</strong><small>available history</small></article>
         <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{% localized_money simulation_monitoring.summary.involved_capital "EUR" display_preferences %}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>simulation only</small></article>
-        <article class="summary-item incident-summary{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %} has-incidents{% endif %}"><span>Recorded warnings / errors</span><strong>{{ simulation_monitoring.summary.warning_count }} / {{ simulation_monitoring.summary.error_count }}</strong><small>{% if simulation_monitoring.summary.error_count or simulation_monitoring.summary.warning_count %}recent run history{% else %}No recorded issues{% endif %}</small></article>
       </section>
+      <p class="admin-metadata">Technical simulation history: {{ simulation_monitoring.summary.warning_count }} warning(s), {{ simulation_monitoring.summary.error_count }} error(s). <a href="{% url 'monitoring' %}">Open Monitoring</a></p>
 
       <section class="simulation-control-panel">
         <div class="section-heading"><div><span class="eyebrow">Sandbox</span><h3>Sandbox simulation</h3></div><span class="tag simulation-tag">Virtual only</span></div>
@@ -161,13 +155,8 @@
               <div><span>Pending</span><strong>{{ engine.pending_matches }}</strong></div>
               <div><span>Virtual capital</span><strong>{% if engine.involved_capital is not None %}{% localized_money engine.involved_capital "EUR" display_preferences %}{% else %}—{% endif %}</strong></div>
             </div>
-            {% if engine.warning_count or engine.error_count %}
-              <div class="issue-badges" aria-label="{{ engine.name }} recorded simulation warnings and errors" title="Recorded incidents from recent simulation history">
-                {% if engine.warning_count %}<span class="issue-badge warning-badge">⚠ {{ engine.warning_count }}</span>{% endif %}
-                {% if engine.error_count %}<span class="issue-badge error-badge">! {{ engine.error_count }}</span>{% endif %}
-              </div>
-            {% endif %}
             <div class="engine-secondary-metrics"><span>State <strong>{{ engine.live_state }}</strong></span><span>Progress <strong>{% if engine.latest_report_id %}{% for report in simulation_monitoring.reports %}{% if report.run_id == engine.latest_report_id %}{{ report.progress }}{% endif %}{% endfor %}{% else %}Unavailable{% endif %}</strong></span></div>
+            {% include "qbet_web/_engine_notices.html" with engine=engine %}
             {% if engine.latest_report_id %}<p><a class="compact-link" href="{% url 'report-detail' engine.latest_report_id %}">Open latest report</a></p>{% endif %}
           </article>
         {% endfor %}
@@ -177,4 +166,5 @@
     </section>
   {% endif %}
 </div>
+<script src="{% static 'qbet_web/engine_notices.js' %}" defer></script>
 {% endblock %}
