@@ -12,20 +12,11 @@ def _job(name: str, next_name: str | None = None) -> str:
     return WORKFLOW[start:end]
 
 
-def test_standard_validation_jobs_use_pinned_runner() -> None:
-    validation = _job("validation", "performance")
-    performance = _job("performance", "vercel-build-check")
-
-    assert "runs-on: ubuntu-22.04" in validation
-    assert "runs-on: ubuntu-22.04" in performance
-
-
 def test_pull_request_vercel_gate_builds_without_deploying() -> None:
     block = _job("vercel-build-check", "deploy-develop")
 
     assert "github.event_name == 'pull_request'" in block
     assert "github.event.pull_request.head.sha" in block
-    assert "runs-on: ubuntu-22.04" in block
     assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=preview" in block
     assert "vercel build --yes" in block

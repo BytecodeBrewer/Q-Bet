@@ -13,7 +13,7 @@ permissions:
 jobs:
   validation:
     name: PostgreSQL validation gate
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
       postgres:
@@ -115,7 +115,7 @@ jobs:
           retention-days: 14
   performance:
     name: Phase 3 performance baseline
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16
@@ -160,7 +160,7 @@ jobs:
       - validation
       - performance
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
