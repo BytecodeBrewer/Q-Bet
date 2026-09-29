@@ -225,6 +225,15 @@
   opacity: 0;
   transform: translateY(14px);
 }
+.home-flow-shell.is-motion-paused .flow-future-layer {
+  transition: none !important;
+}
+.home-flow-shell.is-motion-paused .flow-station circle {
+  animation: none !important;
+}
+.home-flow-shell.is-motion-paused .flow-station text {
+  transition: none !important;
+}
 .flow-future-path {
   stroke: var(--muted);
   stroke-width: 1.5;
