@@ -129,12 +129,33 @@ class PollingTickEndpointTests(TestCase):
         self.assertEqual(wrong.status_code, 404)
         self.assertEqual(PostgresPollingWorkRepository().list(), ())
 
+    def test_first_tick_schedules_without_calling_provider(self) -> None:
+        collector = RecordingCollector()
+        with self.settings(**self.source_settings):
+            with patch("qbet.web.polling_tick.TheOddsApiAdapter", return_value=collector):
+                response = self.client.post(
+                    "/internal/polling/tick/",
+                    HTTP_AUTHORIZATION="Bearer test-polling-token",
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["provider_requests"], 0)
+        self.assertEqual(response.json()["outcomes"], ["scheduled"])
+        self.assertEqual(collector.requests, [])
+        stored = PostgresPollingWorkRepository().list()[0]
+        self.assertEqual(stored.last_outcome, "scheduled")
+        self.assertGreater(stored.next_due_at, datetime.now(UTC) - timedelta(seconds=5))
+
     def test_due_tick_calls_provider_once_and_persists_snapshot_and_activity(self) -> None:
         collector = RecordingCollector()
         now = datetime.now(UTC)
         with self.settings(**self.source_settings):
             candidate = configured_polling_work(now=now)[0].model_copy(
-                update={"next_due_at": now - timedelta(minutes=2)}
+                update={
+                    "next_due_at": now - timedelta(minutes=2),
+                    "last_outcome": "scheduled",
+                    "last_reason": "market_refresh_due",
+                }
             )
             PostgresPollingWorkRepository().synchronize((candidate,))
             with patch("qbet.web.polling_tick.TheOddsApiAdapter", return_value=collector):
@@ -165,7 +186,11 @@ class PollingTickEndpointTests(TestCase):
         now = datetime.now(UTC)
         with self.settings(**self.source_settings):
             candidate = configured_polling_work(now=now)[0].model_copy(
-                update={"next_due_at": now - timedelta(minutes=2)}
+                update={
+                    "next_due_at": now - timedelta(minutes=2),
+                    "last_outcome": "scheduled",
+                    "last_reason": "market_refresh_due",
+                }
             )
             PostgresPollingWorkRepository().synchronize((candidate,))
             with patch("qbet.web.polling_tick.TheOddsApiAdapter", return_value=collector):
@@ -212,7 +237,11 @@ class PollingTickEndpointTests(TestCase):
         now = datetime.now(UTC)
         with self.settings(**self.source_settings):
             candidate = configured_polling_work(now=now)[0].model_copy(
-                update={"next_due_at": now - timedelta(minutes=2)}
+                update={
+                    "next_due_at": now - timedelta(minutes=2),
+                    "last_outcome": "scheduled",
+                    "last_reason": "market_refresh_due",
+                }
             )
             PostgresPollingWorkRepository().synchronize((candidate,))
             UserRoutingPreferenceRepository().save(
