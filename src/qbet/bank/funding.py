@@ -52,15 +52,22 @@ class BankFundingProposal(DomainModel):
     """A future transfer proposal; it has no authority to mutate capital."""
 
     id: UUID
+    requirement_id: UUID | None = None
     direction: FundingDirection
     source_role: FundingAccountRole
     destination_role: FundingAccountRole
+    source_location: Identifier | None = None
+    destination_location: Identifier | None = None
     amount: PositiveDecimal
     currency: Currency
     reason: Identifier
+    opportunity_id: Identifier | None = None
     target_mode: Literal["simulation", "execution"]
     target_context: Identifier
     correlation_id: UUID
+    required_by: AwareDatetime | None = None
+    engine: Identifier | None = None
+    workflow_reference: Identifier | None = None
     created_at: AwareDatetime
     expires_at: AwareDatetime
     state: FundingProposalState = FundingProposalState.PROPOSED
