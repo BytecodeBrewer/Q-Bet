@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from collections.abc import Mapping
-from typing import Final, cast
+from typing import Final, Literal, cast
 from uuid import UUID
 
 from qbet.layers.logging import SimulationLogRecord, SimulationLogRecordType
@@ -45,7 +45,7 @@ class MonitoringWorkflowStage:
 
 @dataclass(frozen=True)
 class EngineNotice:
-    severity: str
+    severity: Literal["info", "success", "warning", "error"]
     reason_code: str
     title: str
     detail: str
