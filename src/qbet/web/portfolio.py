@@ -26,6 +26,10 @@ class CapitalLocation:
     status: str
     provider_id: str | None = None
     note: str = ""
+    available: Decimal | None = None
+    reserved: Decimal | None = None
+    locked: Decimal | None = None
+    pending: Decimal | None = None
 
 @dataclass(frozen=True)
 class CurrencyTotals:
@@ -109,6 +113,10 @@ class PortfolioCapitalReadService:
                         updated_at=row.updated_at,
                         source="PortfolioLedger · residual after provider locations",
                         status="verified",
+                        available=balance.available,
+                        reserved=balance.reserved,
+                        locked=balance.locked,
+                        pending=balance.pending,
                     )
                 )
                 for item in matching:
