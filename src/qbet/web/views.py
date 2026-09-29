@@ -65,7 +65,11 @@ from qbet.web.account_security import (
     email_verification_token,
     remove_expired_unverified_accounts,
 )
-from qbet.web.engine_notices import bonus_input_snapshot, contextual_engine_statuses
+from qbet.web.engine_notices import (
+    bonus_input_snapshot,
+    contextual_engine_statuses,
+    provider_activity_notice,
+)
 from qbet.web.display_preferences import (
     DisplayPreferenceRepository,
     DisplayPreferences,
@@ -324,6 +328,7 @@ def _dashboard_context(
         "dashboard_layout": layout,
         "routing_available": routing_available,
         "provider_activity": provider_activity,
+        "provider_notice": provider_activity_notice(provider_activity),
         "simulation_enabled": False,
     }
     if _is_staff(request.user) and _simulation_enabled():
@@ -607,6 +612,7 @@ def simulation(request: HttpRequest) -> HttpResponse:
             bonus_offers_url=reverse("bonus-offer-list"),
         ),
     )
+    provider_activity = _provider_activity()
     return render(
         request,
         "qbet_web/simulation.html",
@@ -617,7 +623,8 @@ def simulation(request: HttpRequest) -> HttpResponse:
             start_form=SimulationStartForm(),
             pipeline_dry_run_form=PipelineDryRunForm(),
             pipeline_dry_run=request.session.pop("pipeline_dry_run", None),
-            provider_activity=_provider_activity(),
+            provider_activity=provider_activity,
+            provider_notice=provider_activity_notice(provider_activity),
             auto_run_id=auto_run,
             simulation_enabled=True,
         ),
