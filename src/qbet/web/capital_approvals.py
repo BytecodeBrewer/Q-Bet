@@ -14,7 +14,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from qbet.bank.funding import FundingProposalState
+from qbet.bank.funding import FundingApprover, FundingProposalState
 from qbet.storage.capital_movement import CapitalMovementRepository
 from qbet.storage.capital_workflow import (
     CapitalActionMethod,
@@ -102,7 +102,10 @@ def capital_approval_decision(
     try:
         record = _CAPITAL_WORKFLOW.decide(
             proposal_id,
-            actor=request.user.get_username(),
+            approver=FundingApprover(
+                identity=request.user.get_username(),
+                is_authenticated=request.user.is_authenticated,
+            ),
             approve=decision == "approve",
             decided_at=timezone.now(),
         )
