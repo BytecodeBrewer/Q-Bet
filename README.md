@@ -12,7 +12,7 @@ The core system is structurally available from data ingestion to user-facing out
 
 Users can persist personal `BonusEngine` / `SportsCapitalEngine` Simulation and Execution selections inside the global staff routing guardrails. Missing preferences fail closed, globally disabled routes remain unavailable without deleting stored user intent, and Execution selection does not bypass approval or capital boundaries.
 
-Smart Polling now has restart-safe PostgreSQL work state and a protected bounded hosted tick for the connected SportsCapital Simulation / The Odds API route. Supabase Cron is a wake-up mechanism only: the Python `SmartPollingPolicy` remains authoritative for freshness, timing, capacity, terminal state, and whether a provider request is actually made. Disabling a route stops future polling without deleting its durable history.
+Smart Polling now has restart-safe PostgreSQL work state and a protected bounded hosted tick for the connected SportsCapital Simulation / The Odds API route. Supabase Cron is a wake-up mechanism only: the Python `SmartPollingPolicy` remains authoritative for freshness, timing, capacity, terminal state, and whether a provider request is actually made. Staff polling settings now show the effective Default or engine Override for BonusEngine and SportsCapitalEngine, expose deterministic timing presets as concrete values, and preview resolver impact before save. Disabling a route stops future polling without deleting its durable history.
 
 Engine runtime state is explicit: `Inactive` means routing is disabled, `Ready` means the engine is enabled and ready to accept work, and `Running` is reserved for durable work that is actually processing. Monitoring, engine detail, and the dashboard use the same persisted state sources and vocabulary for that distinction.
 
@@ -85,9 +85,9 @@ The GitHub Actions **PostgreSQL validation gate** is the authoritative standard 
 
 ## Deployment
 
-Pull requests run a Vercel preview-environment build check against the exact PR head after the normal validation and performance jobs. It verifies that the app can be built with the Vercel Preview configuration, but creates no Vercel deployment for feature branches. A push to `develop` publishes the exact prebuilt head to the Production Vercel environment and checks the stable Q-Bet URL.
+Pull requests run a gated Vercel build check after the normal validation and performance jobs. That check builds the exact PR head in CI but does not create a Vercel deployment. Publication is a separate CD boundary: a green push to `develop` first verifies that the shared PostgreSQL schema is current, then publishes the exact prebuilt head to the stable Q-Bet Vercel deployment.
 
-Production and Preview configuration live in the Vercel project. The deployment workflow runs the Supabase Vault token lookup with Vercel's Production environment injected directly into the process; no database secret is copied into GitHub or written to the runner filesystem. Deployments do not run schema migrations or gate on migration state; schema changes remain an explicit operator-controlled task.
+The Vercel project receives its runtime configuration through environment variables, including `QBET_DATABASE_URL` and the Django secret. Branch build checks use non-authoritative local build values where a real runtime secret is unnecessary; deployment-only secrets remain confined to the stable deployment boundary.
 
 Day-to-day deployment management is handled through the Vercel project UI and the GitHub Actions workflow; the README intentionally does not duplicate Vercel's own operating instructions.
 
