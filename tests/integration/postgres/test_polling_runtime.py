@@ -19,7 +19,10 @@ from qbet.data.polling import (
 )
 from qbet.data.polling_runtime import SmartPollingRuntime
 from qbet.data.polling_work import PollingMarketSelection, PollingWorkItem, PollingWorkState
-from qbet.data.the_odds_api import THE_ODDS_API_PROVIDER_ID
+from qbet.data.the_odds_api import (
+    THE_ODDS_API_PROVIDER_ID,
+    TheOddsApiConfigurationError,
+)
 from qbet.domain.models import OfferSide
 from qbet.storage.ledger import (
     RoutingConfigurationRepository,
@@ -51,12 +54,20 @@ SELECTION = PollingMarketSelection(
 
 
 class _Collector:
-    def __init__(self, *, fetched_at: datetime = FETCHED) -> None:
+    def __init__(
+        self,
+        *,
+        fetched_at: datetime = FETCHED,
+        error: Exception | None = None,
+    ) -> None:
         self.fetched_at = fetched_at
+        self.error = error
         self.calls: list[DataCollectionRequest] = []
 
     def collect(self, request: DataCollectionRequest) -> NormalizedMarketSnapshot:
         self.calls.append(request)
+        if self.error is not None:
+            raise self.error
         market_id = f"{request.event_id}:{request.market}"
         return NormalizedMarketSnapshot(
             id=market_id,
@@ -223,6 +234,55 @@ class HostedPollingRuntimeTests(TestCase):
         assert persisted is not None
         self.assertEqual(persisted.last_outcome, "skipped_fresh")
         self.assertEqual(persisted.next_due_at, NOW + timedelta(minutes=5))
+
+    def test_provider_configuration_failure_is_explicit_and_never_green(self) -> None:
+        collector = _Collector(error=TheOddsApiConfigurationError("missing provider configuration"))
+        runtime = self._runtime(collector)
+        self._tick(runtime, now=NOW)
+
+        summary = self._tick(runtime, now=FETCHED)
+
+        self.assertEqual(summary.provider_calls, 1)
+        self.assertEqual(summary.failures, 1)
+        self.assertEqual(len(collector.calls), 1)
+        row = PollingWorkRow.objects.get()
+        persisted = PollingWorkRepository().load(row.work_id)
+        assert persisted is not None
+        self.assertEqual(persisted.last_outcome, "provider_error")
+        self.assertEqual(persisted.last_reason, "polling_provider_configuration_error")
+        self.assertEqual(persisted.request.attempt, 1)
+        latest = MonitoringRecordRow.objects.order_by("-occurred_at", "-id").values_list(
+            "payload", flat=True
+        ).first()
+        assert latest is not None
+        self.assertEqual(latest["status"], "error")
+        self.assertNotIn("missing provider configuration", str(latest))
+
+    def test_bonus_execution_is_masked_by_connected_product_routing(self) -> None:
+        PollingStrategyRepository().save(
+            _strategy().model_copy(update={"engine": "bonus"})
+        )
+        RoutingConfigurationRepository().save(
+            RoutingConfiguration(
+                bonus=EngineModes(execution=True),
+                sports_capital=EngineModes(),
+            )
+        )
+        UserRoutingPreferenceRepository().save(
+            "alice",
+            UserRoutingPreferences(
+                bonus=UserEngineModes(execution=True),
+                sports_capital=UserEngineModes(),
+            ),
+        )
+        collector = _Collector()
+
+        summary = self._tick(self._runtime(collector), now=NOW)
+
+        self.assertEqual(summary.eligible_routes, 0)
+        self.assertEqual(summary.claimed, 0)
+        self.assertEqual(collector.calls, [])
+        self.assertEqual(PollingWorkRow.objects.count(), 0)
 
     def test_global_disable_preserves_history_and_blocks_due_provider_work(self) -> None:
         collector = _Collector()

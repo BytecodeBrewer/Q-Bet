@@ -32,6 +32,7 @@ from qbet.workflow.routing import (
     UserRoutingPreferences,
     V1Engine,
     V1_ENGINES,
+    connected_product_routing_configuration,
     effective_engine_modes,
 )
 
@@ -99,12 +100,13 @@ class SmartPollingRuntime:
         if max_work < 1:
             raise ValueError("polling tick max_work must be positive")
 
+        product_routing = connected_product_routing_configuration(routing) or RoutingConfiguration()
         strategies = self._strategy_store.list()
         resolver = PollingStrategyResolver(strategies)
         policy = SmartPollingPolicy(resolver=resolver)
         eligible_routes = self._seed_eligible_work(
             selection=selection,
-            routing=routing,
+            routing=product_routing,
             preferences=preferences,
             strategies=strategies,
             resolver=resolver,
@@ -115,7 +117,7 @@ class SmartPollingRuntime:
         provider_calls = successes = deferred = failures = terminal = 0
         preference_map = dict(preferences)
         for work in claimed:
-            if not self._route_is_active(work, routing, preference_map):
+            if not self._route_is_active(work, product_routing, preference_map):
                 self._disable(work, now=now, reason="polling_route_disabled")
                 terminal += 1
                 continue
@@ -471,7 +473,7 @@ class SmartPollingRuntime:
             failed,
             now=now,
             event_type="provider_query",
-            status=outcome,
+            status="error" if outcome == "provider_error" else outcome,
             reason=reason,
             level=level,
             duration_ms=duration_ms,
