@@ -30,7 +30,7 @@
 
     <svg class="home-flow-map" viewBox="0 0 1120 640" role="img" aria-labelledby="home-flow-title home-flow-desc">
       <title id="home-flow-title">Q-Bet engine workflow</title>
-      <desc id="home-flow-desc">BonusEngine and SportsCapitalEngine currently move structured data through preparation and calculation into shared risk, liquidity, approval, simulation or execution, settlement and reporting stages. Planned engines are shown separately in a muted future layer.</desc>
+      <desc id="home-flow-desc">BonusEngine and SportsCapitalEngine currently move structured data through preparation and calculation into shared risk and liquidity checks. From there, work either enters Simulation directly or goes through Approval before controlled Execution. Both routes continue to Settlement and Reporting or Monitoring. Planned engines are shown separately in a muted future layer.</desc>
       <defs>
         <linearGradient id="flowCurrentLine" x1="0" x2="1">
           <stop offset="0" stop-color="currentColor" stop-opacity=".32"/>
@@ -142,7 +142,7 @@
       </div>
       <div class="home-flow-mobile-shared">
         <strong>Shared stages</strong>
-        <small>Risk → Liquidity → Simulation, or Approval → Execution → Settlement → Reporting / Monitoring</small>
+        <small>Risk → Liquidity → either Simulation or Approval → Execution; both routes → Settlement → Reporting / Monitoring</small>
       </div>
       <div class="home-flow-mobile-future">
         <span class="capability-badge is-planned">Future</span>
