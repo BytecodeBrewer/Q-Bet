@@ -41,7 +41,7 @@ def bonus_input_snapshot(*, user_id: int) -> BonusInputSnapshot:
     return BonusInputSnapshot(
         active_offers=len(offers),
         ready_offers=len(ready),
-        provider_count=len({offer.provider_id for offer in offers}),
+        provider_count=len({offer.provider.provider_id for offer in offers}),
     )
 
 
