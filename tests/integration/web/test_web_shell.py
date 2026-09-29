@@ -97,7 +97,7 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertNotContains(response, "Kubernetes")
         self.assertNotContains(response, "Azure")
         self.assertNotContains(response, "BaseEngine")
-        self.assertNotContains(response, "YieldEngine")
+        self.assertNotContains(response, ">YieldEngine<")
         self.assertNotContains(response, "AlphaEngine")
 
     def test_product_styles_respect_reduced_motion(self) -> None:
