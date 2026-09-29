@@ -11,6 +11,7 @@
 
   const FUTURE_REVEAL_DELAY_MS = Number(flow.dataset.futureDelay || 3000);
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const desktopFlow = window.matchMedia("(min-width: 781px)");
   const pulseTimers = new WeakMap();
   const packetSpecs = Array.from(flow.querySelectorAll("[data-flow-packet]"))
     .map((packet) => {
@@ -113,7 +114,7 @@
   }
 
   function startAnimation() {
-    if (frameId !== null || reducedMotion.matches || !isVisible) {
+    if (frameId !== null || reducedMotion.matches || !desktopFlow.matches || !isVisible) {
       return;
     }
     lastTimestamp = null;
@@ -173,6 +174,15 @@
   reducedMotion.addEventListener("change", () => {
     scheduleFutureReveal();
     if (reducedMotion.matches) {
+      stopAnimation();
+      return;
+    }
+    resetPacketState();
+    startAnimation();
+  });
+
+  desktopFlow.addEventListener("change", () => {
+    if (!desktopFlow.matches) {
       stopAnimation();
       return;
     }
