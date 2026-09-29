@@ -23,6 +23,16 @@ def _environment_flag(name: str, default: str = "false") -> bool:
     return os.environ.get(name, default).lower() == "true"
 
 
+def _environment_positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except ValueError as error:
+        raise ImproperlyConfigured(f"{name} must be a positive integer") from error
+    if value <= 0:
+        raise ImproperlyConfigured(f"{name} must be a positive integer")
+    return value
+
+
 def require_database_url(value: str) -> str:
     """Require the shared PostgreSQL source of truth instead of falling back locally."""
 
@@ -162,6 +172,10 @@ QBET_PROFILE_WEB_REQUESTS = _environment_flag("QBET_PROFILE_WEB_REQUESTS") or (
     os.environ.get("VERCEL_ENV", "").strip().lower() == "preview"
 )
 QBET_METRICS_TOKEN = os.environ.get("QBET_METRICS_TOKEN", "")
+QBET_POLLING_TICK_TOKEN = os.environ.get("QBET_POLLING_TICK_TOKEN", "")
+QBET_POLLING_TICK_MAX_WORK = _environment_positive_int("QBET_POLLING_TICK_MAX_WORK", 10)
+QBET_POLLING_CLAIM_SECONDS = _environment_positive_int("QBET_POLLING_CLAIM_SECONDS", 120)
+QBET_POLLING_DEFER_SECONDS = _environment_positive_int("QBET_POLLING_DEFER_SECONDS", 300)
 QBET_GRAFANA_URL = optional_external_url("QBET_GRAFANA_URL")
 QBET_VERCEL_DASHBOARD_URL = optional_external_url("QBET_VERCEL_DASHBOARD_URL")
 QBET_SUPABASE_DASHBOARD_URL = optional_external_url("QBET_SUPABASE_DASHBOARD_URL")
@@ -172,6 +186,9 @@ QBET_SIMULATION_SPORTS_SOURCE = (
 QBET_SIMULATION_ODDS_SPORT = os.environ.get("QBET_SIMULATION_ODDS_SPORT", "").strip()
 QBET_SIMULATION_ODDS_EVENT_ID = os.environ.get("QBET_SIMULATION_ODDS_EVENT_ID", "").strip()
 QBET_SIMULATION_ODDS_MARKET = os.environ.get("QBET_SIMULATION_ODDS_MARKET", "").strip()
+QBET_SIMULATION_ODDS_EVENT_STARTS_AT = os.environ.get(
+    "QBET_SIMULATION_ODDS_EVENT_STARTS_AT", ""
+).strip()
 QBET_SIMULATION_ASSUMED_LIQUIDITY = os.environ.get("QBET_SIMULATION_ASSUMED_LIQUIDITY", "").strip()
 QBET_SIMULATION_REQUESTED_TOTAL_STAKE = os.environ.get(
     "QBET_SIMULATION_REQUESTED_TOTAL_STAKE", ""
