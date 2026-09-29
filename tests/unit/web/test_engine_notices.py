@@ -155,7 +155,7 @@ def test_provider_runtime_failure_maps_to_contextual_error() -> None:
 
     assert notice.severity == "error"
     assert notice.title == "Market data source unavailable"
-    assert "the_odds_api" in notice.detail
+    assert "the_odds_api" not in notice.detail
 
 
 def test_no_opportunity_is_information_not_error() -> None:
