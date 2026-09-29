@@ -268,3 +268,15 @@ class CapitalMovementRepositoryTests(TestCase):
         self.assertIsNotNone(row)
         assert row is not None
         self.assertTrue(row[0])
+
+    def test_capital_funding_proposal_table_uses_postgresql_row_level_security(self) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT relrowsecurity FROM pg_class "
+                "WHERE relname = 'qbet_capital_funding_proposals'"
+            )
+            row = cursor.fetchone()
+
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertTrue(row[0])
