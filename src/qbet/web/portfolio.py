@@ -10,7 +10,8 @@ from django.db import DatabaseError
 from pydantic import ValidationError
 
 from qbet.ledger import PortfolioLedger
-from qbet.storage.models import PortfolioLedgerRow
+from qbet.providers import GERMAN_JURISDICTION, ProviderStatus
+from qbet.storage.models import PortfolioLedgerRow, SportsbookProviderRow
 from qbet.web.models import PortfolioCapitalLocation, PortfolioLedgerAccess
 
 
@@ -20,8 +21,8 @@ class CapitalLocation:
     mode: str
     currency: str
     label: str
-    amount: Decimal
-    updated_at: datetime
+    amount: Decimal | None
+    updated_at: datetime | None
     source: str
     status: str
     provider_id: str | None = None
@@ -31,6 +32,7 @@ class CapitalLocation:
     locked: Decimal | None = None
     pending: Decimal | None = None
 
+
 @dataclass(frozen=True)
 class CurrencyTotals:
     currency: str
@@ -39,6 +41,13 @@ class CurrencyTotals:
     reserved: Decimal
     locked: Decimal
     pending: Decimal
+
+    @property
+    def in_use(self) -> Decimal:
+        """Customer-facing active capital combines dispatched and unsettled amounts."""
+
+        return self.locked + self.pending
+
 
 @dataclass(frozen=True)
 class PortfolioCapitalView:
@@ -51,7 +60,7 @@ class PortfolioCapitalView:
 
 
 class PortfolioCapitalReadService:
-    """Expose ledger lifecycle totals and independently tracked capital locations."""
+    """Expose ledger totals and account/provider capital locations."""
 
     def snapshot(self, *, user_id: int, is_staff: bool = False) -> PortfolioCapitalView:
         try:
@@ -67,6 +76,14 @@ class PortfolioCapitalReadService:
                 rows = tuple(rows_query)
             allocations = tuple(
                 PortfolioCapitalLocation.objects.filter(user_id=user_id).select_related("provider")
+            )
+            providers = tuple(
+                SportsbookProviderRow.objects.filter(
+                    jurisdiction=GERMAN_JURISDICTION,
+                    sports_betting=True,
+                    online=True,
+                    status=ProviderStatus.ACTIVE.value,
+                ).order_by("display_name", "provider_id")
             )
         except DatabaseError:
             return PortfolioCapitalView(
@@ -95,37 +112,55 @@ class PortfolioCapitalReadService:
                 (execution_totals if balance.mode == "execution" else simulation_totals).append(totals)
 
                 matching = [
-                    item for item in allocations
+                    item
+                    for item in allocations
                     if item.mode == balance.mode and item.currency == balance.currency
                 ]
+                allocations_by_provider = {item.provider_id: item for item in matching}
                 provider_total = sum((item.amount for item in matching), Decimal(0))
                 if provider_total > tracked_total:
                     return PortfolioCapitalView(
                         available=False,
-                        message="Capital locations exceed the authoritative ledger and require correction.",
+                        message="Recorded provider balances exceed total portfolio capital.",
                     )
 
                 target = execution if balance.mode == "execution" else simulation
                 target.append(
                     CapitalLocation(
-                        kind="central", mode=balance.mode, currency=balance.currency,
-                        label="Central payment account", amount=tracked_total - provider_total,
+                        kind="central",
+                        mode=balance.mode,
+                        currency=balance.currency,
+                        label="bunq",
+                        amount=tracked_total - provider_total,
                         updated_at=row.updated_at,
-                        source="PortfolioLedger · residual after provider locations",
-                        status="verified",
+                        source="Q-Bet recorded balance",
+                        status="recorded",
                         available=balance.available,
                         reserved=balance.reserved,
                         locked=balance.locked,
                         pending=balance.pending,
                     )
                 )
-                for item in matching:
+
+                visible_providers = (
+                    providers
+                    if balance.mode == "execution"
+                    else tuple(item.provider for item in matching)
+                )
+                for provider in visible_providers:
+                    item = allocations_by_provider.get(provider.provider_id)
                     target.append(
                         CapitalLocation(
-                            kind="provider", mode=item.mode, currency=item.currency,
-                            label=item.provider.display_name, amount=item.amount,
-                            updated_at=item.updated_at, source="Manual location correction",
-                            status="manual", provider_id=item.provider.provider_id, note=item.note,
+                            kind="provider",
+                            mode=balance.mode,
+                            currency=balance.currency,
+                            label=provider.display_name,
+                            amount=item.amount if item is not None else None,
+                            updated_at=item.updated_at if item is not None else None,
+                            source="Entered in Q-Bet" if item is not None else "",
+                            status="recorded" if item is not None else "not_recorded",
+                            provider_id=provider.provider_id,
+                            note=item.note if item is not None else "",
                         )
                     )
         except (ValidationError, ValueError, AttributeError):
@@ -135,7 +170,8 @@ class PortfolioCapitalReadService:
             )
 
         return PortfolioCapitalView(
-            execution=tuple(execution), simulation=tuple(simulation),
+            execution=tuple(execution),
+            simulation=tuple(simulation),
             execution_totals=tuple(execution_totals),
             simulation_totals=tuple(simulation_totals),
         )
