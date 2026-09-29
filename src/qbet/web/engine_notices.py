@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Iterable
+from typing import Iterable, Literal
 
 from django.db import DatabaseError
 from django.utils import timezone
@@ -225,6 +225,7 @@ def _provider_notice(activity: ProviderActivitySnapshot) -> EngineNotice | None:
 
 
 def _run_failure_notice(reason_code: str, bonus_offers_url: str) -> EngineNotice:
+    severity: Literal["warning", "error"]
     action_label: str | None = None
     action_url: str | None = None
 
