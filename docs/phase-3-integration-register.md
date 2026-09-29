@@ -88,7 +88,7 @@ Result ingestion remains a separate role even when the selected quotation provid
 
 ## Source Balancing And Smart Polling
 
-The provider-neutral `SmartPollingPolicy` resolves persisted provider/target/engine strategies with configurable refresh points, freshness, bounded attempts, quota/capacity metadata, cost class and staff-managed enablement. Final Execution revalidation remains a separate RequestHandler concern.
+The provider-neutral `SmartPollingPolicy` resolves persisted provider/target/engine strategies with configurable refresh points, freshness, bounded attempts, quota/capacity metadata, cost class and staff-managed enablement. A restart-safe PostgreSQL work repository plus protected bounded hosted tick now wakes the connected SportsCapital Simulation / The Odds API route, persists normalized snapshots and activity, and preserves disabled history. Supabase Cron only wakes the endpoint; Python policy still decides whether the provider is called. Final Execution revalidation remains a separate RequestHandler concern.
 
 Automatic balancing across multiple quotation providers remains a later slice to introduce when another real source is connected; the current persisted strategy boundary already allows plan/capacity changes without editing Python constants.
 
