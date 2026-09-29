@@ -172,7 +172,7 @@
   filter: drop-shadow(0 0 7px color-mix(in srgb, var(--admin) 48%, transparent));
 }
 .flow-future-layer {
-  opacity: .62;
+  opacity: .76;
   transform: translateY(0);
   transform-origin: center;
   transition: opacity .72s ease, transform .72s cubic-bezier(.2,.75,.2,1);
@@ -196,12 +196,12 @@
 }
 .flow-future-engine text {
   fill: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 760;
 }
 .flow-future-note {
   fill: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .home-flow-mobile { display: none; }
 
@@ -400,7 +400,7 @@
 @media (prefers-reduced-motion: reduce) {
   .flow-packet { display: none; }
   .flow-future-layer {
-    opacity: .62 !important;
+    opacity: .76 !important;
     transform: none !important;
     transition: none !important;
   }
