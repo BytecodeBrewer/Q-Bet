@@ -512,3 +512,25 @@ body[data-theme="dark"] .portfolio-state-verified { background: #264238; color: 
   .portfolio-total-card dl, .portfolio-state-grid { grid-template-columns: 1fr; }
   .portfolio-authority-badge { white-space: normal; }
 }
+
+
+.capital-map-heading { display:flex; justify-content:space-between; align-items:end; gap:16px; margin:24px 0 12px; }
+.capital-map-heading h3 { margin:3px 0 0; }
+.portfolio-location-central { border-left:4px solid #155e9d; }
+.portfolio-location-provider { border-left:4px solid #8a6a28; }
+.portfolio-state-manual { color:#75551d; background:#fff0cf; }
+body[data-theme="dark"] .portfolio-state-manual { color:#f1cb83; background:#493b21; }
+.location-provenance { margin-top:12px; padding:10px 12px; border-radius:7px; background:var(--surface); border:1px solid var(--border); }
+.location-provenance span { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
+.location-provenance strong { display:block; margin-top:3px; font-size:12px; }
+.location-provenance p { margin:7px 0 0; color:var(--muted); }
+.portfolio-editor-dialog { width:min(680px, calc(100vw - 28px)); border:1px solid var(--border); border-radius:14px; padding:0; background:var(--surface); color:var(--text); box-shadow:0 22px 70px rgba(0,0,0,.24); }
+.portfolio-editor-dialog::backdrop { background:rgba(16,24,32,.56); backdrop-filter:blur(2px); }
+.portfolio-editor-form { padding:22px; }
+.portfolio-editor-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:18px; }
+.portfolio-editor-grid label { display:grid; gap:6px; color:var(--muted); font-size:12px; font-weight:700; }
+.portfolio-editor-grid input,.portfolio-editor-grid select { width:100%; min-height:42px; padding:9px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface-subtle); color:var(--text); }
+.portfolio-editor-grid .full-width { grid-column:1/-1; }
+.portfolio-editor-note { display:flex; gap:10px; margin-top:16px; padding:12px; border-radius:8px; background:var(--primary-soft); color:var(--muted); font-size:12px; }
+.portfolio-editor-note strong { color:var(--primary); }
+@media (max-width:600px){.capital-map-heading{align-items:flex-start;flex-direction:column}.portfolio-editor-grid{grid-template-columns:1fr}.portfolio-editor-grid .full-width{grid-column:auto}}
