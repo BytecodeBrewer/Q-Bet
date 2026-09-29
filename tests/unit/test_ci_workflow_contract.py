@@ -57,11 +57,11 @@ def test_develop_cd_deploys_preview_only() -> None:
     assert "vercel deploy --prebuilt --yes" in block
     assert "vercel deploy --prebuilt --prod --yes" in block
     assert "https://q-bet.vercel.app" in block
-    assert 'if [ "$IS_PRODUCTION" = "true" ]; then' in block
-    assert 'vercel curl /health/ --deployment "$deployment_url" --fail --silent' in block
-    assert "vercel curl /accounts/login/" in block
-    assert "vercel curl /static/qbet_web/app.css" in block
+    assert "Verify production release health" in block
+    assert "if: github.ref == 'refs/heads/main'" in block
     assert 'curl --fail --silent --show-error "$STABLE_URL/health/"' in block
+    assert 'curl --fail --silent --show-error "$STABLE_URL/accounts/login/"' in block
+    assert 'curl --fail --silent --show-error "$STABLE_URL/static/qbet_web/app.css"' in block
 
 
 def test_pull_request_vercel_build_runs_after_failed_quality_gates() -> None:

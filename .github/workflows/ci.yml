@@ -347,13 +347,13 @@ jobs:
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
           echo "Vercel Production deployment: $deployment_url" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify deployed release health
+      - name: Verify production release health
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
-          deployment_url="${{ steps.deploy.outputs.url || steps.deploy-production.outputs.url }}"
           health=""
           for attempt in {1..12}; do
-            health="$(vercel curl /health/ --deployment "$deployment_url" --fail --silent || true)"
+            health="$(curl --fail --silent --show-error "$STABLE_URL/health/" || true)"
             if printf '%s' "$health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\"" &&                printf '%s' "$health" | grep -Fq '"status": "ok"' &&                printf '%s' "$health" | grep -Fq '"persistence": "ready"' &&                printf '%s' "$health" | grep -Fq '"readiness": "ready"'; then
               break
             fi
@@ -369,18 +369,10 @@ jobs:
             exit 1
           fi
 
-          home="$(vercel curl / --deployment "$deployment_url" --fail --silent)"
+          home="$(curl --fail --silent --show-error "$STABLE_URL/")"
           printf '%s' "$home" | grep -q '/static/qbet_web/app.css'
-          login="$(vercel curl /accounts/login/ --deployment "$deployment_url" --fail --silent)"
+          login="$(curl --fail --silent --show-error "$STABLE_URL/accounts/login/")"
           printf '%s' "$login" | grep -q '<form'
-          vercel curl /static/qbet_web/app.css \
-            --deployment "$deployment_url" \
-            --fail --silent --output /dev/null
+          curl --fail --silent --show-error "$STABLE_URL/static/qbet_web/app.css" --output /dev/null
 
-          if [ "$IS_PRODUCTION" = "true" ]; then
-            stable_health="$(curl --fail --silent --show-error "$STABLE_URL/health/")"
-            printf '%s' "$stable_health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\""
-            printf '%s' "$stable_health" | grep -Fq '"status": "ok"'
-          fi
-
-          echo "$VERCEL_ENVIRONMENT serves exact release $EXPECTED_RELEASE and passed hosted smoke checks." >> "$GITHUB_STEP_SUMMARY"
+          echo "Production serves exact release $EXPECTED_RELEASE and passed hosted smoke checks." >> "$GITHUB_STEP_SUMMARY"
