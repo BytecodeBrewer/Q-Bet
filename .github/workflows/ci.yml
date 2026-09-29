@@ -154,8 +154,58 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  vercel-build-check:
+    name: Vercel build check
+    needs:
+      - validation
+      - performance
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      EXPECTED_RELEASE: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify exact Vercel build head
+        shell: bash
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          test "$actual_sha" = "$EXPECTED_RELEASE" || {
+            echo "::error::Vercel build checkout $actual_sha does not match expected head $EXPECTED_RELEASE"
+            exit 1
+          }
+          echo "Checking Vercel buildability for exact head: $actual_sha" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate Vercel build configuration
+        shell: bash
+        run: |
+          test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
+          test -n "$VERCEL_ORG_ID" || { echo "Missing VERCEL_ORG_ID repository variable"; exit 1; }
+          test -n "$VERCEL_PROJECT_ID" || { echo "Missing VERCEL_PROJECT_ID repository variable"; exit 1; }
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@59
+
+      - name: Pull Vercel preview build configuration
+        run: vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
+
+      - name: Build Vercel artifacts without deploying
+        run: |
+          vercel build --yes --token "$VERCEL_TOKEN"
+          echo "Vercel build passed; no deployment was created." >> "$GITHUB_STEP_SUMMARY"
+
   deploy-develop:
-    name: Vercel develop deployment
+    name: Vercel develop CD
     needs:
       - validation
       - performance
@@ -163,7 +213,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: ${{ steps.deploy.outputs.url }}
+      url: https://q-bet.vercel.app
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
@@ -171,34 +221,36 @@ jobs:
       QBET_DJANGO_SECRET_KEY: ${{ secrets.QBET_DJANGO_SECRET_KEY }}
       QBET_DATABASE_URL: ${{ secrets.QBET_MIGRATION_DATABASE_URL }}
       EXPECTED_RELEASE: ${{ github.sha }}
+      STABLE_URL: https://q-bet.vercel.app
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.sha }}
-      - name: Verify exact deploy head
+
+      - name: Verify exact develop deploy head
         shell: bash
         run: |
           actual_sha="$(git rev-parse HEAD)"
           test "$actual_sha" = "$EXPECTED_RELEASE" || {
-            echo "::error::Deployment checkout $actual_sha does not match expected head $EXPECTED_RELEASE"
+            echo "::error::Develop deployment checkout $actual_sha does not match expected head $EXPECTED_RELEASE"
             exit 1
           }
-          echo "Deploying exact head: $actual_sha" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
+          echo "Preparing stable develop release: $actual_sha" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Validate deployment configuration
-        shell: bash
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install runtime dependencies for deployment preflight
+        run: python -m pip install .
+
+      - name: Verify shared schema before stable deployment
+        env:
+          QBET_DJANGO_DEBUG: "false"
         run: |
-          test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
-          test -n "$VERCEL_ORG_ID" || { echo "Missing VERCEL_ORG_ID repository variable"; exit 1; }
-          test -n "$VERCEL_PROJECT_ID" || { echo "Missing VERCEL_PROJECT_ID repository variable"; exit 1; }
-          test -n "$QBET_DJANGO_SECRET_KEY" || {
-            echo "Missing QBET_DJANGO_SECRET_KEY secret"
-            exit 1
-          }
+          python manage.py migrate --check
+          echo "Shared PostgreSQL schema is compatible with $EXPECTED_RELEASE." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Load protected polling token from Supabase Vault
         shell: bash
@@ -229,93 +281,53 @@ jobs:
           echo "::add-mask::$token"
           echo "QBET_POLLING_TICK_TOKEN=$token" >> "$GITHUB_ENV"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate stable deployment configuration
+        shell: bash
+        run: |
+          test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
+          test -n "$VERCEL_ORG_ID" || { echo "Missing VERCEL_ORG_ID repository variable"; exit 1; }
+          test -n "$VERCEL_PROJECT_ID" || { echo "Missing VERCEL_PROJECT_ID repository variable"; exit 1; }
+          test -n "$QBET_DJANGO_SECRET_KEY" || {
+            echo "Missing QBET_DJANGO_SECRET_KEY secret"
+            exit 1
+          }
+
       - name: Install Vercel CLI
         run: npm install --global vercel@59
 
-      - name: Deploy hosted develop release
+      - name: Pull Vercel production build configuration
+        run: vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+
+      - name: Build stable Vercel artifacts
+        run: vercel build --prod --token "$VERCEL_TOKEN"
+
+      - name: Deploy exact develop build to stable Vercel
         id: deploy
         shell: bash
         run: |
           deployment_url="$(
-            vercel deploy --yes \
-              --token "$VERCEL_TOKEN" \
-              --env QBET_HOSTED_PREVIEW=true \
-              --env QBET_DJANGO_DEBUG=false \
-              --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app \
-              --env QBET_DJANGO_SECRET_KEY="$QBET_DJANGO_SECRET_KEY" \
-              --env QBET_POLLING_TICK_TOKEN="$QBET_POLLING_TICK_TOKEN" \
-              --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
-              --env QBET_SIMULATION_MODE_ENABLED=false
+            vercel deploy --prebuilt --prod --yes               --token "$VERCEL_TOKEN"               --env QBET_HOSTED_PREVIEW=false               --env QBET_DJANGO_DEBUG=false               --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app               --env QBET_DJANGO_SECRET_KEY="$QBET_DJANGO_SECRET_KEY"               --env QBET_POLLING_TICK_TOKEN="$QBET_POLLING_TICK_TOKEN"               --env QBET_RELEASE_SHA="$EXPECTED_RELEASE"               --env QBET_SIMULATION_MODE_ENABLED=false
           )"
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
-          echo "Vercel develop deployment: $deployment_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "Stable Vercel deployment: $deployment_url" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Smoke test hosted develop deployment
+      - name: Verify stable alias advanced to exact develop head
         shell: bash
-        env:
-          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
-          health="$(
-            vercel curl /health/ \
-              --deployment "$DEPLOYMENT_URL" \
-              --silent
-          )"
-          printf 'Hosted readiness: %s\n' "$health"
+          health=""
+          for attempt in {1..12}; do
+            health="$(curl --fail --silent --show-error "$STABLE_URL/health/" || true)"
+            if printf '%s' "$health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\"" &&                printf '%s' "$health" | grep -Fq '"status": "ok"' &&                printf '%s' "$health" | grep -Fq '"persistence": "ready"' &&                printf '%s' "$health" | grep -Fq '"readiness": "ready"'; then
+              echo "Stable alias serves exact develop release $EXPECTED_RELEASE." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 5
+          done
 
-          if ! printf '%s' "$health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\""; then
-            echo "::error::Hosted release does not match reviewed head $EXPECTED_RELEASE."
-            exit 1
-          fi
-
-          if printf '%s' "$health" | grep -q '"status": "ok"' && \
-             printf '%s' "$health" | grep -q '"persistence": "ready"' && \
-             printf '%s' "$health" | grep -q '"readiness": "ready"'; then
-            echo "Hosted preview is operationally ready for product acceptance." >> "$GITHUB_STEP_SUMMARY"
-          elif printf '%s' "$health" | grep -q '"status": "unavailable"' && \
-               printf '%s' "$health" | grep -q '"persistence": "migrations_pending"'; then
-            echo "::warning::Hosted preview has pending migrations; validation continues without mutating the shared database."
-            {
-              echo "### Hosted preview readiness: migrations pending"
-              echo
-              echo "The deployment succeeded, but its configured shared PostgreSQL schema is behind the deployed code."
-              echo "Deployment validation remains non-blocking for this operator-owned migration state, but this environment is NOT product-ready until the intended migrations are applied."
-            } >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::error::Hosted preview is not operationally ready."
-            exit 1
-          fi
-
-          if printf '%s' "$health" | grep -q '"status": "ok"' && \
-             printf '%s' "$health" | grep -q '"persistence": "ready"' && \
-             printf '%s' "$health" | grep -q '"readiness": "ready"'; then
-            home="$(
-              vercel curl / \
-                --deployment "$DEPLOYMENT_URL" \
-                --fail --silent
-            )"
-            printf '%s' "$home" | grep -q '/static/qbet_web/app.css'
-
-            login="$(
-              vercel curl /accounts/login/ \
-                --deployment "$DEPLOYMENT_URL" \
-                --fail --silent
-            )"
-            printf '%s' "$login" | grep -q '<form'
-
-            vercel curl /static/qbet_web/app.css \
-              --deployment "$DEPLOYMENT_URL" \
-              --fail --silent \
-              --output /dev/null
-          elif printf '%s' "$health" | grep -q '"status": "unavailable"' && \
-               printf '%s' "$health" | grep -q '"persistence": "migrations_pending"'; then
-            echo "::warning::Hosted preview has pending migrations; skipping strict hosted smoke checks until schema is updated."
-            {
-              echo "### Hosted preview readiness: migrations pending"
-              echo
-              echo "Preview deployment succeeded, but shared database migrations are still pending."
-              echo "Skipping strict smoke checks to keep deployment validation non-blocking until operators apply migrations."
-            } >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::error::Hosted preview is not operationally ready."
-            exit 1
-          fi
+          echo "::error::Stable alias did not advance to healthy release $EXPECTED_RELEASE."
+          printf 'Last health response: %s\n' "$health"
+          exit 1
