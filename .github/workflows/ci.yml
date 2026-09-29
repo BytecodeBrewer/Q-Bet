@@ -155,12 +155,13 @@ jobs:
           retention-days: 14
 
   vercel-build-check:
-    name: Vercel build check
+    name: Vercel preview build check
     needs:
       - validation
       - performance
     if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
+    environment: preview
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
@@ -220,21 +221,19 @@ jobs:
           echo "Vercel build passed; no deployment was created." >> "$GITHUB_STEP_SUMMARY"
 
   deploy-develop:
-    name: Vercel develop CD
+    name: Vercel production CD
     needs:
       - validation
       - performance
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     environment:
-      name: staging
+      name: production
       url: https://q-bet.vercel.app
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-      QBET_DJANGO_SECRET_KEY: ${{ secrets.QBET_DJANGO_SECRET_KEY }}
-      QBET_DATABASE_URL: ${{ secrets.QBET_MIGRATION_DATABASE_URL }}
       EXPECTED_RELEASE: ${{ github.sha }}
       STABLE_URL: https://q-bet.vercel.app
     steps:
@@ -260,6 +259,7 @@ jobs:
       - name: Install runtime dependencies for deployment preflight
         run: |
           python -m pip install .
+          python -m pip install python-dotenv
           python -m pip install uv
 
       - name: Validate stable deployment configuration
@@ -268,25 +268,28 @@ jobs:
           test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
           test -n "$VERCEL_ORG_ID" || { echo "Missing VERCEL_ORG_ID repository variable"; exit 1; }
           test -n "$VERCEL_PROJECT_ID" || { echo "Missing VERCEL_PROJECT_ID repository variable"; exit 1; }
-          test -n "$QBET_DJANGO_SECRET_KEY" || {
-            echo "Missing QBET_DJANGO_SECRET_KEY secret"
-            exit 1
-          }
-          test -n "$QBET_DATABASE_URL" || {
-            echo "Missing QBET_MIGRATION_DATABASE_URL staging environment secret; required to read the polling token from Supabase Vault."
-            exit 1
-          }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@59
+
+      - name: Pull Vercel production build configuration
+        run: vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
 
       - name: Load protected polling token from Supabase Vault
         shell: bash
         run: |
-          token="$(
-            python - <<'PY'
-          import os
-
+          token="$(python - <<'PY'
           import psycopg
+          from dotenv import dotenv_values
 
-          with psycopg.connect(os.environ["QBET_DATABASE_URL"]) as connection:
+          database_url = dotenv_values(".vercel/.env.production.local").get("QBET_DATABASE_URL")
+          if not database_url:
+              raise SystemExit("QBET_DATABASE_URL is missing from Vercel Production environment")
+
+          with psycopg.connect(database_url) as connection:
               with connection.cursor() as cursor:
                   cursor.execute(
                       """
@@ -306,16 +309,6 @@ jobs:
           echo "::add-mask::$token"
           echo "QBET_POLLING_TICK_TOKEN=$token" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install Vercel CLI
-        run: npm install --global vercel@59
-
-      - name: Pull Vercel production build configuration
-        run: vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
-
       - name: Build stable Vercel artifacts
         env:
           QBET_HOSTED_PREVIEW: "false"
@@ -330,7 +323,14 @@ jobs:
         shell: bash
         run: |
           deployment_url="$(
-            vercel deploy --prebuilt --prod --yes               --token "$VERCEL_TOKEN"               --env QBET_HOSTED_PREVIEW=false               --env QBET_DJANGO_DEBUG=false               --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app               --env QBET_DJANGO_SECRET_KEY="$QBET_DJANGO_SECRET_KEY"               --env QBET_POLLING_TICK_TOKEN="$QBET_POLLING_TICK_TOKEN"               --env QBET_RELEASE_SHA="$EXPECTED_RELEASE"               --env QBET_SIMULATION_MODE_ENABLED=false
+            vercel deploy --prebuilt --prod --yes \
+              --token "$VERCEL_TOKEN" \
+              --env QBET_HOSTED_PREVIEW=false \
+              --env QBET_DJANGO_DEBUG=false \
+              --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app \
+              --env QBET_POLLING_TICK_TOKEN="$QBET_POLLING_TICK_TOKEN" \
+              --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
+              --env QBET_SIMULATION_MODE_ENABLED=false
           )"
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
           echo "Stable Vercel deployment: $deployment_url" >> "$GITHUB_STEP_SUMMARY"

@@ -15,8 +15,10 @@ def _job(name: str, next_name: str | None = None) -> str:
 def test_pull_request_vercel_gate_builds_without_deploying() -> None:
     block = _job("vercel-build-check", "deploy-develop")
 
+    assert "!cancelled()" in block
     assert "github.event_name == 'pull_request'" in block
     assert "github.event.pull_request.head.sha" in block
+    assert "environment: preview" in block
     assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=preview" in block
     assert "vercel build --yes" in block
@@ -33,9 +35,13 @@ def test_develop_cd_validates_config_and_updates_stable_alias() -> None:
     assert "github.event_name == 'push'" in block
     assert "refs/heads/develop" in block
     assert "python manage.py migrate --check" not in block
+    assert "manage.py migrate" not in block
     assert "Validate stable deployment configuration" in block
-    assert "QBET_MIGRATION_DATABASE_URL" in block
+    assert "QBET_MIGRATION_DATABASE_URL" not in block
+    assert "name: production" in block
+    assert "name: staging" not in block
     assert "qbet_polling_tick_token" in block
+    assert "dotenv_values(\".vercel/.env.production.local\")" in block
     assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=production" in block
     assert "QBET_HOSTED_PREVIEW: \"false\"" in block
