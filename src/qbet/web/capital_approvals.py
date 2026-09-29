@@ -51,6 +51,7 @@ def _proposal_view(record) -> dict[str, object]:
         movement is None
         and record.action_method is CapitalActionMethod.MANUAL
         and proposal.state is FundingProposalState.APPROVED
+        and timezone.now() < proposal.expires_at
     ):
         manual_instruction = _CAPITAL_WORKFLOW.manual_instruction(
             proposal.id,
