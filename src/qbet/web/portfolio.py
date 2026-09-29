@@ -125,15 +125,33 @@ class PortfolioCapitalReadService:
                     )
 
                 target = execution if balance.mode == "execution" else simulation
+                unallocated = tracked_total - provider_total
+                if balance.mode == "execution":
+                    target.append(
+                        CapitalLocation(
+                            kind="central",
+                            mode=balance.mode,
+                            currency=balance.currency,
+                            label="bunq",
+                            amount=None,
+                            updated_at=None,
+                            source="bunq read-only balance",
+                            status="unavailable",
+                        )
+                    )
                 target.append(
                     CapitalLocation(
-                        kind="central",
+                        kind="unallocated",
                         mode=balance.mode,
                         currency=balance.currency,
-                        label="bunq",
-                        amount=tracked_total - provider_total,
+                        label=(
+                            "Unallocated capital"
+                            if balance.mode == "execution"
+                            else "Unallocated simulation capital"
+                        ),
+                        amount=unallocated,
                         updated_at=row.updated_at,
-                        source="Q-Bet recorded balance",
+                        source="Q-Bet ledger allocation",
                         status="recorded",
                         available=balance.available,
                         reserved=balance.reserved,
