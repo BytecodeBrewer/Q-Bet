@@ -16,6 +16,7 @@ from qbet.bank.bunq import (
     BunqBalanceProvider,
     BunqOperatingMode,
 )
+from qbet.bank.funding import FundingApprover
 from qbet.bank.movement import (
     CapitalMovementObservation,
     CapitalMovementObservationStatus,
@@ -385,7 +386,7 @@ class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
 
         approved_funding = CapitalFundingWorkflowRepository().decide(
             prepared_funding.proposal.id,
-            actor=OWNER,
+            approver=FundingApprover(identity=OWNER, is_authenticated=True),
             approve=True,
             decided_at=NOW + timedelta(minutes=2),
         )
