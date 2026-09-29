@@ -12,6 +12,8 @@ The core system is structurally available from data ingestion to user-facing out
 
 Users can persist personal `BonusEngine` / `SportsCapitalEngine` Simulation and Execution selections inside the global staff routing guardrails. Missing preferences fail closed, globally disabled routes remain unavailable without deleting stored user intent, and Execution selection does not bypass approval or capital boundaries.
 
+Smart Polling now has a hosted-runtime composition for the current The Odds API market path. Eligible global/user routes create restart-safe PostgreSQL polling work, a protected bounded Django tick evaluates that work through the persisted `SmartPollingPolicy`, and only due requests reach the provider adapter. Supabase Cron can wake that endpoint through Vault-backed authorization; the scheduler itself contains no polling policy and does not perform provider I/O.
+
 Engine runtime state is explicit: `Inactive` means routing is disabled, `Ready` means the engine is enabled and ready to accept work, and `Running` is reserved for durable work that is actually processing. Monitoring, engine detail, and the dashboard use the same persisted state sources and vocabulary for that distinction.
 
 Display preferences are durable per user. Language affects the supported authenticated application chrome and locale-sensitive date/number formatting. The currency setting is a non-converting **preferred recorded currency**: Q-Bet prioritizes and highlights report sections whose authoritative values are already recorded in that currency. It never converts or relabels transaction/report amounts without an explicitly approved FX presentation source.
@@ -109,6 +111,7 @@ The README stays intentionally high-level. The detailed design lives in the proj
 - [Phase 3 Hosted Web Performance](docs/phase-3-hosted-performance.md) — Vercel/Supabase hosted-path measurements and repeatable profiling procedure
 - [bunq Adapter](docs/bunq.md) — read-only/sandbox modes, secret configuration, and protected E2E execution
 - [The Odds API](docs/the-odds-api.md) — current market-data adapter and development smoke path
+- [Hosted Smart Polling](docs/smart-polling-runtime.md) — durable work state, protected tick, and Supabase Cron/Vault wake-up procedure
 - [Django Web Shell](docs/django-web-shell.md) — Django/Supabase bootstrap and operational notes
 
 For implementation history and detailed changes, use the GitHub Issues, Pull Requests, and Releases.

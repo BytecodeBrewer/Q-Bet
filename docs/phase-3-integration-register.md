@@ -28,7 +28,7 @@ This file is the companion register for concrete Phase 3 external integrations. 
 | Execution adapters | Prefer official APIs where supported; otherwise keep the Phase 3 flow notification/manual-action-first. | Provider-specific execution choices still pending. | sandbox bank execution boundary exists; provider execution integrations pending |
 | Performance validation | Add repeatable performance/load measurements and operator-driven test runs against the connected system, not only unit/integration test execution. | Dedicated internal connected baseline first; provider/network hot paths later. | Phase 3 internal performance baseline implemented |
 | GUI/product experience | Continue incremental visual refinement, animations, interaction polish, and clearer product surfaces while integrations are added. | Existing Django GUI remains the product surface. | functional controls exist; larger Settings/Admin/UX expansion later in Phase 3 |
-| Cloud runtime | Keep the current Vercel + Supabase production baseline while Phase 3 validates integrations. Broader container orchestration and per-user cloud isolation are Phase 4 concerns. | Vercel + Supabase current baseline. | existing |
+| Cloud runtime | Keep the current Vercel + Supabase production baseline while Phase 3 validates integrations. Broader container orchestration and per-user cloud isolation are Phase 4 concerns. | Vercel + Supabase current baseline. | protected bounded Smart Polling tick + durable PostgreSQL work state implemented; Supabase Cron/Vault operator activation remains an explicit deployment action |
 
 ## German Sportsbook Provider Identity
 
@@ -89,6 +89,8 @@ Result ingestion remains a separate role even when the selected quotation provid
 ## Source Balancing And Smart Polling
 
 The provider-neutral `SmartPollingPolicy` resolves persisted provider/target/engine strategies with configurable refresh points, freshness, bounded attempts, quota/capacity metadata, cost class and staff-managed enablement. Final Execution revalidation remains a separate RequestHandler concern.
+
+The hosted runtime persists target work in PostgreSQL, derives future work only from effective global/user route selections, atomically claims a bounded due set, and dispatches The Odds API only after the existing policy says the work is due. Successful normalized snapshots and last-fetch state survive process recreation. Route disablement prevents future provider calls without deleting polling history. Supabase Cron is only the wake-up mechanism and is configured separately through Vault-backed authorization; no polling policy is duplicated in SQL.
 
 Automatic balancing across multiple quotation providers remains a later slice to introduce when another real source is connected; the current persisted strategy boundary already allows plan/capacity changes without editing Python constants.
 

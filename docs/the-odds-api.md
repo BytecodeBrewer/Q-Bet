@@ -24,6 +24,34 @@ query authentication, regions, markets, oddsFormat, dateFormat, usage headers,
 and rate-limit responses in its v4 API guide:
 https://the-odds-api.com/liveapi/guides/v4/
 
+## Hosted Smart Polling
+
+The Phase 3 hosted polling path reuses the same read-only `TheOddsApiAdapter` without turning Vercel or Supabase Cron into a second policy engine:
+
+    Supabase Cron wake-up
+      -> POST /internal/polling/tick/
+      -> durable qbet_polling_work rows
+      -> SmartPollingPolicy
+      -> due work only
+      -> TheOddsApiAdapter
+      -> NormalizedMarketSnapshot
+      -> PostgreSQL polling state + Monitoring activity
+
+The tick endpoint requires `QBET_POLLING_TICK_TOKEN` as a Bearer token and returns a generic 404 when authorization is absent or incorrect. One request processes at most `QBET_POLLING_TICK_MAX_WORK` rows, which defaults to 10 and is limited to 1-100.
+
+The first connected hosted slice polls one configured event/market target and can reuse the Simulation sport/event/market identifiers when dedicated polling values are omitted:
+
+- `QBET_POLLING_ODDS_SPORT`
+- `QBET_POLLING_ODDS_EVENT_ID`
+- `QBET_POLLING_ODDS_MARKET`
+- `QBET_POLLING_ODDS_EVENT_STARTS_AT` as an explicit timezone-aware ISO-8601 timestamp
+
+The event start time is required because refresh-point policy is evaluated before provider I/O. Q-Bet does not spend a provider request merely to guess scheduling metadata. A future discovery/import slice may seed more targets through the same durable work/runtime boundary without changing the scheduler contract.
+
+A successful fetch persists the validated normalized snapshot and its actual fetch time. Missing credentials, provider failures, rate limits, stale/fresh scheduling decisions, disabled routes, and terminal decisions remain explicit durable/Monitoring outcomes. Final Execution `RequestHandler` revalidation stays separate.
+
+See [Hosted Smart Polling](smart-polling-runtime.md) for the Supabase Cron/Vault operator procedure.
+
 ## Connected SportsCapital Simulation
 
 GUI-started SportsCapital Simulation can opt into one configured two-outcome The Odds API event/market. The connected path remains read-only and follows:
