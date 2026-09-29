@@ -276,7 +276,13 @@ class PollingTickEndpointTests(TestCase):
         settings_values["QBET_POLLING_TICK_MAX_WORK"] = 1
         with self.settings(**settings_values):
             candidates = tuple(
-                candidate.model_copy(update={"next_due_at": now - timedelta(minutes=2)})
+                candidate.model_copy(
+                    update={
+                        "next_due_at": now - timedelta(minutes=2),
+                        "last_outcome": "scheduled",
+                        "last_reason": "market_refresh_due",
+                    }
+                )
                 for candidate in configured_polling_work(now=now)
             )
             PostgresPollingWorkRepository().synchronize(candidates)
