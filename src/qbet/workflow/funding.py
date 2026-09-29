@@ -119,7 +119,7 @@ class SimulationSandboxFundingCoordinator:
             balance=balance,
             action_method=CapitalActionMethod.SANDBOX_ADAPTER,
             max_amount=self._max_amount,
-            max_balance_age_seconds=max(1, int(self._max_balance_age.total_seconds())),
+            max_balance_age_seconds=max(0, int(self._max_balance_age.total_seconds())),
         )
         return self._workflow_repository.publish_attention(
             record,
