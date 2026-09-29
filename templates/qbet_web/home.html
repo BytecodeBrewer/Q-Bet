@@ -23,12 +23,20 @@
   </div>
 
   <div class="home-flow-shell" data-home-flow data-future-delay="3000" aria-label="Q-Bet current and future engine workflow">
-    <div class="flow-legend" aria-hidden="true">
-      <span><i class="flow-legend-dot is-current"></i>Current</span>
-      <span><i class="flow-legend-dot is-future"></i>Future / planned</span>
+    <div class="flow-toolbar">
+      <div class="flow-legend" aria-hidden="true">
+        <span><i class="flow-legend-dot is-current"></i>Current</span>
+        <span><i class="flow-legend-dot is-future"></i>Future / planned</span>
+      </div>
+      <button
+        class="flow-motion-toggle"
+        type="button"
+        data-flow-motion-toggle
+        aria-pressed="false"
+      ><span data-flow-motion-label>Pause motion</span></button>
     </div>
 
-    <svg class="home-flow-map" viewBox="0 0 1120 640" role="img" aria-labelledby="home-flow-title home-flow-desc">
+    <svg class="home-flow-map" viewBox="0 0 960 640" role="img" aria-labelledby="home-flow-title home-flow-desc">
       <title id="home-flow-title">Q-Bet engine workflow</title>
       <desc id="home-flow-desc">BonusEngine and SportsCapitalEngine currently move structured data through preparation and calculation into shared risk and liquidity checks. From there, work either enters Simulation directly or goes through Approval before controlled Execution. Both routes continue to Settlement and Reporting or Monitoring. Planned engines are shown separately in a muted future layer.</desc>
       <defs>
@@ -42,57 +50,57 @@
         </linearGradient>
       </defs>
 
-      <text class="flow-group-label" x="48" y="54">Current</text>
-      <text class="flow-engine-name" x="48" y="126">BonusEngine</text>
-      <text class="flow-engine-name" x="48" y="282">SportsCapitalEngine</text>
+      <text class="flow-group-label" x="42" y="54">Current</text>
+      <text class="flow-engine-name" x="42" y="126">BonusEngine</text>
+      <text class="flow-engine-name" x="42" y="282">SportsCapitalEngine</text>
 
-      <path id="flow-bonus-path" class="flow-current-path" d="M176 118 H450 C496 118 501 210 548 210"/>
-      <path id="flow-sports-path" class="flow-current-path" d="M176 274 H450 C496 274 501 210 548 210"/>
-      <path id="flow-shared-path" class="flow-shared-path" d="M548 210 H735"/>
-      <path id="flow-simulation-path" class="flow-simulation-path" d="M735 210 C785 210 792 130 850 130 C928 130 970 200 970 350 H800"/>
-      <path id="flow-execution-path" class="flow-execution-path" d="M735 210 C785 210 792 270 850 270 H970 V350 H800"/>
+      <path id="flow-bonus-path" class="flow-current-path" d="M150 118 H396 C430 118 435 210 470 210"/>
+      <path id="flow-sports-path" class="flow-current-path" d="M150 274 H396 C430 274 435 210 470 210"/>
+      <path id="flow-shared-path" class="flow-shared-path" d="M470 210 H620"/>
+      <path id="flow-simulation-path" class="flow-simulation-path" d="M620 210 C662 210 670 130 730 130 C790 130 840 200 840 350 H700"/>
+      <path id="flow-execution-path" class="flow-execution-path" d="M620 210 C662 210 670 270 730 270 H840 V350 H700"/>
 
-      <g class="flow-station" data-flow-station="bonus-data" transform="translate(190 118)">
-        <circle r="25"/><text y="5" text-anchor="middle">Data</text>
+      <g class="flow-station" data-flow-station="bonus-data" transform="translate(170 118)">
+        <circle r="31"/><text y="6" text-anchor="middle">Data</text>
       </g>
-      <g class="flow-station" data-flow-station="bonus-prepare" transform="translate(320 118)">
-        <circle r="25"/><text y="5" text-anchor="middle">Prepare</text>
+      <g class="flow-station" data-flow-station="bonus-prepare" transform="translate(282 118)">
+        <circle r="31"/><text y="6" text-anchor="middle">Prepare</text>
       </g>
-      <g class="flow-station" data-flow-station="bonus-calc" transform="translate(450 118)">
-        <circle r="25"/><text y="5" text-anchor="middle">Calculate</text>
-      </g>
-
-      <g class="flow-station" data-flow-station="sports-data" transform="translate(190 274)">
-        <circle r="25"/><text y="5" text-anchor="middle">Data</text>
-      </g>
-      <g class="flow-station" data-flow-station="sports-prepare" transform="translate(320 274)">
-        <circle r="25"/><text y="5" text-anchor="middle">Prepare</text>
-      </g>
-      <g class="flow-station" data-flow-station="sports-calc" transform="translate(450 274)">
-        <circle r="25"/><text y="5" text-anchor="middle">Calculate</text>
+      <g class="flow-station" data-flow-station="bonus-calc" transform="translate(394 118)">
+        <circle r="31"/><text y="6" text-anchor="middle">Calculate</text>
       </g>
 
-      <text class="flow-group-label" x="576" y="156">Shared stages</text>
-      <g class="flow-station flow-shared-station" data-flow-station="risk" transform="translate(620 210)">
-        <circle r="27"/><text y="5" text-anchor="middle">Risk</text>
+      <g class="flow-station" data-flow-station="sports-data" transform="translate(170 274)">
+        <circle r="31"/><text y="6" text-anchor="middle">Data</text>
       </g>
-      <g class="flow-station flow-shared-station" data-flow-station="liquidity" transform="translate(735 210)">
-        <circle r="27"/><text y="5" text-anchor="middle">Liquidity</text>
+      <g class="flow-station" data-flow-station="sports-prepare" transform="translate(282 274)">
+        <circle r="31"/><text y="6" text-anchor="middle">Prepare</text>
       </g>
-      <g class="flow-station flow-shared-station" data-flow-station="simulation" transform="translate(850 130)">
-        <circle r="28"/><text y="5" text-anchor="middle">Simulation</text>
+      <g class="flow-station" data-flow-station="sports-calc" transform="translate(394 274)">
+        <circle r="31"/><text y="6" text-anchor="middle">Calculate</text>
       </g>
-      <g class="flow-station flow-execution-station" data-flow-station="approval" transform="translate(850 270)">
-        <circle r="27"/><text y="5" text-anchor="middle">Approval</text>
+
+      <text class="flow-group-label" x="492" y="156">Shared stages</text>
+      <g class="flow-station flow-shared-station" data-flow-station="risk" transform="translate(540 210)">
+        <circle r="34"/><text y="6" text-anchor="middle">Risk</text>
       </g>
-      <g class="flow-station flow-execution-station" data-flow-station="execution" transform="translate(970 270)">
-        <circle r="28"/><text y="5" text-anchor="middle">Execution</text>
+      <g class="flow-station flow-shared-station" data-flow-station="liquidity" transform="translate(620 210)">
+        <circle r="36"/><text y="6" text-anchor="middle">Liquidity</text>
       </g>
-      <g class="flow-station flow-shared-station" data-flow-station="settlement" transform="translate(970 350)">
-        <circle r="27"/><text y="5" text-anchor="middle">Settle</text>
+      <g class="flow-station flow-shared-station" data-flow-station="simulation" transform="translate(730 130)">
+        <circle r="38"/><text y="6" text-anchor="middle">Simulation</text>
       </g>
-      <g class="flow-station flow-shared-station" data-flow-station="reporting" transform="translate(800 350)">
-        <circle r="30"/><text y="-2" text-anchor="middle"><tspan x="0">Report /</tspan><tspan x="0" dy="14">Monitor</tspan></text>
+      <g class="flow-station flow-execution-station" data-flow-station="approval" transform="translate(730 270)">
+        <circle r="36"/><text y="6" text-anchor="middle">Approval</text>
+      </g>
+      <g class="flow-station flow-execution-station" data-flow-station="execution" transform="translate(840 270)">
+        <circle r="38"/><text y="6" text-anchor="middle">Execution</text>
+      </g>
+      <g class="flow-station flow-shared-station" data-flow-station="settlement" transform="translate(840 350)">
+        <circle r="34"/><text y="6" text-anchor="middle">Settle</text>
+      </g>
+      <g class="flow-station flow-shared-station" data-flow-station="reporting" transform="translate(700 350)">
+        <circle r="38"/><text y="-4" text-anchor="middle"><tspan x="0">Report /</tspan><tspan x="0" dy="18">Monitor</tspan></text>
       </g>
 
       <circle class="flow-packet flow-packet-current" r="6" data-flow-packet data-flow-path="flow-bonus-path" data-flow-duration="7000" data-flow-phase="0" data-flow-pulse="bonus-data:.05,bonus-prepare:.42,bonus-calc:.73"/>
@@ -101,31 +109,31 @@
       <circle class="flow-packet flow-packet-simulation" r="6" data-flow-packet data-flow-path="flow-simulation-path" data-flow-duration="7600" data-flow-phase="1500" data-flow-pulse="simulation:.22,settlement:.77,reporting:1"/>
 
       <g class="flow-future-layer" data-future-layer>
-        <text class="flow-group-label flow-future-label" x="48" y="454">Future / planned</text>
-        <path class="flow-future-path" d="M94 504 H1032"/>
-        <path class="flow-future-path" d="M548 504 V210"/>
+        <text class="flow-group-label flow-future-label" x="42" y="454">Future / planned</text>
+        <path class="flow-future-path" d="M60 504 H900"/>
+        <path class="flow-future-path" d="M470 504 V210"/>
 
-        <g class="flow-future-engine" transform="translate(130 522)">
-          <rect x="-84" y="-24" width="168" height="48" rx="12"/>
-          <text text-anchor="middle" y="-3"><tspan x="0">SportsExchange</tspan><tspan x="0" dy="15">Engine</tspan></text>
+        <g class="flow-future-engine" transform="translate(110 522)">
+          <rect x="-75" y="-29" width="150" height="58" rx="12"/>
+          <text text-anchor="middle" y="-4"><tspan x="0">SportsExchange</tspan><tspan x="0" dy="19">Engine</tspan></text>
         </g>
-        <g class="flow-future-engine" transform="translate(350 522)">
-          <rect x="-84" y="-24" width="168" height="48" rx="12"/>
-          <text text-anchor="middle" y="5">TicketEngine</text>
+        <g class="flow-future-engine" transform="translate(290 522)">
+          <rect x="-75" y="-29" width="150" height="58" rx="12"/>
+          <text text-anchor="middle" y="6">TicketEngine</text>
         </g>
-        <g class="flow-future-engine" transform="translate(570 522)">
-          <rect x="-84" y="-24" width="168" height="48" rx="12"/>
-          <text text-anchor="middle" y="-3"><tspan x="0">PredictionMarket</tspan><tspan x="0" dy="15">Engine</tspan></text>
+        <g class="flow-future-engine" transform="translate(470 522)">
+          <rect x="-75" y="-29" width="150" height="58" rx="12"/>
+          <text text-anchor="middle" y="-4"><tspan x="0">PredictionMarket</tspan><tspan x="0" dy="19">Engine</tspan></text>
         </g>
-        <g class="flow-future-engine" transform="translate(790 522)">
-          <rect x="-84" y="-24" width="168" height="48" rx="12"/>
-          <text text-anchor="middle" y="5">CryptoYieldEngine</text>
+        <g class="flow-future-engine" transform="translate(650 522)">
+          <rect x="-75" y="-29" width="150" height="58" rx="12"/>
+          <text text-anchor="middle" y="6">CryptoYieldEngine</text>
         </g>
-        <g class="flow-future-engine" transform="translate(1010 522)">
-          <rect x="-84" y="-24" width="168" height="48" rx="12"/>
-          <text text-anchor="middle" y="5">MLEdgeLayer</text>
+        <g class="flow-future-engine" transform="translate(830 522)">
+          <rect x="-75" y="-29" width="150" height="58" rx="12"/>
+          <text text-anchor="middle" y="6">MLEdgeLayer</text>
         </g>
-        <text class="flow-future-note" x="548" y="590" text-anchor="middle">Planned components will feed the same shared checks when they are implemented.</text>
+        <text class="flow-future-note" x="470" y="596" text-anchor="middle">Planned components will use the same shared checks when implemented.</text>
       </g>
     </svg>
 
