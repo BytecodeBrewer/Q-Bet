@@ -302,11 +302,10 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertIn("const DRAG_START_DISTANCE = 10;", dashboard_script)
         self.assertIn("const REORDER_HYSTERESIS = 10;", dashboard_script)
         self.assertIn('dragAxis = isSingleColumn(grid) ? "y" : "free";', dashboard_script)
-        self.assertIn('draggedCard.style.transition = "none";', dashboard_script)
-        self.assertIn(
-            "layoutCompensationY += draggedBefore.top - draggedAfter.top;",
-            dashboard_script,
-        )
+        self.assertIn('placeholder.className = "dashboard-drag-placeholder";', dashboard_script)
+        self.assertIn("dnd.closestInsertionSlot(", dashboard_script)
+        self.assertIn("dnd.movePlaceholder(", dashboard_script)
+        self.assertNotIn("layoutCompensation", dashboard_script)
         self.assertIn("function isSingleColumn(grid)", dashboard_script)
 
     def test_root_canvas_uses_selected_theme_for_mobile_viewport(self) -> None:
