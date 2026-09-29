@@ -37,7 +37,7 @@ The central success criterion is not the number of available components. The com
 | Market data | The Odds API feeds GUI-started SportsCapital Simulation through fixed-odds sportsbook snapshots and the Sports Match Builder; German sportsbook identity is gated by the versioned GGL catalog before Bonus preparation | BonusEngine still needs provider-specific promotion/account metadata and later connected fixed-odds sportsbook market-data composition |
 | RequestHandler | targeted pre-execution revalidation is adapter-backed through The Odds API and survives the durable dispatch path | no remaining core Phase 3 gap; post-event result collection is a separate settlement boundary |
 | Smart Polling | persisted strategies now drive restart-safe PostgreSQL work through a protected bounded hosted tick; the connected SportsCapital Simulation route dispatches due The Odds API market work and records Monitoring outcomes | multi-provider source selection can be added when another source is introduced |
-| Bank/account | bunq read-only and official sandbox modes are implemented, including durable idempotent Simulation funding feedback composed from completed Simulation work into Portfolio Ledger | no remaining core Phase 3 gap; broaden only when another bank/account flow requires it |
+| Bank/account | bunq read-only and official sandbox modes are implemented; capital requirements now progress through attention, approval, pending movement, and explicit reconciliation before authoritative Portfolio Ledger updates | no remaining core Phase 3 gap; broaden only when another bank/account flow requires it |
 | Notifications | approval-gated notification domain, email-first delivery, durable per-user preferences, and a customer-safe internal inbox exist | SMS and broader approval-flow categories remain later work |
 | Results/settlement data | The Odds API scores are connected through the provider-neutral result boundary and the connected E2E path to post-event SettlementService composition | no remaining core Phase 3 gap; add another result source only when coverage requires it |
 | Monitoring/Reporting | technical Monitoring now includes bounded operational windows, summaries, durable Prometheus-compatible metrics, an importable Grafana dashboard, degraded-source visibility and configured infrastructure links; customer Reporting remains separate | customer/business Reporting UX improvements only |
@@ -97,7 +97,7 @@ These capabilities are no longer Phase 3 missing points. The external capital/re
 
 The two remaining external-loop foundations are now implemented:
 
-- #151 closes bunq fake-money sandbox funding feedback into the durable Simulation Portfolio Ledger with restart-safe idempotency and Simulation/Execution isolation.
+- #151 established bunq fake-money sandbox funding feedback; #212 now separates provider acknowledgement from authoritative capital state with restart-safe Pending movement records and explicit reconciliation into Portfolio Ledger.
 - #154 connects exact-event The Odds API score/finality reads to the provider-neutral post-event result boundary and existing SettlementService without treating sports scores as financial execution outcomes.
 
 With the earlier #146, #147 and #150 composition work, the major external boundaries needed for the first realistic connected flow now exist independently. The next Priority 1 objective is to prove them together through a genuine connected E2E gate rather than adding another isolated adapter.
@@ -114,7 +114,7 @@ Sandbox and personal/production account modes must remain explicit configuration
 
 ### Connected E2E Gate
 
-#155 adds the first genuine connected SportsCapital Phase 3 gate. Normal CI composes the production application/domain/repository boundaries while replacing only external network and sandbox transport edges with deterministic fakes. The gate proves mode isolation, exactly-once bunq Simulation funding feedback, post-event result settlement, durable PostgreSQL restoration, and Monitoring/Reporting visibility. External bunq sandbox writes remain separately opt-in.
+#155 adds the first genuine connected SportsCapital Phase 3 gate. Normal CI composes the production application/domain/repository boundaries while replacing only external network and sandbox transport edges with deterministic fakes. The gate proves mode isolation, approval-gated bunq Simulation acknowledgement followed by exactly-once reconciliation into Portfolio Ledger, post-event result settlement, durable PostgreSQL restoration, and Monitoring/Reporting visibility. External bunq sandbox writes remain separately opt-in.
 
 ### End-to-End Definition
 

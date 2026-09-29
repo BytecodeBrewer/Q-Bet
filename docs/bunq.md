@@ -11,11 +11,15 @@ Q-Bet connects bunq through the existing provider-neutral bank boundaries. The a
 - the adapter is explicitly configured with `QBET_BUNQ_MODE=sandbox`;
 - the caller provides an already approved `BankFundingProposal`;
 - the approved proposal has not expired when the provider write is attempted;
-- the proposal targets the `execution` capital context;
+- the proposal targets the capital context configured for that adapter instance;
 - the proposal direction is funding;
 - a sandbox recipient is explicitly configured.
 
-Simulation never triggers a bunq payment. The adapter does not mutate `PortfolioLedger`; it returns a correlated provider outcome for the existing settlement/monitoring boundaries.
+The low-level adapter defaults to the controlled `execution` context. The dedicated Phase 3
+Simulation funding composition uses the same fake-money adapter with an explicit `simulation`
+target. In both cases the adapter itself does not mutate `PortfolioLedger`: a successful provider
+acknowledgement becomes a durable Pending capital movement, and only a later matching
+reconciliation observation may update the authoritative ledger.
 
 ## SDK Boundary
 

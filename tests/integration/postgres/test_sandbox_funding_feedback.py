@@ -34,6 +34,8 @@ def proposal(**changes: object) -> BankFundingProposal:
         "direction": FundingDirection.FUNDING,
         "source_role": FundingAccountRole.BANK_ACCOUNT,
         "destination_role": FundingAccountRole.PORTFOLIO_LEDGER,
+        "source_location": "bunq-***1234",
+        "destination_location": "owner:simulation",
         "amount": Decimal("0.01"),
         "currency": "EUR",
         "reason": "bunq_sandbox_simulation_funding",
@@ -79,19 +81,20 @@ class SandboxFundingFeedbackRepositoryTests(TestCase):
     def setUp(self) -> None:
         SimulationPortfolioLedgerRepository().load_or_create(initial_ledger())
 
-    def test_success_is_persisted_and_credits_simulation_ledger_once_after_recreation(self) -> None:
+    def test_success_is_persisted_without_assuming_provider_ack_is_settlement(self) -> None:
         first = SandboxFundingFeedbackRepository().apply(proposal(), result())
         reloaded = SandboxFundingFeedbackRepository().load(PROPOSAL_ID)
         repeated = SandboxFundingFeedbackRepository().apply(proposal(), result())
         ledger = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
 
-        self.assertTrue(first.ledger_applied)
+        self.assertFalse(first.ledger_applied)
         self.assertEqual(reloaded, first)
         self.assertTrue(repeated.duplicate)
         self.assertEqual(SandboxFundingOutcomeRow.objects.count(), 1)
         self.assertIsNotNone(ledger)
         assert ledger is not None
-        self.assertEqual(ledger.balance.available, Decimal("10.01"))
+        self.assertEqual(ledger.balance.available, Decimal("10"))
+        self.assertEqual(len(ledger.commands), 0)
 
     def test_provider_failure_is_persisted_without_ledger_credit(self) -> None:
         failed = result(
@@ -110,7 +113,7 @@ class SandboxFundingFeedbackRepositoryTests(TestCase):
         assert ledger is not None
         self.assertEqual(ledger.balance.available, Decimal("10"))
 
-    def test_conflicting_duplicate_fails_closed_without_second_credit(self) -> None:
+    def test_conflicting_duplicate_fails_closed_without_any_credit(self) -> None:
         repository = SandboxFundingFeedbackRepository()
         repository.apply(proposal(), result())
 
@@ -126,7 +129,8 @@ class SandboxFundingFeedbackRepositoryTests(TestCase):
         ledger = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
         self.assertIsNotNone(ledger)
         assert ledger is not None
-        self.assertEqual(ledger.balance.available, Decimal("10.01"))
+        self.assertEqual(ledger.balance.available, Decimal("10"))
+        self.assertEqual(len(ledger.commands), 0)
 
     def test_execution_context_is_rejected_and_execution_ledger_stays_untouched(self) -> None:
         execution_ledger = initial_ledger(mode="execution").model_copy(
@@ -142,6 +146,7 @@ class SandboxFundingFeedbackRepositoryTests(TestCase):
         execution = proposal(
             target_mode="execution",
             target_context="owner:execution",
+            destination_location="owner:execution",
         )
 
         with self.assertRaisesRegex(

@@ -17,6 +17,11 @@ from qbet.bank.bunq import (
     BunqOperatingMode,
 )
 from qbet.bank.funding import FundingApprover
+from qbet.bank.movement import (
+    CapitalMovementObservation,
+    CapitalMovementObservationStatus,
+    CapitalMovementState,
+)
 from qbet.data.models import DataSourceMetadata, DataTarget, SourceTransport
 from qbet.data.results import ResultCollectionRequest, ResultProviderTarget
 from qbet.data.the_odds_api import THE_ODDS_API_PROVIDER_ID, TheOddsApiAdapter
@@ -42,6 +47,8 @@ from qbet.simulation.opportunity_source import (
     TheOddsApiSportsSimulationConfig,
     TheOddsApiSportsSimulationOpportunitySource,
 )
+from qbet.storage.capital_movement import CapitalMovementRepository
+from qbet.storage.capital_workflow import CapitalFundingWorkflowRepository
 from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
@@ -367,15 +374,28 @@ class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
             max_amount=Decimal("1"),
             max_balance_age=timedelta(minutes=5),
         )
-        funding_approver = FundingApprover(identity=OWNER, is_authenticated=True)
-        first_funding = funding.execute_for_completed_work(
+        prepared_funding = funding.prepare_for_completed_work(
             first_by_mode[WorkflowMode.SIMULATION],
             amount=Decimal("0.01"),
             balance=balance,
-            approver=funding_approver,
             requested_at=NOW + timedelta(minutes=1),
-            approved_at=NOW + timedelta(minutes=2),
             expires_at=NOW + timedelta(minutes=20),
+        )
+        self.assertEqual(prepared_funding.proposal.state.value, "awaiting_approval")
+        self.assertEqual(bunq.payment_calls, 0)
+
+        approved_funding = CapitalFundingWorkflowRepository().decide(
+            prepared_funding.proposal.id,
+            approver=FundingApprover(identity=OWNER, is_authenticated=True),
+            approve=True,
+            decided_at=NOW + timedelta(minutes=2),
+        )
+        self.assertEqual(approved_funding.proposal.state.value, "approved")
+        self.assertEqual(bunq.payment_calls, 0)
+
+        first_funding = funding.execute_approved(
+            prepared_funding.proposal.id,
+            actor=OWNER,
         )
         restarted_funding = SimulationSandboxFundingCoordinator(
             transport=bunq,
@@ -383,22 +403,47 @@ class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
             max_amount=Decimal("1"),
             max_balance_age=timedelta(minutes=5),
         )
-        repeated_funding = restarted_funding.execute_for_completed_work(
-            first_by_mode[WorkflowMode.SIMULATION],
-            amount=Decimal("0.01"),
-            balance=balance,
-            approver=funding_approver,
-            requested_at=NOW + timedelta(minutes=1),
-            approved_at=NOW + timedelta(minutes=2),
-            expires_at=NOW + timedelta(minutes=20),
+        repeated_funding = restarted_funding.execute_approved(
+            prepared_funding.proposal.id,
+            actor=OWNER,
+        )
+        pending_funding = CapitalMovementRepository().load_by_proposal(
+            first_funding.proposal.id
+        )
+        simulation_while_pending = PortfolioLedgerRepository().load(
+            mode="simulation",
+            currency="EUR",
+        )
+        self.assertFalse(first_funding.ledger_applied)
+        self.assertTrue(repeated_funding.duplicate)
+        self.assertEqual(bunq.payment_calls, 1)
+        self.assertIsNotNone(pending_funding)
+        self.assertIsNotNone(simulation_while_pending)
+        assert pending_funding is not None and simulation_while_pending is not None
+        self.assertEqual(pending_funding.state, CapitalMovementState.PENDING)
+        self.assertEqual(
+            simulation_while_pending.balance.available,
+            simulation_before_funding.balance.available,
+        )
+
+        reconciled_funding = CapitalMovementRepository().reconcile(
+            pending_funding.id,
+            CapitalMovementObservation(
+                status=CapitalMovementObservationStatus.CONFIRMED,
+                observed_at=pending_funding.performed_at + timedelta(seconds=1),
+                source="bunq_sandbox_transaction",
+                amount=first_funding.proposal.amount,
+                currency=first_funding.proposal.currency,
+                source_location=first_funding.proposal.source_location,
+                destination_location=first_funding.proposal.destination_location,
+            ),
         )
         simulation_after_funding = PortfolioLedgerRepository().load(
             mode="simulation",
             currency="EUR",
         )
-        self.assertTrue(first_funding.ledger_applied)
-        self.assertTrue(repeated_funding.duplicate)
-        self.assertEqual(bunq.payment_calls, 1)
+        self.assertEqual(reconciled_funding.state, CapitalMovementState.RECONCILED)
+        self.assertTrue(reconciled_funding.ledger_applied)
         self.assertIsNotNone(simulation_after_funding)
         assert simulation_after_funding is not None
         self.assertEqual(
@@ -572,13 +617,11 @@ class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
             max_balance_age=timedelta(minutes=5),
         )
         with self.assertRaisesMessage(ValueError, "simulation_funding_work_not_completed"):
-            rejected_funding.execute_for_completed_work(
+            rejected_funding.prepare_for_completed_work(
                 dispatched[0],
                 amount=Decimal("0.01"),
                 balance=rejected_balance,
-                approver=FundingApprover(identity=OWNER, is_authenticated=True),
                 requested_at=NOW + timedelta(minutes=1),
-                approved_at=NOW + timedelta(minutes=2),
                 expires_at=NOW + timedelta(minutes=20),
             )
 

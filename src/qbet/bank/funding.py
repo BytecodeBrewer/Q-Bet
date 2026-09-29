@@ -52,15 +52,23 @@ class BankFundingProposal(DomainModel):
     """A future transfer proposal; it has no authority to mutate capital."""
 
     id: UUID
+    requirement_id: UUID | None = None
     direction: FundingDirection
     source_role: FundingAccountRole
     destination_role: FundingAccountRole
+    source_location: Identifier | None = None
+    destination_location: Identifier | None = None
     amount: PositiveDecimal
     currency: Currency
     reason: Identifier
+    opportunity_id: Identifier | None = None
     target_mode: Literal["simulation", "execution"]
     target_context: Identifier
     correlation_id: UUID
+    required_by: AwareDatetime | None = None
+    engine: Identifier | None = None
+    workflow_reference: Identifier | None = None
+    attention_created_at: AwareDatetime | None = None
     created_at: AwareDatetime
     expires_at: AwareDatetime
     state: FundingProposalState = FundingProposalState.PROPOSED
@@ -96,6 +104,11 @@ class BankFundingProposal(DomainModel):
             raise ValueError("funding target_context must match target_mode")
         if self.expires_at <= self.created_at:
             raise ValueError("funding proposals must expire after creation")
+        if self.attention_created_at is not None:
+            if self.attention_created_at < self.created_at:
+                raise ValueError("funding attention cannot precede proposal creation")
+            if self.attention_created_at >= self.expires_at:
+                raise ValueError("funding attention must precede proposal expiry")
         if self.lifecycle_at < self.created_at:
             raise ValueError("funding lifecycle time cannot precede creation")
         requires_approval = self.state in {
@@ -268,6 +281,11 @@ class BankFundingProposalService:
             return "transition_before_current_lifecycle"
         if approved_at >= proposal.expires_at:
             return "proposal_expired"
+        if proposal.requirement_id is not None:
+            if proposal.attention_created_at is None:
+                return "funding_attention_required"
+            if approved_at < proposal.attention_created_at:
+                return "approval_before_funding_attention"
         if proposal.amount > self._max_amount:
             return "amount_exceeds_limit"
         if balance.currency != proposal.currency or ledger.balance.currency != proposal.currency:

@@ -8,11 +8,12 @@ from typing import Protocol
 from uuid import UUID
 
 from django.db import DatabaseError
-from django.db.models import Exists, OuterRef, Subquery
 from django.utils import timezone
 
+from qbet.bank.funding import BankFundingProposal, FundingProposalState
 from qbet.notifications.models import ExecutionNotificationTask, NotificationStatus
 from qbet.storage.models import (
+    CapitalFundingProposalRow,
     NotificationInboxDeliveryRow,
     NotificationInboxReadRow,
     NotificationPreferenceRow,
@@ -130,6 +131,13 @@ class PostgresNotificationInbox:
                     recipient_id=user_id,
                 )
             }
+            capital_rows = {
+                row.proposal_id: row
+                for row in CapitalFundingProposalRow.objects.filter(
+                    proposal_id__in=task_ids,
+                    owner_id=user_id,
+                )
+            }
             reads = set(
                 NotificationInboxReadRow.objects.filter(
                     user_id=user_id,
@@ -138,49 +146,34 @@ class PostgresNotificationInbox:
             )
         except DatabaseError:
             return ()
-        return tuple(
-            self._item(
-                row,
-                category=delivery.category,
-                read=delivery.task_id in reads,
-                now=current_time,
-            )
-            for delivery in deliveries
-            if (row := rows.get(delivery.task_id)) is not None
-        )
+
+        items: list[InboxItem] = []
+        for delivery in deliveries:
+            execution_row = rows.get(delivery.task_id)
+            if execution_row is not None:
+                items.append(
+                    self._item(
+                        execution_row,
+                        category=delivery.category,
+                        read=delivery.task_id in reads,
+                        now=current_time,
+                    )
+                )
+                continue
+            capital_row = capital_rows.get(delivery.task_id)
+            if capital_row is not None and delivery.category == "funding_attention":
+                items.append(
+                    self._capital_item(
+                        capital_row,
+                        read=delivery.task_id in reads,
+                    )
+                )
+        return tuple(items)
 
     def unread_count(self, user_id: str, *, limit: int = 100) -> int:
-        """Count recent valid unread deliveries without materializing inbox payloads."""
+        """Count recent readable inbox items across execution and capital attention."""
 
-        bounded_limit = max(1, min(limit, 100))
-        recent_delivery_ids = (
-            NotificationInboxDeliveryRow.objects.filter(user_id=user_id)
-            .order_by("-created_at", "-id")
-            .values("id")[:bounded_limit]
-        )
-        owned_task = NotificationTaskRow.objects.filter(
-            task_id=OuterRef("task_id"),
-            recipient_id=user_id,
-        )
-        read_marker = NotificationInboxReadRow.objects.filter(
-            user_id=user_id,
-            task_id=OuterRef("task_id"),
-        )
-        try:
-            return (
-                NotificationInboxDeliveryRow.objects.filter(
-                    user_id=user_id,
-                    id__in=Subquery(recent_delivery_ids),
-                )
-                .annotate(
-                    owned_task=Exists(owned_task),
-                    read_marker=Exists(read_marker),
-                )
-                .filter(owned_task=True, read_marker=False)
-                .count()
-            )
-        except DatabaseError:
-            return 0
+        return sum(not item.read for item in self.list(user_id, limit=limit))
 
     def mark_read(self, user_id: str, task_id: UUID) -> bool:
         try:
@@ -216,6 +209,39 @@ class PostgresNotificationInbox:
             message=message,
             link="/execution/approvals/" if actionable else "/inbox/",
             occurred_at=task.lifecycle_at,
+            actionable=actionable,
+            read=read,
+        )
+
+    @staticmethod
+    def _capital_item(
+        row: CapitalFundingProposalRow,
+        *,
+        read: bool,
+    ) -> InboxItem:
+        proposal = BankFundingProposal.model_validate(row.payload["proposal"])
+        actionable = proposal.state in {
+            FundingProposalState.AWAITING_APPROVAL,
+            FundingProposalState.APPROVED,
+        }
+        if proposal.state is FundingProposalState.AWAITING_APPROVAL:
+            title = "Capital approval required"
+        elif proposal.state is FundingProposalState.APPROVED:
+            title = "Capital action approved"
+        else:
+            title = "Capital movement update"
+        message = (
+            f"{proposal.direction.value}: {proposal.amount} {proposal.currency} "
+            f"from {proposal.source_location or 'unavailable'} "
+            f"to {proposal.destination_location or 'unavailable'}."
+        )
+        return InboxItem(
+            task_id=proposal.id,
+            category="funding_attention",
+            title=title,
+            message=message,
+            link="/capital/approvals/" if actionable else "/inbox/",
+            occurred_at=proposal.lifecycle_at,
             actionable=actionable,
             read=read,
         )
