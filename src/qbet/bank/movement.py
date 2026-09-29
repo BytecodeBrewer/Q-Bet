@@ -207,6 +207,8 @@ class CapitalMovementObservation(DomainModel):
 
     status: CapitalMovementObservationStatus
     observed_at: AwareDatetime
+    source: Identifier
+    evidence_reference: Identifier | None = None
     amount: PositiveDecimal | None = None
     currency: Currency | None = None
     source_location: Identifier | None = None
