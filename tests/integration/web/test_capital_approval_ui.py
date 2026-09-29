@@ -59,6 +59,7 @@ class CapitalApprovalUiTests(TestCase):
 
     def _publish_manual_attention(self) -> BankFundingProposal:
         now = datetime.now(UTC).replace(microsecond=0)
+        created_at = now - timedelta(seconds=1)
         proposal = BankFundingProposal(
             id=PROPOSAL_ID,
             requirement_id=REQUIREMENT_ID,
@@ -77,10 +78,10 @@ class CapitalApprovalUiTests(TestCase):
             required_by=now + timedelta(minutes=30),
             engine="sports_capital",
             workflow_reference="workflow-1",
-            attention_created_at=now,
-            created_at=now,
+            attention_created_at=created_at,
+            created_at=created_at,
             expires_at=now + timedelta(minutes=30),
-            lifecycle_at=now,
+            lifecycle_at=created_at,
         )
         balance = BankBalance(
             source=SOURCE,
@@ -88,7 +89,7 @@ class CapitalApprovalUiTests(TestCase):
             currency="EUR",
             available_balance=Decimal("500"),
             current_balance=Decimal("500"),
-            observed_at=now,
+            observed_at=created_at,
             freshness=FreshnessStatus.FRESH,
             correlation_id=CORRELATION_ID,
         )
@@ -102,7 +103,7 @@ class CapitalApprovalUiTests(TestCase):
         )
         published = CapitalFundingWorkflowRepository().publish_attention(
             record,
-            requested_at=now + timedelta(seconds=1),
+            requested_at=now,
         )
         return published.proposal
 
