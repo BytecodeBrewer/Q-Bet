@@ -12,7 +12,9 @@ const fs = require("fs");
 const vm = require("vm");
 
 const rafCallbacks = new Map();
+const timeoutCallbacks = new Map();
 let nextRafId = 1;
+let nextTimeoutId = 1;
 let cancelled = 0;
 
 const buttonAttributes = {};
@@ -34,6 +36,7 @@ const classList = {
     if (enabled) classes.add(name);
     else classes.delete(name);
   },
+  contains(name) { return classes.has(name); },
 };
 
 const path = {
@@ -86,8 +89,14 @@ global.window = {
   cancelAnimationFrame(id) {
     if (rafCallbacks.delete(id)) cancelled += 1;
   },
-  setTimeout() { return 1; },
-  clearTimeout() {},
+  setTimeout(callback) {
+    const id = nextTimeoutId++;
+    timeoutCallbacks.set(id, callback);
+    return id;
+  },
+  clearTimeout(id) {
+    timeoutCallbacks.delete(id);
+  },
 };
 
 vm.runInThisContext(fs.readFileSync(process.argv[1], "utf8"), {
@@ -98,6 +107,7 @@ const initial = {
   label: label.textContent,
   pressed: buttonAttributes["aria-pressed"],
   pendingFrames: rafCallbacks.size,
+  pendingFutureTimers: timeoutCallbacks.size,
 };
 
 clickHandler();
@@ -106,6 +116,8 @@ const paused = {
   pressed: buttonAttributes["aria-pressed"],
   pendingFrames: rafCallbacks.size,
   pausedClass: classes.has("is-motion-paused"),
+  pendingFutureTimers: timeoutCallbacks.size,
+  futureVisible: classes.has("is-future-visible"),
   cancelled,
 };
 
@@ -115,6 +127,8 @@ const resumed = {
   pressed: buttonAttributes["aria-pressed"],
   pendingFrames: rafCallbacks.size,
   pausedClass: classes.has("is-motion-paused"),
+  pendingFutureTimers: timeoutCallbacks.size,
+  futureVisible: classes.has("is-future-visible"),
 };
 
 process.stdout.write(JSON.stringify({ initial, paused, resumed }));
@@ -133,12 +147,15 @@ process.stdout.write(JSON.stringify({ initial, paused, resumed }));
             "label": "Pause motion",
             "pressed": "false",
             "pendingFrames": 1,
+            "pendingFutureTimers": 1,
         },
         "paused": {
             "label": "Resume motion",
             "pressed": "true",
             "pendingFrames": 0,
             "pausedClass": True,
+            "pendingFutureTimers": 0,
+            "futureVisible": False,
             "cancelled": 1,
         },
         "resumed": {
@@ -146,5 +163,7 @@ process.stdout.write(JSON.stringify({ initial, paused, resumed }));
             "pressed": "false",
             "pendingFrames": 1,
             "pausedClass": False,
+            "pendingFutureTimers": 1,
+            "futureVisible": False,
         },
     }
