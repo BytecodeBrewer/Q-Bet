@@ -23,6 +23,20 @@ from .bunq import (
     BunqTransport,
     BunqTransportError,
 )
+from .movement import (
+    CapitalAttentionNotice,
+    CapitalMovementInstruction,
+    CapitalMovementMethod,
+    CapitalMovementObservation,
+    CapitalMovementObservationStatus,
+    CapitalMovementRecord,
+    CapitalMovementService,
+    CapitalMovementState,
+    CapitalRequirement,
+    CapitalRequirementDecision,
+    CapitalRequirementDecisionKind,
+    CapitalRequirementService,
+)
 from .funding import (
     BankFundingProposal,
     BankFundingProposalService,
@@ -64,4 +78,16 @@ __all__ = [
     "FundingDirection",
     "FundingProposalOutcome",
     "FundingProposalState",
+    "CapitalAttentionNotice",
+    "CapitalMovementInstruction",
+    "CapitalMovementMethod",
+    "CapitalMovementObservation",
+    "CapitalMovementObservationStatus",
+    "CapitalMovementRecord",
+    "CapitalMovementService",
+    "CapitalMovementState",
+    "CapitalRequirement",
+    "CapitalRequirementDecision",
+    "CapitalRequirementDecisionKind",
+    "CapitalRequirementService",
 ]
