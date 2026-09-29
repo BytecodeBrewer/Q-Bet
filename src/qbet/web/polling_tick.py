@@ -63,16 +63,15 @@ def configured_polling_work(*, now: datetime) -> tuple[PollingWork, ...]:
         return ()
 
     preferences = UserRoutingPreferenceRepository().list()
-    owners = tuple(
-        user_id
-        for user_id, user_preferences in preferences
-        if effective_engine_modes(
+    route_is_eligible = any(
+        effective_engine_modes(
             routing,
             user_preferences,
             "sports_capital",
         ).simulation
+        for _, user_preferences in preferences
     )
-    if not owners:
+    if not route_is_eligible:
         return ()
 
     if getattr(settings, "QBET_SIMULATION_SPORTS_SOURCE", "") != "the_odds_api":
@@ -94,42 +93,39 @@ def configured_polling_work(*, now: datetime) -> tuple[PollingWork, ...]:
         transport=SourceTransport.API,
     )
     event_starts_at = _event_start(values["event_starts_at"])
-    resolver = PollingStrategyRepository().resolver()
-    configured: list[PollingWork] = []
-    for owner in owners:
-        correlation_id = uuid5(
-            NAMESPACE_URL,
-            ":".join(
-                (
-                    "qbet-polling",
-                    owner,
-                    source.provider_id,
-                    source.source_id,
-                    "sports_capital",
-                    "simulation",
-                    str(values["event_id"]),
-                )
-            ),
-        )
-        candidate = PollingWork(
-            owner=owner,
-            source=source,
-            target=PollingTarget.MARKET,
-            engine="sports_capital",
-            mode="simulation",
-            match_id=str(values["event_id"]),
-            correlation_id=correlation_id,
-            sport=str(values["sport"]),
-            market=str(values["market"]),
-            event_starts_at=event_starts_at,
-            next_due_at=now,
-        )
-        try:
-            strategy = resolver.resolve(candidate.request())
-        except PollingStrategyResolutionError as error:
-            raise PollingTickConfigurationError(error.reason_code) from error
-        configured.append(candidate.model_copy(update={"disabled": not strategy.enabled}))
-    return tuple(configured)
+    correlation_id = uuid5(
+        NAMESPACE_URL,
+        ":".join(
+            (
+                "qbet-polling",
+                source.provider_id,
+                source.source_id,
+                PollingTarget.MARKET.value,
+                "sports_capital",
+                "simulation",
+                str(values["sport"]),
+                str(values["event_id"]),
+                str(values["market"]),
+            )
+        ),
+    )
+    candidate = PollingWork(
+        source=source,
+        target=PollingTarget.MARKET,
+        engine="sports_capital",
+        mode="simulation",
+        match_id=str(values["event_id"]),
+        correlation_id=correlation_id,
+        sport=str(values["sport"]),
+        market=str(values["market"]),
+        event_starts_at=event_starts_at,
+        next_due_at=now,
+    )
+    try:
+        strategy = PollingStrategyRepository().resolver().resolve(candidate.request())
+    except PollingStrategyResolutionError as error:
+        raise PollingTickConfigurationError(error.reason_code) from error
+    return (candidate.model_copy(update={"disabled": not strategy.enabled}),)
 
 
 def _runtime(*, configured: bool) -> SmartPollingRuntime:
