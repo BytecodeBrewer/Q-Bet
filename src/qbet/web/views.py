@@ -315,7 +315,7 @@ def _dashboard_context(
         "execution_monitoring": execution,
         "execution_engines": _ordered_engines(execution_engines, layout.execution),
         "execution_attention": any(
-            notice.severity in {"warning", "error"}
+            engine.enabled and notice.severity in {"warning", "error"}
             for engine in execution_engines
             for notice in engine.notices
         ),
