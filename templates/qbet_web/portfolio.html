@@ -61,10 +61,27 @@
   <section class="portfolio-account-section" aria-labelledby="provider-list-heading">
     <div class="capital-map-heading provider-list-heading">
       <div><span class="eyebrow">Sportsbooks</span><h3 id="provider-list-heading">Providers</h3></div>
-      <label class="provider-filter">
-        <span class="visually-hidden">Filter providers</span>
-        <input type="search" placeholder="Filter providers" autocomplete="off" data-provider-filter>
-      </label>
+      <div class="provider-list-controls" aria-label="Provider list controls">
+        <label class="provider-search">
+          <span>Search</span>
+          <input type="search" placeholder="Search providers" autocomplete="off" data-provider-search>
+        </label>
+        <label>
+          <span>Sort</span>
+          <select data-provider-sort>
+            <option value="name-asc">A–Z</option>
+            <option value="name-desc">Z–A</option>
+          </select>
+        </label>
+        <label>
+          <span>Show</span>
+          <select data-provider-page-size>
+            <option value="4" selected>4</option>
+            <option value="8">8</option>
+            <option value="12">12</option>
+          </select>
+        </label>
+      </div>
     </div>
     <div class="portfolio-location-grid" data-provider-list>
       {% for location in portfolio.execution %}
@@ -73,7 +90,11 @@
         {% endif %}
       {% endfor %}
     </div>
-    <p class="portfolio-provider-empty" data-provider-filter-empty hidden>No providers match this filter.</p>
+    <p class="portfolio-provider-empty" data-provider-empty hidden>No providers match your search.</p>
+    <div class="provider-list-footer">
+      <span class="provider-list-count" data-provider-count aria-live="polite"></span>
+      <button class="button secondary-button provider-load-more" type="button" data-provider-load-more>Load more</button>
+    </div>
   </section>
   {% endif %}
 </section>
