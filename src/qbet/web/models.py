@@ -116,6 +116,36 @@ class PortfolioLedgerAccess(models.Model):
         ordering = ("mode", "currency")
 
 
+class PortfolioCapitalLocation(models.Model):
+    """User-owned allocation of authoritative ledger capital to one provider location."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_portfolio_capital_locations",
+    )
+    provider = models.ForeignKey(
+        "storage.SportsbookProviderRow",
+        on_delete=models.PROTECT,
+        related_name="portfolio_capital_locations",
+    )
+    mode = models.CharField(max_length=16)
+    currency = models.CharField(max_length=3)
+    amount = models.DecimalField(max_digits=24, decimal_places=8, default=Decimal("0"), validators=[MinValueValidator(Decimal("0"))])
+    note = models.CharField(max_length=255, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_portfolio_capital_location"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "provider", "mode", "currency"),
+                name="qbet_portfolio_capital_location_unique",
+            )
+        ]
+        ordering = ("provider__display_name", "currency")
+
+
 class UserDisplayPreference(models.Model):
     """Durable user-owned regional display choices with no business authority."""
 
