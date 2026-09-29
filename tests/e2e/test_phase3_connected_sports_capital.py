@@ -422,6 +422,7 @@ class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
             CapitalMovementObservation(
                 status=CapitalMovementObservationStatus.CONFIRMED,
                 observed_at=pending_funding.performed_at + timedelta(seconds=1),
+                source="bunq_sandbox_transaction",
                 amount=first_funding.proposal.amount,
                 currency=first_funding.proposal.currency,
                 source_location=first_funding.proposal.source_location,
