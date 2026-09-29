@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("web", "0010_portfolio_ledger_access"),
+        ("web", "0011_portfolio_capital_location"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
