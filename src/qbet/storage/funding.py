@@ -103,7 +103,10 @@ class BunqSandboxSimulationFundingService:
                 raise SandboxFundingFeedbackPersistenceError(
                     "sandbox_funding_provider_outcome_unknown"
                 )
-            self._persist_movement(claim.record, recorded_at=self._clock())
+            # Historical feedback written before #212 may already have credited the
+            # ledger. Never create a new pending movement that could credit it twice.
+            if not claim.record.ledger_applied:
+                self._persist_movement(claim.record, recorded_at=self._clock())
             return claim.record.model_copy(update={"duplicate": True})
 
         provider_result = self._adapter.execute(proposal)
