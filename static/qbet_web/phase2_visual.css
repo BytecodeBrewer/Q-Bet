@@ -197,7 +197,7 @@
 }
 .flow-station text {
   fill: var(--text);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 760;
   transition: fill .18s ease;
 }
@@ -240,12 +240,12 @@
 }
 .flow-future-engine text {
   fill: var(--muted);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 760;
 }
 .flow-future-note {
   fill: var(--muted);
-  font-size: 14px;
+  font-size: 15px;
 }
 .home-flow-mobile { display: none; }
 
