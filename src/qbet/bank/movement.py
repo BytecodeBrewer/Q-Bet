@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from pydantic import AwareDatetime, field_validator, model_validator
+from pydantic import AwareDatetime, model_validator
 
 from qbet.bank.funding import (
     BankFundingProposal,
@@ -58,6 +58,20 @@ class CapitalRequirementDecisionKind(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
+class CapitalAttentionNotice(DomainModel):
+    """Notification payload saying capital needs attention, not permission to move it."""
+
+    requirement_id: UUID
+    correlation_id: UUID
+    direction: FundingDirection
+    amount: PositiveDecimal
+    currency: Currency
+    source_location: Identifier | None = None
+    destination_location: Identifier
+    reason: Identifier
+    requires_approval: bool = True
+
+
 class CapitalRequirementDecision(DomainModel):
     """Result of translating a capital requirement into a proposal or explicit non-action."""
 
@@ -77,20 +91,6 @@ class CapitalRequirementDecision(DomainModel):
         if self.kind is CapitalRequirementDecisionKind.NO_ACTION and self.attention is not None:
             raise ValueError("no-action decisions must not request attention")
         return self
-
-
-class CapitalAttentionNotice(DomainModel):
-    """Notification payload saying capital needs attention, not permission to move it."""
-
-    requirement_id: UUID
-    correlation_id: UUID
-    direction: FundingDirection
-    amount: PositiveDecimal
-    currency: Currency
-    source_location: Identifier | None = None
-    destination_location: Identifier
-    reason: Identifier
-    requires_approval: bool = True
 
 
 class CapitalRequirementService:
