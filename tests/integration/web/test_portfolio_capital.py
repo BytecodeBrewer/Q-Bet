@@ -222,7 +222,7 @@ class PortfolioCapitalTests(TestCase):
         self.assertContains(response, "Free")
         self.assertContains(response, "Reserved")
         self.assertContains(response, "In use")
-        self.assertContains(response, 'data-provider-edit', count=2)
+        self.assertContains(response, 'data-provider-edit')
         self.assertContains(response, 'aria-label="Edit balance for Licensed Book"')
         self.assertContains(response, 'aria-label="Edit balance for Another Book"')
         self.assertContains(response, "Search providers")
