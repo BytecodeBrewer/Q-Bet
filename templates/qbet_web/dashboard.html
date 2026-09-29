@@ -30,6 +30,7 @@
   </div>
   {% if provider_activity.is_working %}<span class="activity-spinner" aria-label="Working"></span>{% elif provider_activity.state == "success" %}<span class="activity-check" aria-label="Success">✓</span>{% endif %}
 </section>
+{% include "qbet_web/_provider_notice.html" with provider_notice=provider_notice %}
 
 <form id="dashboard-layout-state" data-layout-url="{% url 'dashboard-layout' %}" hidden>{% csrf_token %}</form>
 <div class="dashboard-planes{% if simulation_enabled %} dashboard-planes-split{% endif %}">
