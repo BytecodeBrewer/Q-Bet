@@ -259,7 +259,6 @@ jobs:
       - name: Install runtime dependencies for deployment preflight
         run: |
           python -m pip install .
-          python -m pip install python-dotenv
           python -m pip install uv
 
       - name: Validate stable deployment configuration
@@ -281,15 +280,11 @@ jobs:
       - name: Load protected polling token from Supabase Vault
         shell: bash
         run: |
-          token="$(python - <<'PY'
+          token="$(vercel env run -e production -- python -c '
+          import os
           import psycopg
-          from dotenv import dotenv_values
 
-          database_url = dotenv_values(".vercel/.env.production.local").get("QBET_DATABASE_URL")
-          if not database_url:
-              raise SystemExit("QBET_DATABASE_URL is missing from Vercel Production environment")
-
-          with psycopg.connect(database_url) as connection:
+          with psycopg.connect(os.environ["QBET_DATABASE_URL"]) as connection:
               with connection.cursor() as cursor:
                   cursor.execute(
                       """
@@ -304,8 +299,7 @@ jobs:
               raise SystemExit("Q-Bet polling tick token is missing from Supabase Vault")
 
           print(row[0])
-          PY
-          )"
+          ')"
           echo "::add-mask::$token"
           echo "QBET_POLLING_TICK_TOKEN=$token" >> "$GITHUB_ENV"
 

@@ -41,7 +41,8 @@ def test_develop_cd_validates_config_and_updates_stable_alias() -> None:
     assert "name: production" in block
     assert "name: staging" not in block
     assert "qbet_polling_tick_token" in block
-    assert "dotenv_values(\".vercel/.env.production.local\")" in block
+    assert "vercel env run -e production -- python" in block
+    assert "python-dotenv" not in block
     assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=production" in block
     assert "QBET_HOSTED_PREVIEW: \"false\"" in block
