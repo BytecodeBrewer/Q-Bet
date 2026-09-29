@@ -22,7 +22,7 @@ This file is the companion register for concrete Phase 3 external integrations. 
 | Data Aggregation / odds | Feed normalized candidate markets and quotations into the sports pipeline through typed adapters. | The Odds API is the selected first read-only quotation adapter; Odds-API.io, OddsPapi, BetBurger, and OddsJam remain future candidates. | The Odds API adapter is connected to GUI-started SportsCapital Simulation through normalized snapshots and the Sports Match Builder |
 | RequestHandler revalidation | Perform targeted event-specific refreshes close to action time using current quotation/provider state rather than repeating broad ingestion. | Reuse selected quotation adapters with source-aware targeted pulls and optional cross-checking. | real The Odds API-backed targeted Execution revalidation implemented through the durable dispatch path |
 | Result data / settlement | Resolve final match/result state independently from normal quotation ingestion where practical. | The Odds API v4 scores endpoint is the first connected result source; the other user-provided providers remain future candidates. | exact-event score/finality collection is connected to the post-event SettlementService boundary |
-| Bank / account data | Connect balances, transactions, sandbox execution, and later account-backed flows through the bank adapter boundary. | bunq is the first concrete bank integration. | bunq read-only + official sandbox adapter + durable idempotent Simulation funding feedback implemented |
+| Bank / account data | Connect balances, transactions, sandbox execution, and later account-backed flows through the bank adapter boundary. | bunq is the first concrete bank integration. | bunq read-only + official sandbox adapter + approval-gated pending capital movement and reconciliation lifecycle implemented |
 | Notifications | Notify the user when an opportunity, approval, or capital action requires attention instead of automatically navigating a provider website. | Email first. | notification domain + Django email transport implemented; richer preferences/inbox later |
 | Pipeline observability | Add established infrastructure metrics around the existing structured Monitoring plane without creating a second business-monitoring authority. | Durable PostgreSQL-backed Prometheus-compatible metrics plus the repository-owned Grafana dashboard in `dashboards/qbet-observability.json`. | implemented: protected metrics endpoint, bounded operational metrics, Grafana contract, Monitoring presets/summaries, degraded-source state and optional staff infrastructure links |
 | Execution adapters | Prefer official APIs where supported; otherwise keep the Phase 3 flow notification/manual-action-first. | Provider-specific execution choices still pending. | sandbox bank execution boundary exists; provider execution integrations pending |
@@ -121,9 +121,9 @@ No claim in this register about current WebSocket availability, exact free-tier 
 
 ### Bank / Account Integration
 
-- **bunq** is the first concrete bank/account integration; read-only access, the official sandbox adapter, and restart-safe idempotent Simulation funding feedback into Portfolio Ledger are implemented.
+- **bunq** is the first concrete bank/account integration; read-only access, the official sandbox adapter, and restart-safe idempotent Simulation funding acknowledgement into a pending capital-movement record are implemented.
 - The user has already checked bunq documentation/SDK and confirmed that automated transactions are supported and that bunq provides an official sandbox suitable for repeated development/test setups. Phase 3 tickets should use the official documentation/SDK for concrete authentication, endpoint, and sandbox mechanics instead of reopening the capability question.
-- The adapter supports account/balance reads and guarded fake-money sandbox payment execution, and successful correlated sandbox funding feedback is persisted into the Simulation Portfolio Ledger exactly once. The next architecture task is to exercise this accepted boundary inside the genuine connected E2E flow.
+- The adapter supports account/balance reads and guarded fake-money sandbox payment execution. Provider acknowledgement is persisted as Pending and does not alter Portfolio Ledger; a later matching reconciliation observation applies the authoritative ledger update exactly once. The connected E2E gate exercises that separation.
 - The existing personal account can be connected separately when a Phase 3 ticket needs real account data or a user-approved account-backed flow; sandbox and personal-account modes must remain explicit configuration boundaries.
 - The expected repository/deployment secret name for the existing credential is `API_KEY_BUNQ`. Only the secret reference/name may appear in code or documentation; the value must never be printed, committed, logged, copied into issues, or embedded in test data.
 - The personal payment/share link is intentionally not stored in the repository because it is not required for the technical adapter contract.
@@ -156,7 +156,7 @@ A ticket agent should use the candidates above directly. Do not open broad provi
 - First adapter: bunq, implemented in read-only and official sandbox modes.
 - First test environment: official bunq sandbox.
 - Credential reference: `API_KEY_BUNQ` through secret/environment handling only.
-- Next integration objective: compose the accepted bunq sandbox funding feedback with the connected market-data and post-event result boundaries in the genuine Phase 3 E2E gate.
+- Current integration behavior: the connected Phase 3 E2E gate composes bunq sandbox acknowledgement with explicit reconciliation before authoritative Portfolio Ledger credit.
 
 ### Monitoring / Metrics Stack
 
