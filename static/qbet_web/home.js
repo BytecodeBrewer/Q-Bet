@@ -14,7 +14,9 @@
   const desktopFlow = window.matchMedia("(min-width: 781px)");
   const motionToggle = flow.querySelector("[data-flow-motion-toggle]");
   const motionLabel = flow.querySelector("[data-flow-motion-label]");
-  const pulseTimers = new WeakMap();
+  const pulseTimers = new Map();
+  const pulseFrames = new Map();
+  const stations = Array.from(flow.querySelectorAll("[data-flow-station]"));
   const packetSpecs = Array.from(flow.querySelectorAll("[data-flow-packet]"))
     .map((packet) => {
       const pathId = packet.dataset.flowPath;
@@ -48,23 +50,53 @@
 
   function pulseStation(name) {
     const station = flow.querySelector(`[data-flow-station="${name}"]`);
-    if (!station) {
+    if (!station || motionPaused || reducedMotion.matches) {
       return;
+    }
+
+    const existingFrame = pulseFrames.get(station);
+    if (existingFrame) {
+      window.cancelAnimationFrame(existingFrame);
+      pulseFrames.delete(station);
     }
 
     const existingTimer = pulseTimers.get(station);
     if (existingTimer) {
       window.clearTimeout(existingTimer);
+      pulseTimers.delete(station);
     }
 
     station.classList.remove("is-packet-hit");
-    window.requestAnimationFrame(() => {
+    const frame = window.requestAnimationFrame(() => {
+      pulseFrames.delete(station);
+      if (motionPaused || reducedMotion.matches) {
+        return;
+      }
       station.classList.add("is-packet-hit");
       const timer = window.setTimeout(() => {
         station.classList.remove("is-packet-hit");
         pulseTimers.delete(station);
       }, 460);
       pulseTimers.set(station, timer);
+    });
+    pulseFrames.set(station, frame);
+  }
+
+  function clearPulseEffects() {
+    stations.forEach((station) => {
+      const frame = pulseFrames.get(station);
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+        pulseFrames.delete(station);
+      }
+
+      const timer = pulseTimers.get(station);
+      if (timer) {
+        window.clearTimeout(timer);
+        pulseTimers.delete(station);
+      }
+
+      station.classList.remove("is-packet-hit");
     });
   }
 
@@ -159,6 +191,7 @@
     if (motionPaused) {
       stopAnimation();
       cancelFutureReveal();
+      clearPulseEffects();
     } else {
       resetPacketState();
       startAnimation();
@@ -223,6 +256,7 @@
     scheduleFutureReveal();
     if (reducedMotion.matches) {
       stopAnimation();
+      clearPulseEffects();
       return;
     }
     resetPacketState();
