@@ -1,3 +1,4 @@
+{% load display_preferences %}
 {% if engine.notices %}
 <section class="engine-notices" aria-label="{{ engine.name }} current notices" aria-live="polite">
   {% for notice in engine.notices %}
@@ -14,6 +15,9 @@
         <span class="engine-notice-level">{{ notice.severity|title }}</span>
         <strong>{{ notice.title }}</strong>
         <p>{{ notice.detail }}</p>
+        {% if notice.occurred_at %}
+          <small class="engine-notice-time">Updated {% localized_datetime notice.occurred_at display_preferences %}</small>
+        {% endif %}
         {% if notice.action_url and notice.action_label %}
           <a class="compact-link" href="{{ notice.action_url }}">{{ notice.action_label }}</a>
         {% endif %}
