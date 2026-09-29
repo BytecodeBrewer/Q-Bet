@@ -54,7 +54,7 @@
       {% if location.kind == "central" %}
         <span>Source</span>
         <strong data-central-source>{{ location.source }}</strong>
-        <p data-central-refresh-message>Refresh reads the configured bunq account only. It does not move money or change the PortfolioLedger.</p>
+        <p data-central-refresh-message>Refresh reads the configured bunq account only. No transfer is made.</p>
       {% elif location.status == "recorded" %}
         <span>Source</span>
         <strong>{{ location.source }}</strong>
