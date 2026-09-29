@@ -22,9 +22,15 @@ from qbet.bank.funding import (
     FundingDirection,
     FundingProposalState,
 )
+from qbet.bank.movement import (
+    CapitalMovementObservation,
+    CapitalMovementObservationStatus,
+    CapitalMovementState,
+)
 from qbet.data.models import DataSourceMetadata, SourceTransport
 from qbet.domain.ledger import PortfolioBalance
 from qbet.ledger import PortfolioLedger
+from qbet.storage.capital_movement import CapitalMovementRepository
 from qbet.storage.funding import (
     BunqSandboxSimulationFundingService,
     SandboxFundingFeedbackPersistenceError,
@@ -176,6 +182,8 @@ class BunqSandboxSimulationFundingBoundaryTests(TestCase):
             direction=FundingDirection.FUNDING,
             source_role=FundingAccountRole.BANK_ACCOUNT,
             destination_role=FundingAccountRole.PORTFOLIO_LEDGER,
+            source_location="bunq-***1234",
+            destination_location="owner:simulation",
             amount=Decimal("0.01"),
             currency="EUR",
             reason="bunq_sandbox_simulation_funding",
@@ -208,22 +216,48 @@ class BunqSandboxSimulationFundingBoundaryTests(TestCase):
         funding_service = BunqSandboxSimulationFundingService(
             transport=transport,
             recipient_email="sandbox@example.invalid",
+            clock=lambda: NOW + timedelta(seconds=1),
         )
         first = funding_service.execute(approved.proposal)
         restarted_service = BunqSandboxSimulationFundingService(
             transport=transport,
             recipient_email="sandbox@example.invalid",
+            clock=lambda: NOW + timedelta(seconds=2),
         )
         replay = restarted_service.execute(approved.proposal)
-        persisted = PortfolioLedgerRepository().load(
+        pending = CapitalMovementRepository().load_by_proposal(PROPOSAL_ID)
+        before_reconciliation = PortfolioLedgerRepository().load(
             mode="simulation",
             currency="EUR",
         )
 
         assert first.provider_result.sent
-        assert first.ledger_applied
+        assert not first.ledger_applied
         assert replay.duplicate
         assert transport.payment_calls == 1
+        assert pending is not None
+        assert pending.state is CapitalMovementState.PENDING
+        assert before_reconciliation is not None
+        assert before_reconciliation.balance.available == Decimal("10")
+
+        reconciled = CapitalMovementRepository().reconcile(
+            pending.id,
+            CapitalMovementObservation(
+                status=CapitalMovementObservationStatus.CONFIRMED,
+                observed_at=pending.performed_at + timedelta(seconds=1),
+                amount=approved.proposal.amount,
+                currency=approved.proposal.currency,
+                source_location=approved.proposal.source_location,
+                destination_location=approved.proposal.destination_location,
+            ),
+        )
+        persisted = PortfolioLedgerRepository().load(
+            mode="simulation",
+            currency="EUR",
+        )
+
+        assert reconciled.state is CapitalMovementState.RECONCILED
+        assert reconciled.ledger_applied
         assert persisted is not None
         assert persisted.balance.available == Decimal("10.01")
 
