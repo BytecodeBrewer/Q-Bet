@@ -163,6 +163,7 @@ def portfolio_central_refresh(request: HttpRequest) -> JsonResponse:
             "amount": format(balance.amount, "f"),
             "currency": balance.currency,
             "observed_at": balance.observed_at.isoformat(),
+            "reconciled": False,
         }
     )
 
