@@ -87,6 +87,8 @@ def confirmed_observation(**changes: object) -> CapitalMovementObservation:
     values: dict[str, object] = {
         "status": CapitalMovementObservationStatus.CONFIRMED,
         "observed_at": NOW + timedelta(minutes=2),
+        "source": "bank_transaction_feed",
+        "evidence_reference": "transaction-***4321",
         "amount": Decimal("25"),
         "currency": "EUR",
         "source_location": "bunq-***1234",
@@ -115,6 +117,9 @@ def test_requirement_produces_exact_correlated_proposal() -> None:
     assert proposal.reason == "capital_shortage"
     assert proposal.engine == "sports_capital"
     assert proposal.workflow_reference == "workflow-1"
+    assert proposal.attention_created_at == NOW
+    assert decision.attention is not None
+    assert decision.attention.requires_approval
 
 
 def test_requirement_surfaces_no_action_and_missing_source_explicitly() -> None:
@@ -137,6 +142,7 @@ def test_requirement_surfaces_no_action_and_missing_source_explicitly() -> None:
     assert unavailable.kind is CapitalRequirementDecisionKind.UNAVAILABLE
     assert unavailable.reason_code == "capital_source_unavailable"
     assert unavailable.proposal is None
+    assert unavailable.attention is not None
 
 
 def test_attention_is_not_an_execution_instruction_and_rejected_proposal_has_none() -> None:
@@ -233,6 +239,7 @@ def test_reconciliation_maps_non_confirmed_outcomes_without_ledger_authority(
     observation = CapitalMovementObservation(
         status=status,
         observed_at=NOW + timedelta(minutes=1),
+        source="reconciliation_worker",
         reason_code="observed_state",
     )
 
