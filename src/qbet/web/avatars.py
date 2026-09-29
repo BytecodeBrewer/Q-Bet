@@ -126,14 +126,23 @@ class SupabaseAvatarStorage:
         self._secret_key = secret_key
         self._bucket = quote(bucket, safe="")
 
-    def _request(self, method: str, path: str, content: bytes | None = None) -> bytes:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        content: bytes | None = None,
+        *,
+        authenticated_download: bool = False,
+    ) -> bytes:
+        endpoint = "/storage/v1/object/"
+        if authenticated_download:
+            endpoint += "authenticated/"
         request = Request(
-            f"{self._base_url}/storage/v1/object/{self._bucket}/{quote(path, safe='/')}",
+            f"{self._base_url}{endpoint}{self._bucket}/{quote(path, safe='/')}",
             data=content,
             method=method,
             headers={
                 "apikey": self._secret_key,
-                "Authorization": f"Bearer {self._secret_key}",
                 "Content-Type": "image/jpeg" if content is not None else "application/json",
                 "x-upsert": "false",
             },
@@ -148,7 +157,7 @@ class SupabaseAvatarStorage:
         self._request("POST", object_key, content)
 
     def download(self, object_key: str) -> bytes:
-        return self._request("GET", object_key)
+        return self._request("GET", object_key, authenticated_download=True)
 
     def delete(self, object_key: str) -> None:
         request = Request(
@@ -157,7 +166,6 @@ class SupabaseAvatarStorage:
             method="DELETE",
             headers={
                 "apikey": self._secret_key,
-                "Authorization": f"Bearer {self._secret_key}",
                 "Content-Type": "application/json",
             },
         )

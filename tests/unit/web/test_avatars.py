@@ -1,4 +1,6 @@
 from io import BytesIO
+import json
+from unittest.mock import patch
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -6,6 +8,7 @@ from PIL import Image
 
 from qbet.web.avatars import (
     AvatarValidationError,
+    SupabaseAvatarStorage,
     avatar_fallback_svg,
     is_valid_stored_avatar,
     normalize_avatar,
@@ -77,3 +80,53 @@ def test_corrupt_or_oversized_stored_avatar_is_rejected() -> None:
     assert is_valid_stored_avatar(normalized)
     assert not is_valid_stored_avatar(b"broken image")
     assert not is_valid_stored_avatar(b"x" * (1024 * 1024 + 1))
+
+
+def test_supabase_storage_http_contract_for_upload_private_download_and_delete() -> None:
+    class Response:
+        def __init__(self, content: bytes = b"") -> None:
+            self.content = content
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return self.content
+
+    key = "sb_secret_test-key"
+    storage = SupabaseAvatarStorage("https://project.example", key)
+
+    with patch(
+        "qbet.web.avatars.urlopen",
+        side_effect=(Response(), Response(b"stored-image"), Response()),
+    ) as urlopen:
+        storage.upload("users/7/avatar.jpg", b"jpeg-data")
+        assert storage.download("users/7/avatar.jpg") == b"stored-image"
+        storage.delete("users/7/avatar.jpg")
+
+    upload_request = urlopen.call_args_list[0].args[0]
+    download_request = urlopen.call_args_list[1].args[0]
+    delete_request = urlopen.call_args_list[2].args[0]
+
+    assert upload_request.method == "POST"
+    assert upload_request.full_url == (
+        "https://project.example/storage/v1/object/qbet-avatars/users/7/avatar.jpg"
+    )
+    assert upload_request.data == b"jpeg-data"
+
+    assert download_request.method == "GET"
+    assert download_request.full_url == (
+        "https://project.example/storage/v1/object/authenticated/"
+        "qbet-avatars/users/7/avatar.jpg"
+    )
+
+    assert delete_request.method == "DELETE"
+    assert delete_request.full_url == "https://project.example/storage/v1/object/qbet-avatars"
+    assert json.loads(delete_request.data) == {"prefixes": ["users/7/avatar.jpg"]}
+
+    for request in (upload_request, download_request, delete_request):
+        assert request.get_header("Apikey") == key
+        assert request.get_header("Authorization") is None
