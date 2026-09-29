@@ -49,9 +49,8 @@ class PollingRuntimeOutcome(StrEnum):
 
 
 class PollingWork(DomainModel):
-    """Restart-safe polling state for one owner/engine/mode/market identity."""
+    """Restart-safe polling state for one shared provider market identity."""
 
-    owner: Identifier
     source: DataSourceMetadata
     target: PollingTarget
     engine: Literal["bonus", "sports_capital"]
@@ -71,15 +70,16 @@ class PollingWork(DomainModel):
     latest_snapshot: NormalizedMarketSnapshot | None = None
 
     @property
-    def identity(self) -> tuple[str, str, str, PollingTarget, str, str, str]:
+    def identity(self) -> tuple[str, str, PollingTarget, str, str, str, str, str]:
         return (
-            self.owner,
             self.source.provider_id,
             self.source.source_id,
             self.target,
             self.engine,
             self.mode,
+            self.sport,
             self.match_id,
+            self.market,
         )
 
     def request(self, *, evaluation_at: AwareDatetime | None = None) -> PollingRequest:
