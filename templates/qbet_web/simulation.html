@@ -16,6 +16,7 @@
     <span class="activity-spinner provider-working-indicator" aria-label="Working"></span>
     <span class="activity-check provider-success-indicator" aria-label="Success">✓</span>
   </section>
+  {% include "qbet_web/_provider_notice.html" with provider_notice=provider_notice %}
 
   <p class="simulation-client-status" data-simulation-client-status role="status"></p>
   {% if auto_run_id %}
