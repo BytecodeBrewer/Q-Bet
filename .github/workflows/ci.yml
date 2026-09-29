@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - develop
+      - main
 
 permissions:
   contents: read
@@ -220,21 +221,25 @@ jobs:
           vercel build --yes --token "$VERCEL_TOKEN"
           echo "Vercel build passed; no deployment was created." >> "$GITHUB_STEP_SUMMARY"
 
-  deploy-develop:
-    name: Vercel production CD
+  deploy:
+    name: Vercel deployment
     needs:
       - validation
       - performance
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
-      name: production
-      url: https://q-bet.vercel.app
+      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+      url: ${{ steps.deploy.outputs.url || steps.deploy-production.outputs.url }}
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       EXPECTED_RELEASE: ${{ github.sha }}
+      VERCEL_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+      IS_PRODUCTION: ${{ github.ref == 'refs/heads/main' }}
       STABLE_URL: https://q-bet.vercel.app
     steps:
       - uses: actions/checkout@v4
@@ -242,15 +247,15 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.sha }}
 
-      - name: Verify exact develop deploy head
+      - name: Verify exact deployment head
         shell: bash
         run: |
           actual_sha="$(git rev-parse HEAD)"
           test "$actual_sha" = "$EXPECTED_RELEASE" || {
-            echo "::error::Develop deployment checkout $actual_sha does not match expected head $EXPECTED_RELEASE"
+            echo "::error::Deployment checkout $actual_sha does not match expected head $EXPECTED_RELEASE"
             exit 1
           }
-          echo "Preparing stable develop release: $actual_sha" >> "$GITHUB_STEP_SUMMARY"
+          echo "Preparing $VERCEL_ENVIRONMENT release: $actual_sha" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-python@v5
         with:
@@ -261,7 +266,7 @@ jobs:
           python -m pip install .
           python -m pip install uv
 
-      - name: Validate stable deployment configuration
+      - name: Validate deployment configuration
         shell: bash
         run: |
           test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
@@ -274,13 +279,13 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@59
 
-      - name: Pull Vercel production build configuration
-        run: vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+      - name: Pull Vercel environment configuration
+        run: vercel pull --yes --environment="$VERCEL_ENVIRONMENT" --token "$VERCEL_TOKEN"
 
       - name: Load protected polling token from Supabase Vault
         shell: bash
         run: |
-          token="$(vercel env run -e production -- python -c '
+          token="$(vercel env run -e "$VERCEL_ENVIRONMENT" -- python -c '
           import os
           import psycopg
 
@@ -290,8 +295,9 @@ jobs:
                       """
                       select decrypted_secret
                       from vault.decrypted_secrets
-                      where name = 'qbet_polling_tick_token'
-                      """
+                      where name = %s
+                      """,
+                      ("qbet_polling_tick_token",),
                   )
                   row = cursor.fetchone()
 
@@ -303,7 +309,18 @@ jobs:
           echo "::add-mask::$token"
           echo "QBET_POLLING_TICK_TOKEN=$token" >> "$GITHUB_ENV"
 
-      - name: Build stable Vercel artifacts
+      - name: Build Vercel preview artifacts
+        if: github.ref == 'refs/heads/develop'
+        env:
+          QBET_HOSTED_PREVIEW: "true"
+          QBET_DJANGO_DEBUG: "false"
+          QBET_DJANGO_ALLOWED_HOSTS: .vercel.app
+          QBET_RELEASE_SHA: ${{ github.sha }}
+          QBET_SIMULATION_MODE_ENABLED: "false"
+        run: vercel build --token "$VERCEL_TOKEN"
+
+      - name: Build Vercel production artifacts
+        if: github.ref == 'refs/heads/main'
         env:
           QBET_HOSTED_PREVIEW: "false"
           QBET_DJANGO_DEBUG: "false"
@@ -312,8 +329,27 @@ jobs:
           QBET_SIMULATION_MODE_ENABLED: "false"
         run: vercel build --prod --token "$VERCEL_TOKEN"
 
-      - name: Deploy exact develop build to stable Vercel
+      - name: Deploy preview from develop
+        if: github.ref == 'refs/heads/develop'
         id: deploy
+        shell: bash
+        run: |
+          deployment_url="$(
+            vercel deploy --prebuilt --yes \
+              --token "$VERCEL_TOKEN" \
+              --env QBET_HOSTED_PREVIEW=true \
+              --env QBET_DJANGO_DEBUG=false \
+              --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app \
+              --env QBET_POLLING_TICK_TOKEN="$QBET_POLLING_TICK_TOKEN" \
+              --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
+              --env QBET_SIMULATION_MODE_ENABLED=false
+          )"
+          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+          echo "Vercel preview deployment: $deployment_url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy production from main
+        if: github.ref == 'refs/heads/main'
+        id: deploy-production
         shell: bash
         run: |
           deployment_url="$(
@@ -327,21 +363,27 @@ jobs:
               --env QBET_SIMULATION_MODE_ENABLED=false
           )"
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
-          echo "Stable Vercel deployment: $deployment_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "Vercel Production deployment: $deployment_url" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify stable alias advanced to exact develop head
+      - name: Verify deployed release health
         shell: bash
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url || steps.deploy-production.outputs.url }}
         run: |
+          health_url="$DEPLOYMENT_URL"
+          if [ "$IS_PRODUCTION" = "true" ]; then
+            health_url="$STABLE_URL"
+          fi
           health=""
           for attempt in {1..12}; do
-            health="$(curl --fail --silent --show-error "$STABLE_URL/health/" || true)"
+            health="$(curl --fail --silent --show-error "$health_url/health/" || true)"
             if printf '%s' "$health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\"" &&                printf '%s' "$health" | grep -Fq '"status": "ok"' &&                printf '%s' "$health" | grep -Fq '"persistence": "ready"' &&                printf '%s' "$health" | grep -Fq '"readiness": "ready"'; then
-              echo "Stable alias serves exact develop release $EXPECTED_RELEASE." >> "$GITHUB_STEP_SUMMARY"
+              echo "$VERCEL_ENVIRONMENT serves exact release $EXPECTED_RELEASE." >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 5
           done
 
-          echo "::error::Stable alias did not advance to healthy release $EXPECTED_RELEASE."
+          echo "::error::$VERCEL_ENVIRONMENT did not serve healthy release $EXPECTED_RELEASE."
           printf 'Last health response: %s\n' "$health"
           exit 1

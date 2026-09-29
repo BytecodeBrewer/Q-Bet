@@ -13,8 +13,9 @@ def _job(name: str, next_name: str | None = None) -> str:
 
 
 def test_pull_request_vercel_gate_builds_without_deploying() -> None:
-    block = _job("vercel-build-check", "deploy-develop")
+    block = _job("vercel-build-check", "deploy")
 
+    assert "      - develop\n      - main" in WORKFLOW
     assert "!cancelled()" in block
     assert "github.event_name == 'pull_request'" in block
     assert "github.event.pull_request.head.sha" in block
@@ -29,33 +30,34 @@ def test_pull_request_vercel_gate_builds_without_deploying() -> None:
     assert "QBET_MIGRATION_DATABASE_URL" not in block
 
 
-def test_develop_cd_validates_config_and_updates_stable_alias() -> None:
-    block = _job("deploy-develop")
+def test_develop_cd_deploys_preview_only() -> None:
+    block = _job("deploy", None)
 
     assert "github.event_name == 'push'" in block
     assert "refs/heads/develop" in block
+    assert "refs/heads/main" in block
     assert "python manage.py migrate --check" not in block
     assert "manage.py migrate" not in block
-    assert "Validate stable deployment configuration" in block
+    assert "Validate deployment configuration" in block
     assert "QBET_MIGRATION_DATABASE_URL" not in block
-    assert "name: production" in block
-    assert "name: staging" not in block
+    assert "'production' || 'preview'" in block
     assert "qbet_polling_tick_token" in block
-    assert "vercel env run -e production -- python" in block
+    assert 'vercel env run -e "$VERCEL_ENVIRONMENT" -- python' in block
     assert "python-dotenv" not in block
     assert "python -m pip install uv" in block
-    assert "vercel pull --yes --environment=production" in block
-    assert "QBET_HOSTED_PREVIEW: \"false\"" in block
-    assert "vercel build --prod" in block
+    assert 'vercel pull --yes --environment="$VERCEL_ENVIRONMENT"' in block
+    assert "- name: Deploy preview from develop\n        if: github.ref == 'refs/heads/develop'" in block
+    assert "- name: Deploy production from main\n        if: github.ref == 'refs/heads/main'" in block
+    assert "run: vercel build --token \"$VERCEL_TOKEN\"" in block
+    assert "run: vercel build --prod --token \"$VERCEL_TOKEN\"" in block
+    assert "vercel deploy --prebuilt --yes" in block
     assert "vercel deploy --prebuilt --prod --yes" in block
-    assert "qbet_polling_tick_token" in block
     assert "https://q-bet.vercel.app" in block
-    assert '"release": "$EXPECTED_RELEASE"' not in block
-    assert 'grep -Fq "\\\"release\\\": \\"$EXPECTED_RELEASE\\\""' in block
+    assert 'if [ "$IS_PRODUCTION" = "true" ]; then' in block
 
 
 def test_pull_request_vercel_build_runs_after_failed_quality_gates() -> None:
-    block = _job("vercel-build-check", "deploy-develop")
+    block = _job("vercel-build-check", "deploy")
 
     assert "needs:\n      - validation\n      - performance" in block
     assert "!cancelled()" in block

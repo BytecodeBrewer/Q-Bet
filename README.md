@@ -85,9 +85,9 @@ The GitHub Actions **PostgreSQL validation gate** is the authoritative standard 
 
 ## Deployment
 
-Pull requests run a Vercel preview-environment build check against the exact PR head after the normal validation and performance jobs. It verifies that the app can be built with the Vercel Preview configuration, but creates no Vercel deployment for feature branches. A push to `develop` publishes the exact prebuilt head to the Production Vercel environment and checks the stable Q-Bet URL.
+Pull requests run a Vercel Preview build check against the exact PR head after the normal validation and performance jobs. It verifies that the app can be built, but does not create a deployment for feature branches. A push to `develop` creates and health-checks a Vercel Preview deployment. Only a push to `main` builds and deploys to the Production Vercel environment and checks the stable Q-Bet URL.
 
-Production and Preview configuration live in the Vercel project. The deployment workflow runs the Supabase Vault token lookup with Vercel's Production environment injected directly into the process; no database secret is copied into GitHub or written to the runner filesystem. Deployments do not run schema migrations or gate on migration state; schema changes remain an explicit operator-controlled task.
+Production and Preview configuration live in the corresponding Vercel environments. The workflow runs the Supabase Vault token lookup with the selected Vercel environment injected directly into the process; no database secret is copied into GitHub or written to the runner filesystem. Deployments do not run schema migrations or gate on migration state; schema changes remain an explicit operator-controlled task.
 
 Day-to-day deployment management is handled through the Vercel project UI and the GitHub Actions workflow; the README intentionally does not duplicate Vercel's own operating instructions.
 
