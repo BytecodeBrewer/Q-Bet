@@ -9,11 +9,15 @@ from uuid import NAMESPACE_URL, uuid5
 from qbet.bank.balances import BankBalance
 from qbet.bank.bunq import BunqTransport
 from qbet.bank.funding import (
-    BankFundingProposal,
     BankFundingProposalService,
     FundingAccountRole,
     FundingApprover,
     FundingDirection,
+)
+from qbet.bank.movement import (
+    CapitalRequirement,
+    CapitalRequirementDecisionKind,
+    CapitalRequirementService,
 )
 from qbet.storage.funding import (
     BunqSandboxSimulationFundingService,
@@ -42,6 +46,7 @@ class SimulationSandboxFundingCoordinator:
             max_balance_age=max_balance_age,
         )
         self._ledger_repository = ledger_repository or PortfolioLedgerRepository()
+        self._requirement_service = CapitalRequirementService()
         self._funding_service = funding_service or BunqSandboxSimulationFundingService(
             transport=transport,
             recipient_email=recipient_email,
@@ -69,21 +74,33 @@ class SimulationSandboxFundingCoordinator:
             raise ValueError("simulation_funding_ledger_missing")
 
         created_at = queued.history[-1].recorded_at
-        proposal = BankFundingProposal(
-            id=uuid5(NAMESPACE_URL, f"qbet:simulation-funding:{work.id}"),
+        requirement = CapitalRequirement(
+            id=uuid5(NAMESPACE_URL, f"qbet:simulation-funding-requirement:{work.id}"),
             direction=FundingDirection.FUNDING,
             source_role=FundingAccountRole.BANK_ACCOUNT,
             destination_role=FundingAccountRole.PORTFOLIO_LEDGER,
+            source_location=balance.account_reference,
+            destination_location=work.capital_context,
             amount=amount,
             currency=balance.currency,
             reason="completed_simulation_sandbox_funding",
+            opportunity_id=work.opportunity_id,
+            correlation_id=work.correlation_id,
+            required_by=expires_at,
             target_mode="simulation",
             target_context=work.capital_context,
-            correlation_id=work.correlation_id,
+            engine=work.engine,
+            workflow_reference=str(work.id),
+        )
+        decision = self._requirement_service.propose(
+            requirement,
             created_at=created_at,
             expires_at=expires_at,
-            lifecycle_at=created_at,
         )
+        if decision.kind is not CapitalRequirementDecisionKind.PROPOSAL:
+            raise ValueError(decision.reason_code or "simulation_funding_requirement_unavailable")
+        proposal = decision.proposal
+        assert proposal is not None
         awaiting = self._policy.request_approval(proposal, requested_at=requested_at)
         if not awaiting.accepted:
             raise ValueError(awaiting.reason_code or "simulation_funding_approval_request_rejected")
