@@ -208,7 +208,7 @@ class SmartPollingRuntime:
 
         if decision.outcome is PollingOutcome.SCHEDULED:
             assert decision.scheduled_for is not None
-            if decision.scheduled_for > now:
+            if work.last_outcome is None and work.last_success_at is None:
                 updated = work.model_copy(
                     update={
                         "next_due_at": decision.scheduled_for,
@@ -388,11 +388,10 @@ class SmartPollingRuntime:
         return PollingRuntimeOutcome.SUCCESS, True
 
     def _schedule_after_success(self, work: PollingWork, *, now: AwareDatetime) -> PollingWork:
-        decision = self._policy.decide(work.request(evaluation_at=now))
-        if decision.outcome is PollingOutcome.SKIPPED_FRESH:
-            return work.model_copy(
-                update={"next_due_at": decision.freshness_deadline or now + self._defer_interval}
-            )
+        planning_request = work.request(
+            evaluation_at=now + timedelta(microseconds=1)
+        ).model_copy(update={"fetched_at": None})
+        decision = self._policy.decide(planning_request)
         if decision.outcome is PollingOutcome.SCHEDULED and decision.scheduled_for is not None:
             return work.model_copy(update={"next_due_at": decision.scheduled_for})
         if decision.outcome is PollingOutcome.DISABLED:
