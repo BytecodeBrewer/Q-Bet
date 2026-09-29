@@ -18,9 +18,8 @@ SOURCE = DataSourceMetadata(
 )
 
 
-def work(*, owner: str = "alice", match_id: str = "event-1", **changes: object) -> PollingWork:
+def work(*, match_id: str = "event-1", **changes: object) -> PollingWork:
     values: dict[str, object] = {
-        "owner": owner,
         "source": SOURCE,
         "target": PollingTarget.MARKET,
         "engine": "sports_capital",
@@ -46,9 +45,8 @@ class PollingWorkRepositoryTests(TestCase):
 
     def test_claim_is_bounded_and_lease_prevents_duplicate_concurrent_claim(self) -> None:
         repository = PostgresPollingWorkRepository()
-        first = work(owner="alice", match_id="event-a")
+        first = work(match_id="event-a")
         second = work(
-            owner="bob",
             match_id="event-b",
             correlation_id=UUID("22345678-1234-5678-1234-567812345678"),
         )
@@ -68,6 +66,20 @@ class PollingWorkRepositoryTests(TestCase):
         self.assertEqual(len(first_claim), 1)
         self.assertEqual(len(second_claim), 1)
         self.assertNotEqual(first_claim[0].identity, second_claim[0].identity)
+
+    def test_same_event_different_market_has_distinct_durable_identity(self) -> None:
+        first = work(market="h2h")
+        second = work(
+            market="spreads",
+            correlation_id=UUID("32345678-1234-5678-1234-567812345678"),
+        )
+
+        self.assertNotEqual(first.identity, second.identity)
+
+        repository = PostgresPollingWorkRepository()
+        repository.synchronize((first, second))
+
+        self.assertEqual(PollingWorkRow.objects.count(), 2)
 
     def test_route_removal_disables_future_work_without_deleting_history(self) -> None:
         repository = PostgresPollingWorkRepository()
