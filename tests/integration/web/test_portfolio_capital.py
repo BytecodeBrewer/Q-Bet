@@ -151,7 +151,7 @@ class PortfolioCapitalTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get("/portfolio/")
         self.assertNotContains(response, "125,00 EUR")
-        self.assertNotContains(response, "Licensed Book")
+        self.assertNotContains(response, "portfolio-location-provider")
         self.assertContains(response, "Capital locations are not available for this account")
         portfolio = PortfolioCapitalReadService().snapshot(user_id=self.user.pk)
         self.assertFalse(portfolio.execution)
