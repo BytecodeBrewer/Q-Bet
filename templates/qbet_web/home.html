@@ -5,7 +5,7 @@
   <div class="product-hero-copy">
     <span class="eyebrow">Quantitative workflow</span>
     <h1 id="home-heading">Market data in. Strategy result out.</h1>
-    <p class="product-hero-lead">Q-Bet collects structured market data, prepares it for the selected engine, runs deterministic calculations, and checks risk and liquidity before Simulation or controlled Execution.</p>
+    <p class="product-hero-lead">Q-Bet collects structured market data, prepares it for the selected engine, runs deterministic calculations, and checks risk and liquidity before Simulation or, with approval, controlled Execution.</p>
     <div class="hero-actions">
       {% if user.is_authenticated %}
         <a class="button-link" href="{% url 'dashboard' %}">Open Dashboard</a>
@@ -48,7 +48,9 @@
 
       <path id="flow-bonus-path" class="flow-current-path" d="M176 118 H450 C496 118 501 210 548 210"/>
       <path id="flow-sports-path" class="flow-current-path" d="M176 274 H450 C496 274 501 210 548 210"/>
-      <path id="flow-shared-path" class="flow-shared-path" d="M548 210 H970 V350 H782"/>
+      <path id="flow-shared-path" class="flow-shared-path" d="M548 210 H735"/>
+      <path id="flow-simulation-path" class="flow-simulation-path" d="M735 210 C785 210 792 130 850 130 C928 130 970 200 970 350 H800"/>
+      <path id="flow-execution-path" class="flow-execution-path" d="M735 210 C785 210 792 270 850 270 H970 V350 H800"/>
 
       <g class="flow-station" data-flow-station="bonus-data" transform="translate(190 118)">
         <circle r="25"/><text y="5" text-anchor="middle">Data</text>
@@ -77,27 +79,31 @@
       <g class="flow-station flow-shared-station" data-flow-station="liquidity" transform="translate(735 210)">
         <circle r="27"/><text y="5" text-anchor="middle">Liquidity</text>
       </g>
-      <g class="flow-station flow-shared-station" data-flow-station="approval" transform="translate(850 210)">
+      <g class="flow-station flow-shared-station" data-flow-station="simulation" transform="translate(850 130)">
+        <circle r="28"/><text y="5" text-anchor="middle">Simulation</text>
+      </g>
+      <g class="flow-station flow-execution-station" data-flow-station="approval" transform="translate(850 270)">
         <circle r="27"/><text y="5" text-anchor="middle">Approval</text>
       </g>
-      <g class="flow-station flow-shared-station" data-flow-station="simulation-execution" transform="translate(970 210)">
-        <circle r="30"/><text y="-2" text-anchor="middle"><tspan x="0">Sim /</tspan><tspan x="0" dy="14">Execution</tspan></text>
+      <g class="flow-station flow-execution-station" data-flow-station="execution" transform="translate(970 270)">
+        <circle r="28"/><text y="5" text-anchor="middle">Execution</text>
       </g>
       <g class="flow-station flow-shared-station" data-flow-station="settlement" transform="translate(970 350)">
         <circle r="27"/><text y="5" text-anchor="middle">Settle</text>
       </g>
-      <g class="flow-station flow-shared-station" data-flow-station="reporting" transform="translate(782 350)">
+      <g class="flow-station flow-shared-station" data-flow-station="reporting" transform="translate(800 350)">
         <circle r="30"/><text y="-2" text-anchor="middle"><tspan x="0">Report /</tspan><tspan x="0" dy="14">Monitor</tspan></text>
       </g>
 
       <circle class="flow-packet flow-packet-current" r="6" data-flow-packet data-flow-path="flow-bonus-path" data-flow-duration="7000" data-flow-phase="0" data-flow-pulse="bonus-data:.05,bonus-prepare:.42,bonus-calc:.73"/>
       <circle class="flow-packet flow-packet-current flow-packet-secondary" r="6" data-flow-packet data-flow-path="flow-sports-path" data-flow-duration="7000" data-flow-phase="3500" data-flow-pulse="sports-data:.05,sports-prepare:.42,sports-calc:.73"/>
-      <circle class="flow-packet flow-packet-shared" r="7" data-flow-packet data-flow-path="flow-shared-path" data-flow-duration="9000" data-flow-phase="0" data-flow-pulse="risk:.12,liquidity:.29,approval:.46,simulation-execution:.63,settlement:.80,reporting:1"/>
+      <circle class="flow-packet flow-packet-shared" r="7" data-flow-packet data-flow-path="flow-shared-path" data-flow-duration="5200" data-flow-phase="0" data-flow-pulse="risk:.35,liquidity:1"/>
+      <circle class="flow-packet flow-packet-simulation" r="6" data-flow-packet data-flow-path="flow-simulation-path" data-flow-duration="7600" data-flow-phase="1500" data-flow-pulse="simulation:.22,settlement:.77,reporting:1"/>
 
       <g class="flow-future-layer" data-future-layer>
         <text class="flow-group-label flow-future-label" x="48" y="454">Future / planned</text>
         <path class="flow-future-path" d="M94 504 H1032"/>
-        <path class="flow-future-path" d="M548 504 V404 C548 370 590 350 640 350"/>
+        <path class="flow-future-path" d="M548 504 V210"/>
 
         <g class="flow-future-engine" transform="translate(130 522)">
           <rect x="-84" y="-24" width="168" height="48" rx="12"/>
@@ -136,7 +142,7 @@
       </div>
       <div class="home-flow-mobile-shared">
         <strong>Shared stages</strong>
-        <small>Risk → Liquidity → Approval → Simulation / Execution → Settlement → Reporting / Monitoring</small>
+        <small>Risk → Liquidity → Simulation, or Approval → Execution → Settlement → Reporting / Monitoring</small>
       </div>
       <div class="home-flow-mobile-future">
         <span class="capability-badge is-planned">Future</span>
@@ -167,7 +173,7 @@
     <article>
       <span class="principle-index">03</span>
       <h3>Check before action</h3>
-      <p>Risk, liquidity and approval checks sit between an engine result and Simulation or controlled Execution.</p>
+      <p>Risk and liquidity are checked before either route. Controlled Execution adds an explicit approval step; Simulation does not.</p>
     </article>
   </div>
 </section>
