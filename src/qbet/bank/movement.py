@@ -64,15 +64,18 @@ class CapitalRequirementDecision(DomainModel):
     requirement: CapitalRequirement
     kind: CapitalRequirementDecisionKind
     proposal: BankFundingProposal | None = None
+    attention: CapitalAttentionNotice | None = None
     reason_code: Identifier | None = None
 
     @model_validator(mode="after")
     def validates_decision(self) -> "CapitalRequirementDecision":
         if self.kind is CapitalRequirementDecisionKind.PROPOSAL:
-            if self.proposal is None or self.reason_code is not None:
-                raise ValueError("proposal decisions require a proposal only")
+            if self.proposal is None or self.attention is None or self.reason_code is not None:
+                raise ValueError("proposal decisions require proposal and attention only")
         elif self.proposal is not None or self.reason_code is None:
-            raise ValueError("non-proposal decisions require a reason code only")
+            raise ValueError("non-proposal decisions require a reason code")
+        if self.kind is CapitalRequirementDecisionKind.NO_ACTION and self.attention is not None:
+            raise ValueError("no-action decisions must not request attention")
         return self
 
 
@@ -122,12 +125,14 @@ class CapitalRequirementService:
             return CapitalRequirementDecision(
                 requirement=requirement,
                 kind=CapitalRequirementDecisionKind.UNAVAILABLE,
+                attention=self.attention(requirement),
                 reason_code="requirement_deadline_elapsed",
             )
         if requirement.source_location is None:
             return CapitalRequirementDecision(
                 requirement=requirement,
                 kind=CapitalRequirementDecisionKind.UNAVAILABLE,
+                attention=self.attention(requirement),
                 reason_code="capital_source_unavailable",
             )
 
@@ -149,6 +154,7 @@ class CapitalRequirementService:
             required_by=requirement.required_by,
             engine=requirement.engine,
             workflow_reference=requirement.workflow_reference,
+            attention_created_at=created_at,
             created_at=created_at,
             expires_at=expires_at,
             lifecycle_at=created_at,
@@ -157,6 +163,7 @@ class CapitalRequirementService:
             requirement=requirement,
             kind=CapitalRequirementDecisionKind.PROPOSAL,
             proposal=proposal,
+            attention=self.attention(requirement),
         )
 
 
