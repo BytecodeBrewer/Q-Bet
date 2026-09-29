@@ -1,4 +1,4 @@
-"""User-facing read model for authoritative portfolio capital state."""
+"""User-facing capital-location read model over authoritative PortfolioLedger state."""
 
 from __future__ import annotations
 
@@ -11,25 +11,21 @@ from pydantic import ValidationError
 
 from qbet.ledger import PortfolioLedger
 from qbet.storage.models import PortfolioLedgerRow
-from qbet.web.models import PortfolioLedgerAccess
+from qbet.web.models import PortfolioCapitalLocation, PortfolioLedgerAccess
 
 
 @dataclass(frozen=True)
 class CapitalLocation:
+    kind: str
     mode: str
     currency: str
     label: str
-    available: Decimal
-    reserved: Decimal
-    locked: Decimal
-    pending: Decimal
-    settled: Decimal
-    cost: Decimal
-    tracked_total: Decimal
+    amount: Decimal
     updated_at: datetime
-    source: str = "PortfolioLedger"
-    status: str = "verified"
-
+    source: str
+    status: str
+    provider_id: str | None = None
+    note: str = ""
 
 @dataclass(frozen=True)
 class CurrencyTotals:
@@ -39,7 +35,6 @@ class CurrencyTotals:
     reserved: Decimal
     locked: Decimal
     pending: Decimal
-
 
 @dataclass(frozen=True)
 class PortfolioCapitalView:
@@ -52,56 +47,79 @@ class PortfolioCapitalView:
 
 
 class PortfolioCapitalReadService:
-    """Read persisted ledgers without deriving balances from engines or reports."""
+    """Expose ledger lifecycle totals and independently tracked capital locations."""
 
     def snapshot(self, *, user_id: int, is_staff: bool = False) -> PortfolioCapitalView:
         try:
             rows_query = PortfolioLedgerRow.objects.order_by("mode", "currency")
             if not is_staff:
-                permitted = PortfolioLedgerAccess.objects.filter(user_id=user_id).values(
-                    "mode", "currency"
+                allowed = set(
+                    PortfolioLedgerAccess.objects.filter(user_id=user_id).values_list(
+                        "mode", "currency"
+                    )
                 )
-                allowed = {(item["mode"], item["currency"]) for item in permitted}
-                rows = tuple(
-                    row for row in rows_query if (row.mode, row.currency) in allowed
-                )
+                rows = tuple(row for row in rows_query if (row.mode, row.currency) in allowed)
             else:
                 rows = tuple(rows_query)
+            allocations = tuple(
+                PortfolioCapitalLocation.objects.filter(user_id=user_id).select_related("provider")
+            )
         except DatabaseError:
             return PortfolioCapitalView(
-                available=False,
-                message="Portfolio capital is temporarily unavailable.",
+                available=False, message="Portfolio capital is temporarily unavailable."
             )
 
         execution: list[CapitalLocation] = []
         simulation: list[CapitalLocation] = []
+        execution_totals: list[CurrencyTotals] = []
+        simulation_totals: list[CurrencyTotals] = []
         try:
             for row in rows:
                 ledger = PortfolioLedger.model_validate(row.payload)
                 balance = ledger.balance
-                # settled and cost are cumulative lifecycle counters. They are deliberately
-                # excluded from tracked_total so capital is never counted twice.
                 tracked_total = (
                     balance.available + balance.reserved + balance.locked + balance.pending
                 )
-                location = CapitalLocation(
-                    mode=balance.mode,
+                totals = CurrencyTotals(
                     currency=balance.currency,
-                    label=(
-                        "Execution portfolio"
-                        if balance.mode == "execution"
-                        else "Simulation sandbox"
-                    ),
+                    tracked_total=tracked_total,
                     available=balance.available,
                     reserved=balance.reserved,
                     locked=balance.locked,
                     pending=balance.pending,
-                    settled=balance.settled,
-                    cost=balance.cost,
-                    tracked_total=tracked_total,
-                    updated_at=row.updated_at,
                 )
-                (execution if balance.mode == "execution" else simulation).append(location)
+                (execution_totals if balance.mode == "execution" else simulation_totals).append(totals)
+
+                matching = [
+                    item for item in allocations
+                    if item.mode == balance.mode and item.currency == balance.currency
+                ]
+                provider_total = sum((item.amount for item in matching), Decimal(0))
+                if provider_total > tracked_total:
+                    return PortfolioCapitalView(
+                        available=False,
+                        message="Capital locations exceed the authoritative ledger and require correction.",
+                    )
+
+                target = execution if balance.mode == "execution" else simulation
+                target.append(
+                    CapitalLocation(
+                        kind="central", mode=balance.mode, currency=balance.currency,
+                        label="Central payment account", amount=tracked_total - provider_total,
+                        updated_at=row.updated_at,
+                        source="PortfolioLedger · residual after provider locations",
+                        status="verified",
+                    )
+                )
+                for item in matching:
+                    target.append(
+                        CapitalLocation(
+                            kind="provider", mode=item.mode, currency=item.currency,
+                            label=item.provider.display_name, amount=item.amount,
+                            updated_at=item.updated_at, source="Manual location correction",
+                            status="manual", provider_id=item.provider.provider_id, note=item.note,
+                        )
+                    )
         except (ValidationError, ValueError, AttributeError):
             return PortfolioCapitalView(
                 available=False,
@@ -109,34 +127,7 @@ class PortfolioCapitalReadService:
             )
 
         return PortfolioCapitalView(
-            execution=tuple(execution),
-            simulation=tuple(simulation),
-            execution_totals=_totals(execution),
-            simulation_totals=_totals(simulation),
+            execution=tuple(execution), simulation=tuple(simulation),
+            execution_totals=tuple(execution_totals),
+            simulation_totals=tuple(simulation_totals),
         )
-
-
-def _totals(locations: list[CapitalLocation]) -> tuple[CurrencyTotals, ...]:
-    currencies = sorted({location.currency for location in locations})
-    return tuple(
-        CurrencyTotals(
-            currency=currency,
-            tracked_total=sum(
-                (item.tracked_total for item in locations if item.currency == currency),
-                Decimal(0),
-            ),
-            available=sum(
-                (item.available for item in locations if item.currency == currency), Decimal(0)
-            ),
-            reserved=sum(
-                (item.reserved for item in locations if item.currency == currency), Decimal(0)
-            ),
-            locked=sum(
-                (item.locked for item in locations if item.currency == currency), Decimal(0)
-            ),
-            pending=sum(
-                (item.pending for item in locations if item.currency == currency), Decimal(0)
-            ),
-        )
-        for currency in currencies
-    )
