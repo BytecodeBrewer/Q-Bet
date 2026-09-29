@@ -74,11 +74,16 @@
   background-size: 42px 42px;
   mask-image: linear-gradient(to bottom, transparent, #000 10%, #000 90%, transparent);
 }
-.flow-legend {
+.flow-toolbar {
   position: absolute;
   z-index: 3;
   top: 18px;
   right: 20px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.flow-legend {
   display: flex;
   gap: 12px;
   padding: 8px 10px;
@@ -86,8 +91,31 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
+}
+.flow-motion-toggle {
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.flow-motion-toggle:hover,
+.flow-motion-toggle:focus-visible,
+.flow-motion-toggle[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  color: var(--text);
+  background: var(--primary-soft);
+}
+.flow-motion-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 .flow-legend span {
   display: inline-flex;
@@ -115,14 +143,14 @@
 }
 .flow-group-label {
   fill: var(--muted);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
-  letter-spacing: .08em;
+  letter-spacing: .075em;
   text-transform: uppercase;
 }
 .flow-engine-name {
   fill: var(--text);
-  font-size: 15px;
+  font-size: 20px;
   font-weight: 800;
 }
 .flow-current-path,
@@ -169,7 +197,7 @@
 }
 .flow-station text {
   fill: var(--text);
-  font-size: 11px;
+  font-size: 16px;
   font-weight: 760;
   transition: fill .18s ease;
 }
@@ -212,12 +240,12 @@
 }
 .flow-future-engine text {
   fill: var(--muted);
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 760;
 }
 .flow-future-note {
   fill: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
 }
 .home-flow-mobile { display: none; }
 
@@ -372,7 +400,7 @@
     border-radius: 20px;
   }
   .home-flow-map,
-  .flow-legend {
+  .flow-toolbar {
     display: none;
   }
   .home-flow-mobile {
@@ -414,6 +442,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .flow-motion-toggle { display: none; }
   .flow-packet { display: none; }
   .flow-future-layer {
     opacity: .76 !important;
