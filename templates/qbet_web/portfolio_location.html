@@ -1,23 +1,67 @@
 {% load display_preferences %}
-<article class="portfolio-location-card portfolio-location-{{ location.kind }}">
+<article
+  class="portfolio-location-card portfolio-location-{{ location.kind }}"
+  {% if location.kind == "provider" %}data-provider-card data-provider-name="{{ location.label|lower|escape }}"{% endif %}
+>
   <div class="portfolio-location-heading">
-    <div><span class="portfolio-source">{% if location.kind == "central" %}Central account{% else %}Provider{% endif %}</span><h3>{{ location.label }}</h3></div>
-    <span class="portfolio-state portfolio-state-{{ location.status }}">{{ location.status|capfirst }}</span>
+    <div>
+      <span class="portfolio-source">{% if location.kind == "central" %}Central account{% else %}Provider{% endif %}</span>
+      <h3>{{ location.label }}</h3>
+    </div>
+    {% if location.kind == "central" and location.mode == "execution" %}
+      <button
+        class="button compact-button"
+        type="button"
+        data-central-refresh
+        data-refresh-url="{% url 'portfolio-central-refresh' %}"
+        data-currency="{{ location.currency }}"
+      >Refresh</button>
+    {% elif location.kind == "provider" and location.mode == "execution" %}
+      <button
+        class="button compact-button"
+        type="button"
+        data-provider-edit
+        data-provider-id="{{ location.provider_id|escape }}"
+        data-provider-label="{{ location.label|escape }}"
+        data-currency="{{ location.currency }}"
+        data-amount="{% if location.status == 'recorded' %}{{ location.amount }}{% endif %}"
+        data-note="{{ location.note|escape }}"
+      >{% if location.status == "recorded" %}Edit{% else %}Set balance{% endif %}</button>
+    {% endif %}
   </div>
-  <div class="portfolio-balance-primary"><span>Capital at this location</span><strong>{% localized_money location.amount location.currency display_preferences %}</strong></div>
-  <div class="portfolio-location-meta"><span>{{ location.currency }}</span><span>Updated {% localized_datetime location.updated_at display_preferences %}</span></div>
+
+  <div class="portfolio-balance-primary">
+    <span>{% if location.kind == "central" %}Recorded balance{% else %}Balance{% endif %}</span>
+    <strong {% if location.kind == "central" %}data-central-amount{% endif %}>
+      {% if location.status == "recorded" %}
+        {% localized_money location.amount location.currency display_preferences %}
+      {% else %}
+        Not recorded
+      {% endif %}
+    </strong>
+  </div>
+
+  <div class="portfolio-location-meta">
+    <span>{{ location.currency }}</span>
+    <span {% if location.kind == "central" %}data-central-updated{% endif %}>
+      {% if location.updated_at %}Updated {% localized_datetime location.updated_at display_preferences %}{% else %}No balance recorded{% endif %}
+    </span>
+  </div>
+
   <details class="portfolio-history-context">
-    <summary>Location details</summary>
-    {% if location.kind == "central" %}<dl class="portfolio-state-grid location-state-grid">
-      <div><dt>Available</dt><dd>{% localized_money location.available location.currency display_preferences %}</dd></div>
-      <div><dt>Reserved</dt><dd>{% localized_money location.reserved location.currency display_preferences %}</dd></div>
-      <div><dt>Locked</dt><dd>{% localized_money location.locked location.currency display_preferences %}</dd></div>
-      <div><dt>Pending</dt><dd>{% localized_money location.pending location.currency display_preferences %}</dd></div>
-    </dl>{% endif %}
+    <summary>Details</summary>
     <div class="location-provenance">
-      <span>Source</span><strong>{{ location.source }}</strong>
-      {% if location.kind == "provider" %}<p>This manually reconciled amount records where capital is held. Lifecycle states remain authoritative at portfolio level until provider-level execution state is available.</p>{% endif %}
-      {% if location.note %}<p>{{ location.note }}</p>{% endif %}
+      {% if location.kind == "central" %}
+        <span>Source</span>
+        <strong data-central-source>{{ location.source }}</strong>
+        <p data-central-refresh-message>Refresh reads the configured bunq account only. It does not move money or change the PortfolioLedger.</p>
+      {% elif location.status == "recorded" %}
+        <span>Source</span>
+        <strong>{{ location.source }}</strong>
+        {% if location.note %}<p>{{ location.note }}</p>{% endif %}
+      {% else %}
+        <p>No balance has been entered for this provider.</p>
+      {% endif %}
     </div>
   </details>
 </article>
