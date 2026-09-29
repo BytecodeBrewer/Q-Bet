@@ -31,6 +31,7 @@ class LedgerOperation(StrEnum):
     FAIL = "fail"
     COST = "cost"
     FUND = "fund"
+    WITHDRAW = "withdraw"
 
 
 class LedgerCommand(DomainModel):
