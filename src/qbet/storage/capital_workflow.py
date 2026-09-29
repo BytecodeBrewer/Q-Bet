@@ -7,7 +7,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from django.db import DatabaseError, transaction
-from pydantic import AwareDatetime, PositiveInt, ValidationError
+from pydantic import AwareDatetime, NonNegativeInt, ValidationError
 
 from qbet.bank.balances import BankBalance
 from qbet.bank.funding import (
@@ -43,7 +43,7 @@ class CapitalFundingWorkflowRecord(DomainModel):
     balance: BankBalance
     action_method: CapitalActionMethod
     max_amount: PositiveDecimal
-    max_balance_age_seconds: PositiveInt
+    max_balance_age_seconds: NonNegativeInt
 
 
 class CapitalFundingWorkflowError(RuntimeError):
