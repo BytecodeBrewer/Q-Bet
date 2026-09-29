@@ -6,7 +6,7 @@ import csv
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.contrib import messages
@@ -24,6 +24,14 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.views.decorators.http import require_GET, require_POST
 from pydantic import ValidationError
 
+from qbet.web.avatars import (
+    AvatarStorageError,
+    AvatarValidationError,
+    avatar_fallback_svg,
+    get_avatar_storage,
+    is_valid_stored_avatar,
+    normalize_avatar,
+)
 from qbet.monitoring import MonitoringQuery, MonitoringService as WorkflowMonitoringService
 from qbet.monitoring.exports import csv_header as monitoring_csv_header
 from qbet.monitoring.exports import csv_rows as monitoring_csv_rows
@@ -86,7 +94,12 @@ from qbet.web.forms import (
     SimulationStartForm,
     UserRoutingPreferencesForm,
 )
-from qbet.web.models import AccountVerification, CustomerReportAccess, SimulationRunState
+from qbet.web.models import (
+    AccountVerification,
+    CustomerReportAccess,
+    SimulationRunState,
+    UserAvatar,
+)
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.provider_activity import ProviderActivitySnapshot, provider_activity_snapshot
 from qbet.web.portfolio import PortfolioCapitalReadService
@@ -502,8 +515,104 @@ def profile(request: HttpRequest) -> HttpResponse:
             preferences_form=preferences_form,
             status=status,
             verification_status=account_verification_status(user),
+            avatar=UserAvatar.objects.filter(user=user).first(),
         ),
     )
+
+
+@login_required
+@require_POST
+def profile_avatar_update(request: HttpRequest) -> HttpResponse:
+    user = cast(User, request.user)
+    uploaded_file = request.FILES.get("avatar")
+    if uploaded_file is None:
+        messages.error(request, "Choose an image to upload.")
+        return redirect("profile")
+    try:
+        normalized = normalize_avatar(uploaded_file)
+        storage = get_avatar_storage()
+        object_key = f"{user.pk}/{uuid4().hex}.jpg"
+        storage.upload(object_key, normalized.content)
+    except AvatarValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect("profile")
+    except AvatarStorageError:
+        messages.error(request, "Avatar storage is unavailable. Please try again later.")
+        return redirect("profile")
+
+    try:
+        with transaction.atomic():
+            avatar = UserAvatar.objects.select_for_update().filter(user=user).first()
+            previous_key = avatar.object_key if avatar is not None else None
+            if avatar is None:
+                UserAvatar.objects.create(
+                    user=user,
+                    object_key=object_key,
+                    content_type="image/jpeg",
+                    byte_size=len(normalized.content),
+                )
+            else:
+                avatar.object_key = object_key
+                avatar.content_type = "image/jpeg"
+                avatar.byte_size = len(normalized.content)
+                avatar.save(update_fields=("object_key", "content_type", "byte_size", "updated_at"))
+    except DatabaseError:
+        try:
+            storage.delete(object_key)
+        except AvatarStorageError:
+            pass
+        raise
+
+    if previous_key:
+        try:
+            storage.delete(previous_key)
+        except AvatarStorageError:
+            pass
+    messages.success(request, "Profile picture updated.")
+    return redirect("profile")
+
+
+@login_required
+@require_POST
+def profile_avatar_remove(request: HttpRequest) -> HttpResponse:
+    user = cast(User, request.user)
+    with transaction.atomic():
+        avatar = UserAvatar.objects.select_for_update().filter(user=user).first()
+        object_key = avatar.object_key if avatar is not None else None
+        if avatar is not None:
+            avatar.delete()
+    if object_key is None:
+        messages.success(request, "The generated profile picture is active.")
+        return redirect("profile")
+    try:
+        get_avatar_storage().delete(object_key)
+    except AvatarStorageError:
+        messages.warning(
+            request,
+            "Your generated profile picture is active, but stored image cleanup could not finish.",
+        )
+        return redirect("profile")
+    messages.success(request, "Profile picture removed.")
+    return redirect("profile")
+
+
+@login_required
+@require_GET
+def account_avatar(request: HttpRequest) -> HttpResponse:
+    user = cast(User, request.user)
+    try:
+        avatar = UserAvatar.objects.get(user=user)
+        content = get_avatar_storage().download(avatar.object_key)
+        if avatar.content_type != "image/jpeg" or not is_valid_stored_avatar(content):
+            raise AvatarStorageError("Stored avatar is invalid.")
+    except (UserAvatar.DoesNotExist, AvatarStorageError):
+        content = avatar_fallback_svg(user.get_username(), user.first_name, user.last_name)
+        response = HttpResponse(content, content_type="image/svg+xml")
+    else:
+        response = HttpResponse(content, content_type="image/jpeg")
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @login_required

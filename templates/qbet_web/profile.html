@@ -2,6 +2,22 @@
 {% block content %}
 <section class="content-section">
   <h1>Profile</h1>
+  <section aria-labelledby="profile-picture-heading">
+    <h2 id="profile-picture-heading">Profile picture</h2>
+    <img class="profile-avatar-preview" src="{% url 'account-avatar' %}" alt="Profile picture for {{ user.get_username }}" width="96" height="96">
+    <form method="post" enctype="multipart/form-data" action="{% url 'profile-avatar-update' %}">
+      {% csrf_token %}
+      <p><label for="profile-avatar-file">Choose a JPEG, PNG, or WebP image (max. 5 MB)</label>
+        <input id="profile-avatar-file" type="file" name="avatar" accept="image/jpeg,image/png,image/webp" required></p>
+      <button class="primary" type="submit">Upload profile picture</button>
+    </form>
+    {% if avatar %}
+      <form method="post" action="{% url 'profile-avatar-remove' %}">
+        {% csrf_token %}
+        <button type="submit">Remove profile picture</button>
+      </form>
+    {% endif %}
+  </section>
   <p>{% if status.ready %}Notification ready{% else %}Notification unavailable: {{ status.reason_code }}{% endif %}</p>
   <p>{% if verification_status.verified %}Email verified{% elif verification_status.pending %}Email verification pending{% else %}Email verification unavailable{% endif %}</p>
   <p><a href="{% url 'password-change' %}">Change password</a></p>
