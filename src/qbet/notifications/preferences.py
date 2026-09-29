@@ -8,7 +8,6 @@ from typing import Protocol
 from uuid import UUID
 
 from django.db import DatabaseError
-from django.db.models import Exists, OuterRef, Subquery
 from django.utils import timezone
 
 from qbet.bank.funding import BankFundingProposal, FundingProposalState
