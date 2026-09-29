@@ -179,13 +179,14 @@ class PollingWorkRow(models.Model):
     """Durable provider polling work and latest normalized snapshot state."""
 
     id = models.BigAutoField(primary_key=True)
-    owner_id = models.CharField(max_length=255)
     provider_id = models.CharField(max_length=255)
     source_id = models.CharField(max_length=255)
     target = models.CharField(max_length=16)
     engine = models.CharField(max_length=64)
     mode = models.CharField(max_length=16)
+    sport = models.CharField(max_length=255)
     match_id = models.CharField(max_length=255)
+    market = models.CharField(max_length=255)
     correlation_id = models.UUIDField(db_index=True)
     next_due_at = models.DateTimeField(db_index=True)
     attempt = models.PositiveIntegerField(default=0)
@@ -203,13 +204,14 @@ class PollingWorkRow(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=(
-                    "owner_id",
                     "provider_id",
                     "source_id",
                     "target",
                     "engine",
                     "mode",
+                    "sport",
                     "match_id",
+                    "market",
                 ),
                 name="qbet_polling_work_identity_unique",
             )
