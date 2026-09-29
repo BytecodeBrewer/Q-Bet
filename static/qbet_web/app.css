@@ -478,7 +478,7 @@ body[data-theme="dark"] .portfolio-simulation { background: #2c3038; border-colo
 .portfolio-total-card > span { display: block; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .08em; }
 .portfolio-total-card > strong { display: block; margin: 5px 0 2px; font-size: clamp(24px, 3vw, 31px); letter-spacing: -.025em; }
 .portfolio-total-card > small { display: block; margin-bottom: 15px; }
-.portfolio-total-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.portfolio-total-card dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
 .portfolio-total-card dl div { padding: 9px 10px; border-radius: 7px; background: color-mix(in srgb, var(--surface) 70%, transparent); }
 .portfolio-total-card dd { margin-top: 3px; }
 .portfolio-location-card { padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-subtle); min-width: 0; }
@@ -511,4 +511,62 @@ body[data-theme="dark"] .portfolio-state-verified { background: #264238; color: 
 @media (max-width: 440px) {
   .portfolio-total-card dl, .portfolio-state-grid { grid-template-columns: 1fr; }
   .portfolio-authority-badge { white-space: normal; }
+}
+
+
+.capital-map-heading { display:flex; justify-content:space-between; align-items:end; gap:16px; margin:24px 0 12px; }
+.capital-map-heading h3 { margin:3px 0 0; }
+.portfolio-location-central { border-left:4px solid #155e9d; }
+.portfolio-location-provider { border-left:4px solid #8a6a28; }
+.location-provenance { margin-top:12px; padding:10px 12px; border-radius:7px; background:var(--surface); border:1px solid var(--border); }
+.location-provenance span { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
+.location-provenance strong { display:block; margin-top:3px; font-size:12px; }
+.location-provenance p { margin:7px 0 0; color:var(--muted); }
+.portfolio-editor-dialog { width:min(680px, calc(100vw - 28px)); border:1px solid var(--border); border-radius:14px; padding:0; background:var(--surface); color:var(--text); box-shadow:0 22px 70px rgba(0,0,0,.24); }
+.portfolio-editor-dialog::backdrop { background:rgba(16,24,32,.56); backdrop-filter:blur(2px); }
+.portfolio-editor-form { padding:22px; }
+.portfolio-editor-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:18px; }
+.portfolio-editor-grid label { display:grid; gap:6px; color:var(--muted); font-size:12px; font-weight:700; }
+.portfolio-editor-grid input,.portfolio-editor-grid select { width:100%; min-height:42px; padding:9px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface-subtle); color:var(--text); }
+.portfolio-editor-grid .full-width { grid-column:1/-1; }
+.portfolio-editor-note { display:flex; gap:10px; margin-top:16px; padding:12px; border-radius:8px; background:var(--primary-soft); color:var(--muted); font-size:12px; }
+.portfolio-editor-note strong { color:var(--primary); }
+@media (max-width:600px){.capital-map-heading{align-items:flex-start;flex-direction:column}.portfolio-editor-grid{grid-template-columns:1fr}.portfolio-editor-grid .full-width{grid-column:auto}}
+
+
+/* Portfolio account controls */
+.portfolio-account-section + .portfolio-account-section { margin-top: 28px; }
+.portfolio-central-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.portfolio-reconciliation-note { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.compact-button { min-height: 34px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.compact-button:hover, .compact-button:focus-visible { border-color: var(--primary); color: var(--primary); }
+.compact-button:disabled { opacity: .62; cursor: progress; }
+.provider-list-heading { align-items: flex-end; }
+.provider-list-controls { display: flex; align-items: flex-end; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.provider-list-controls label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.provider-list-controls input,
+.provider-list-controls select { min-height: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-subtle); color: var(--text); font: inherit; text-transform: none; letter-spacing: normal; }
+.provider-search { width: min(260px, 100%); }
+.provider-search input { width: 100%; }
+.provider-edit-button { width: 38px; height: 38px; flex: 0 0 38px; display: inline-grid; place-items: center; padding: 0; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--muted); cursor: pointer; }
+.provider-edit-button:hover,
+.provider-edit-button:focus-visible { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.provider-edit-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.provider-list-footer { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; }
+.provider-list-count { color: var(--muted); font-size: 13px; }
+.provider-load-more[hidden] { display: none; }
+.portfolio-provider-empty { margin: 14px 0 0; color: var(--muted); }
+.portfolio-location-card[hidden] { display: none; }
+.portfolio-editor-form .dialog-heading p { margin: 4px 0 0; color: var(--muted); }
+@media (max-width: 760px) {
+  .portfolio-total-card dl { grid-template-columns: 1fr; }
+  .portfolio-central-grid { grid-template-columns: 1fr; }
+  .provider-list-heading { align-items: stretch; }
+  .provider-list-controls { width: 100%; justify-content: stretch; display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(84px, auto)); }
+  .provider-search { width: auto; grid-column: 1 / -1; }
+}
+@media (max-width: 440px) {
+  .provider-list-controls { grid-template-columns: 1fr 1fr; }
+  .provider-list-footer { align-items: stretch; flex-direction: column; }
+  .provider-load-more { width: 100%; }
 }
