@@ -1,22 +1,17 @@
 {% load display_preferences %}
-<article class="portfolio-location-card">
+<article class="portfolio-location-card portfolio-location-{{ location.kind }}">
   <div class="portfolio-location-heading">
-    <div><span class="portfolio-source">{{ location.source }}</span><h3>{{ location.label }}</h3></div>
+    <div><span class="portfolio-source">{% if location.kind == "central" %}Central account{% else %}Provider{% endif %}</span><h3>{{ location.label }}</h3></div>
     <span class="portfolio-state portfolio-state-{{ location.status }}">{{ location.status|capfirst }}</span>
   </div>
-  <div class="portfolio-balance-primary"><span>Available now</span><strong>{% localized_money location.available location.currency display_preferences %}</strong></div>
-  <dl class="portfolio-state-grid">
-    <div><dt>Reserved</dt><dd>{% localized_money location.reserved location.currency display_preferences %}</dd></div>
-    <div><dt>Locked</dt><dd>{% localized_money location.locked location.currency display_preferences %}</dd></div>
-    <div><dt>Pending</dt><dd>{% localized_money location.pending location.currency display_preferences %}</dd></div>
-    <div><dt>Tracked total</dt><dd>{% localized_money location.tracked_total location.currency display_preferences %}</dd></div>
-  </dl>
-  <div class="portfolio-location-meta">
-    <span>Currency <strong>{{ location.currency }}</strong></span>
-    <span>Last ledger update <strong>{% localized_datetime location.updated_at display_preferences %}</strong></span>
-  </div>
-  <details class="portfolio-history-context"><summary>Reconciled context</summary>
-    <p>Settled lifecycle total: <strong>{% localized_money location.settled location.currency display_preferences %}</strong> · Recorded costs: <strong>{% localized_money location.cost location.currency display_preferences %}</strong></p>
-    <small>Historical lifecycle counters are not added to tracked capital.</small>
+  <div class="portfolio-balance-primary"><span>Capital at this location</span><strong>{% localized_money location.amount location.currency display_preferences %}</strong></div>
+  <div class="portfolio-location-meta"><span>{{ location.currency }}</span><span>Updated {% localized_datetime location.updated_at display_preferences %}</span></div>
+  <details class="portfolio-history-context">
+    <summary>Location details</summary>
+    <div class="location-provenance">
+      <span>Source</span><strong>{{ location.source }}</strong>
+      {% if location.kind == "provider" %}<p>Lifecycle states such as reserved or locked remain authoritative at portfolio level. This location records where the capital is held.</p>{% endif %}
+      {% if location.note %}<p>{{ location.note }}</p>{% endif %}
+    </div>
   </details>
 </article>
