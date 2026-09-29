@@ -5,7 +5,9 @@
 >
   <div class="portfolio-location-heading">
     <div>
-      <span class="portfolio-source">{% if location.kind == "central" %}Central account{% else %}Provider{% endif %}</span>
+      <span class="portfolio-source">
+        {% if location.kind == "central" %}Central account{% elif location.kind == "unallocated" %}Unallocated{% else %}Provider{% endif %}
+      </span>
       <h3>{{ location.label }}</h3>
     </div>
     {% if location.kind == "central" and location.mode == "execution" %}
@@ -40,10 +42,14 @@
   </div>
 
   <div class="portfolio-balance-primary">
-    <span>{% if location.kind == "central" %}Recorded balance{% else %}Balance{% endif %}</span>
+    <span>
+      {% if location.kind == "central" %}Bank balance{% elif location.kind == "unallocated" %}Unallocated{% else %}Balance{% endif %}
+    </span>
     <strong {% if location.kind == "central" %}data-central-amount{% endif %}>
       {% if location.status == "recorded" %}
         {% localized_money location.amount location.currency display_preferences %}
+      {% elif location.kind == "central" %}
+        Not available
       {% else %}
         Not recorded
       {% endif %}
@@ -53,7 +59,13 @@
   <div class="portfolio-location-meta">
     <span>{{ location.currency }}</span>
     <span {% if location.kind == "central" %}data-central-updated{% endif %}>
-      {% if location.updated_at %}Updated {% localized_datetime location.updated_at display_preferences %}{% else %}No balance recorded{% endif %}
+      {% if location.updated_at %}
+        Updated {% localized_datetime location.updated_at display_preferences %}
+      {% elif location.kind == "central" %}
+        No bank observation
+      {% else %}
+        No balance recorded
+      {% endif %}
     </span>
   </div>
 
@@ -63,7 +75,13 @@
       {% if location.kind == "central" %}
         <span>Source</span>
         <strong data-central-source>{{ location.source }}</strong>
-        <p data-central-refresh-message>Refresh reads the configured bunq account only. No transfer is made.</p>
+        <p data-central-refresh-message>
+          No bunq balance has been observed for this view yet. A refresh reads bunq only; it does not reconcile the bank balance with Q-Bet totals or move money.
+        </p>
+      {% elif location.kind == "unallocated" %}
+        <span>Source</span>
+        <strong>{{ location.source }}</strong>
+        <p>This amount is recorded by Q-Bet but is not assigned to bunq or a provider. It is not treated as a verified balance at either location.</p>
       {% elif location.status == "recorded" %}
         <span>Source</span>
         <strong>{{ location.source }}</strong>
