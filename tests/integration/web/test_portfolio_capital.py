@@ -64,7 +64,7 @@ class PortfolioCapitalTests(TestCase):
     def _grant(self, user: User, mode: str, currency: str) -> None:
         PortfolioLedgerAccess.objects.create(user=user, mode=mode, currency=currency)
 
-    def test_provider_location_partitions_ledger_and_central_account_is_remainder(self) -> None:
+    def test_provider_location_leaves_unallocated_capital_without_inventing_bunq(self) -> None:
         self._store("execution", "EUR", available="700", reserved="40", locked="20", pending="30")
         self._grant(self.user, "execution", "EUR")
         PortfolioCapitalLocation.objects.create(
@@ -77,10 +77,21 @@ class PortfolioCapitalTests(TestCase):
         )
 
         snapshot = PortfolioCapitalReadService().snapshot(user_id=self.user.pk)
-        central, provider = snapshot.execution
+        central = next(item for item in snapshot.execution if item.kind == "central")
+        unallocated = next(item for item in snapshot.execution if item.kind == "unallocated")
+        provider = next(
+            item
+            for item in snapshot.execution
+            if item.kind == "provider" and item.provider_id == self.provider.provider_id
+        )
 
         self.assertEqual(central.label, "bunq")
-        self.assertEqual(central.amount, Decimal("620"))
+        self.assertIsNone(central.amount)
+        self.assertIsNone(central.updated_at)
+        self.assertEqual(central.status, "unavailable")
+        self.assertEqual(unallocated.label, "Unallocated capital")
+        self.assertEqual(unallocated.amount, Decimal("620"))
+        self.assertEqual(unallocated.source, "Q-Bet ledger allocation")
         self.assertEqual(provider.label, "Licensed Book")
         self.assertEqual(provider.amount, Decimal("170"))
         self.assertEqual(provider.status, "recorded")
@@ -181,9 +192,16 @@ class PortfolioCapitalTests(TestCase):
 
         snapshot = PortfolioCapitalReadService().snapshot(user_id=self.user.pk)
         central = next(item for item in snapshot.execution if item.kind == "central")
-        provider = next(item for item in snapshot.execution if item.kind == "provider")
+        unallocated = next(item for item in snapshot.execution if item.kind == "unallocated")
+        provider = next(
+            item
+            for item in snapshot.execution
+            if item.kind == "provider" and item.provider_id == self.provider.provider_id
+        )
 
-        self.assertEqual(central.amount, Decimal("125"))
+        self.assertIsNone(central.amount)
+        self.assertEqual(central.status, "unavailable")
+        self.assertEqual(unallocated.amount, Decimal("125"))
         self.assertEqual(provider.label, "Licensed Book")
         self.assertIsNone(provider.amount)
         self.assertEqual(provider.status, "not_recorded")
@@ -216,6 +234,13 @@ class PortfolioCapitalTests(TestCase):
         self.assertContains(response, "Total capital")
         self.assertContains(response, "Central account")
         self.assertContains(response, "bunq")
+        self.assertContains(response, "Not available")
+        self.assertContains(response, "No bank observation")
+        self.assertContains(response, "Unallocated capital")
+        self.assertContains(
+            response,
+            "Bank observations and Q-Bet allocation totals are shown separately until they are reconciled.",
+        )
         self.assertContains(response, "Providers")
         self.assertContains(response, "Licensed Book")
         self.assertContains(response, second.display_name)
@@ -264,6 +289,7 @@ class PortfolioCapitalTests(TestCase):
         )
         self.assertEqual(ledger.balance.available, Decimal("125"))
         self.assertEqual(ledger.balance.reserved, Decimal("20"))
+        self.assertNotEqual(Decimal(response.json()["amount"]), Decimal("145"))
 
     def test_provider_edit_cannot_allocate_more_than_tracked_capital(self) -> None:
         self._store("execution", "EUR", available="25")
@@ -283,7 +309,7 @@ class PortfolioCapitalTests(TestCase):
         self.assertFalse(PortfolioCapitalLocation.objects.exists())
 
     @patch("qbet.web.portfolio_locations.read_bunq_balance")
-    def test_central_refresh_returns_fresh_bunq_balance_without_mutating_ledger(
+    def test_central_refresh_can_differ_from_ledger_without_mutating_or_reconciling_it(
         self, read_balance
     ) -> None:
         self._store("execution", "EUR", available="125", reserved="20")
@@ -306,6 +332,7 @@ class PortfolioCapitalTests(TestCase):
                 "amount": "321.45",
                 "currency": "EUR",
                 "observed_at": observed_at.isoformat(),
+                "reconciled": False,
             },
         )
         ledger = PortfolioLedger.model_validate(
