@@ -245,6 +245,7 @@ class BunqSandboxSimulationFundingBoundaryTests(TestCase):
             CapitalMovementObservation(
                 status=CapitalMovementObservationStatus.CONFIRMED,
                 observed_at=pending.performed_at + timedelta(seconds=1),
+                source="bunq_sandbox_transaction",
                 amount=approved.proposal.amount,
                 currency=approved.proposal.currency,
                 source_location=approved.proposal.source_location,
