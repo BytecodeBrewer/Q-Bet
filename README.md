@@ -85,11 +85,11 @@ The GitHub Actions **PostgreSQL validation gate** is the authoritative standard 
 
 ## Deployment
 
-Pull requests and changes on `develop` can produce gated Vercel Preview deployments after CI passes.
+Pull requests run a gated Vercel build check after the normal validation and performance jobs. That check builds the exact PR head in CI but does not create a Vercel deployment. Publication is a separate CD boundary: a green push to `develop` first verifies that the shared PostgreSQL schema is current, then publishes the exact prebuilt head to the stable Q-Bet Vercel deployment.
 
-The Vercel project receives its runtime configuration through environment variables, including `QBET_DATABASE_URL` and the Django secret. Preview environments keep high-authority behavior disabled unless explicitly enabled.
+The Vercel project receives its runtime configuration through environment variables, including `QBET_DATABASE_URL` and the Django secret. Branch build checks use non-authoritative local build values where a real runtime secret is unnecessary; deployment-only secrets remain confined to the stable deployment boundary.
 
-Day-to-day deployment and preview management is handled through the Vercel project UI and the GitHub Actions workflow; the README intentionally does not duplicate Vercel's own operating instructions.
+Day-to-day deployment management is handled through the Vercel project UI and the GitHub Actions workflow; the README intentionally does not duplicate Vercel's own operating instructions.
 
 ## Execution Strategy
 
