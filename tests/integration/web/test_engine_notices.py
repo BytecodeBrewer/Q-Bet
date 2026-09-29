@@ -18,7 +18,14 @@ class ContextualEngineNoticeWebTests(TestCase):
             password="Strong-pass-123",
         )
 
-    def _dashboard(self):
+    def _dashboard(
+        self,
+        provider_activity: ProviderActivitySnapshot | None = None,
+    ):
+        activity = provider_activity or ProviderActivitySnapshot(
+            state="ready",
+            label="Market data ready; no query running.",
+        )
         with (
             patch(
                 "qbet.web.views._routing_configuration",
@@ -30,10 +37,7 @@ class ContextualEngineNoticeWebTests(TestCase):
             ),
             patch(
                 "qbet.web.views._provider_activity",
-                return_value=ProviderActivitySnapshot(
-                    state="ready",
-                    label="Market data ready; no query running.",
-                ),
+                return_value=activity,
             ),
         ):
             return self.client.get("/dashboard/")
@@ -84,6 +88,81 @@ class ContextualEngineNoticeWebTests(TestCase):
         self.assertNotContains(response, "<dt>Warnings</dt>", html=True)
         self.assertNotContains(response, "<dt>Errors</dt>", html=True)
         self.assertNotContains(response, "Technical history:")
+
+    def test_dashboard_renders_working_and_success_provider_activity_notices(self) -> None:
+        self.client.force_login(self.user)
+
+        cases = (
+            (
+                ProviderActivitySnapshot(
+                    state="working",
+                    label="Market data is updating.",
+                    provider="the_odds_api",
+                    reason_code="provider_query_started",
+                ),
+                "Market data is being refreshed",
+                "Info · Market data",
+            ),
+            (
+                ProviderActivitySnapshot(
+                    state="success",
+                    label="Market data updated successfully.",
+                    provider="the_odds_api",
+                    reason_code="provider_query_completed",
+                ),
+                "Market data updated",
+                "Success · Market data",
+            ),
+        )
+
+        for activity, title, level in cases:
+            with self.subTest(state=activity.state):
+                response = self._dashboard(activity)
+                self.assertContains(response, "data-provider-notice")
+                self.assertContains(response, title)
+                self.assertContains(response, level)
+                self.assertContains(response, "the_odds_api")
+
+    def test_dashboard_renders_delayed_and_unavailable_provider_activity_notices(self) -> None:
+        self.client.force_login(self.user)
+
+        cases = (
+            (
+                ProviderActivitySnapshot(
+                    state="delayed",
+                    label="Market data update is delayed.",
+                    provider="the_odds_api",
+                    reason_code="provider_rate_limited",
+                ),
+                "Market data refresh is delayed",
+                "Warning · Market data",
+            ),
+            (
+                ProviderActivitySnapshot(
+                    state="unavailable",
+                    label="Market data source unavailable.",
+                    provider="the_odds_api",
+                    reason_code="provider_unavailable",
+                ),
+                "Market data source unavailable",
+                "Error · Market data",
+            ),
+        )
+
+        for activity, title, level in cases:
+            with self.subTest(state=activity.state):
+                response = self._dashboard(activity)
+                self.assertContains(response, "data-provider-notice")
+                self.assertContains(response, title)
+                self.assertContains(response, level)
+                self.assertContains(response, "the_odds_api")
+
+    def test_ready_provider_activity_does_not_invent_notice(self) -> None:
+        self.client.force_login(self.user)
+
+        response = self._dashboard()
+
+        self.assertNotContains(response, "data-provider-notice")
 
     def test_notice_dismissal_script_is_presentation_only(self) -> None:
         script = Path(
