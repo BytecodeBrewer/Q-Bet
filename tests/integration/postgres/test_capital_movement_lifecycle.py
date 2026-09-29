@@ -88,6 +88,8 @@ def confirmed(
     return CapitalMovementObservation(
         status=CapitalMovementObservationStatus.CONFIRMED,
         observed_at=NOW + timedelta(minutes=2),
+        source="bank_transaction_feed",
+        evidence_reference="transaction-***4321",
         amount=item.amount if amount is None else amount,
         currency=item.currency,
         source_location=item.source_location,
@@ -183,6 +185,7 @@ class CapitalMovementRepositoryTests(TestCase):
             CapitalMovementObservation(
                 status=CapitalMovementObservationStatus.FAILED,
                 observed_at=NOW + timedelta(minutes=1),
+                source="bank_transaction_feed",
                 reason_code="provider_reported_failure",
             ),
         )
