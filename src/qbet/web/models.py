@@ -93,6 +93,29 @@ class CustomerReportAccess(models.Model):
         ordering = ("-granted_at",)
 
 
+class PortfolioLedgerAccess(models.Model):
+    """Explicit per-user permission for one shared authoritative ledger context."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_portfolio_ledger_accesses",
+    )
+    mode = models.CharField(max_length=16)
+    currency = models.CharField(max_length=3)
+    granted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "qbet_portfolio_ledger_access"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "mode", "currency"),
+                name="qbet_portfolio_ledger_access_unique",
+            )
+        ]
+        ordering = ("mode", "currency")
+
+
 class UserDisplayPreference(models.Model):
     """Durable user-owned regional display choices with no business authority."""
 

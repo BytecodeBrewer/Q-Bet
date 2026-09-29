@@ -89,6 +89,7 @@ from qbet.web.forms import (
 from qbet.web.models import AccountVerification, CustomerReportAccess, SimulationRunState
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.provider_activity import ProviderActivitySnapshot, provider_activity_snapshot
+from qbet.web.portfolio import PortfolioCapitalReadService
 from qbet.web.readiness import deployment_release_id, persistence_readiness
 from qbet.web.shell_context import display_preferences_for, shell_context
 from qbet.web.ui_copy import ui_copy
@@ -133,6 +134,7 @@ WORKFLOW_MONITORING_SERVICE = WorkflowMonitoringService(WORKFLOW_MONITORING_REPO
 SIMULATION_CONTROL = SimulationControlService()
 DISPLAY_PREFERENCES = DisplayPreferenceRepository()
 OBSERVABILITY_REPOSITORY = PostgresObservabilityRepository()
+PORTFOLIO_CAPITAL = PortfolioCapitalReadService()
 
 
 def _simulation_enabled() -> bool:
@@ -1363,6 +1365,24 @@ def admin_simulation_availability(request: HttpRequest) -> HttpResponse:
         state = "enabled" if enabled else "disabled"
         messages.success(request, f"Simulation availability {state}.")
     return redirect("presentation-settings")
+
+
+@login_required
+@require_GET
+def portfolio(request: HttpRequest) -> HttpResponse:
+    """Render authoritative capital state without deriving balances from engines."""
+
+    return render(
+        request,
+        "qbet_web/portfolio.html",
+        _context(
+            request,
+            portfolio=PORTFOLIO_CAPITAL.snapshot(
+                user_id=cast(int, request.user.pk),
+                is_staff=_is_staff(request.user),
+            ),
+        ),
+    )
 
 
 @login_required
