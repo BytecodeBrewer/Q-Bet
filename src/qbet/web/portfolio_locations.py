@@ -28,6 +28,7 @@ from qbet.bank import (
     ReadOnlyBankBalanceService,
 )
 from qbet.data.models import DataSourceMetadata, SourceTransport
+from qbet.domain.models import Currency
 from qbet.ledger import PortfolioLedger
 from qbet.storage.models import PortfolioLedgerRow, SportsbookProviderRow
 from qbet.web.models import PortfolioCapitalLocation, PortfolioLedgerAccess
@@ -38,7 +39,7 @@ class CentralAccountBalance:
     """Fresh read-only bank observation returned to the Portfolio UI."""
 
     amount: Decimal
-    currency: str
+    currency: Currency
     observed_at: datetime
 
 
@@ -65,7 +66,7 @@ class ProviderCapitalLocationForm(forms.Form):
         ).order_by("display_name", "provider_id")
 
 
-def read_bunq_balance(currency: str) -> CentralAccountBalance:
+def read_bunq_balance(currency: Currency) -> CentralAccountBalance:
     """Read a fresh bunq balance without mutating PortfolioLedger."""
 
     settings = BunqSettings.from_environment()
@@ -117,12 +118,13 @@ def portfolio_central_refresh(request: HttpRequest) -> JsonResponse:
     """Refresh only the central bunq card through the read-only bank boundary."""
 
     user = cast(User, request.user)
-    currency = request.POST.get("currency", "").upper()
-    if currency not in {"EUR", "GBP", "USD"}:
+    raw_currency = request.POST.get("currency", "").upper()
+    if raw_currency not in {"EUR", "GBP", "USD"}:
         return JsonResponse(
             {"status": "invalid", "message": "Unsupported currency."},
             status=400,
         )
+    currency = cast(Currency, raw_currency)
     if not user.is_staff and not PortfolioLedgerAccess.objects.filter(
         user=user, mode="execution", currency=currency
     ).exists():
