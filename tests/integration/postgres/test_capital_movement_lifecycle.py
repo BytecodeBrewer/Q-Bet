@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
+from django.db import connection
 from django.test import TestCase
 
 from qbet.bank.funding import (
@@ -255,3 +256,15 @@ class CapitalMovementRepositoryTests(TestCase):
         self.assertIsNotNone(current)
         assert current is not None
         self.assertEqual(current.balance.available, Decimal("100"))
+
+
+    def test_capital_movement_table_uses_postgresql_row_level_security(self) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT relrowsecurity FROM pg_class WHERE relname = 'qbet_capital_movements'"
+            )
+            row = cursor.fetchone()
+
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertTrue(row[0])
