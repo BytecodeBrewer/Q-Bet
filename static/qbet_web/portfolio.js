@@ -86,8 +86,8 @@
 
         if (amount) amount.textContent = formatMoney(payload.amount, payload.currency);
         if (updated) updated.textContent = formatObservedAt(payload.observed_at);
-        if (source) source.textContent = "bunq";
-        if (message) message.textContent = "Balance refreshed from bunq. No transfer was made.";
+        if (source) source.textContent = "bunq read-only balance";
+        if (message) message.textContent = "Fresh bunq observation. It is not reconciled with the Q-Bet total or provider balances, and no transfer was made.";
       } catch (error) {
         if (message) {
           message.textContent =
