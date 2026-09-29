@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.db import DatabaseError, transaction
+from django.db.models.deletion import ProtectedError
 
 from qbet.providers import (
     ExternalProviderMapping,
@@ -55,27 +56,34 @@ class PostgresSportsbookCatalogRepository:
         return SportsbookCatalog(providers=providers, mappings=mappings)
 
     def replace(self, catalog: SportsbookCatalog) -> None:
+        incoming_provider_ids = tuple(provider.provider_id for provider in catalog.providers)
         try:
             with transaction.atomic():
                 SportsbookExternalIdentityRow.objects.all().delete()
                 SportsbookProviderDomainRow.objects.all().delete()
-                SportsbookProviderRow.objects.all().delete()
-                SportsbookProviderRow.objects.bulk_create(
-                    [
-                        SportsbookProviderRow(
-                            provider_id=provider.provider_id,
-                            legal_name=provider.legal_name,
-                            display_name=provider.display_name,
-                            jurisdiction=provider.jurisdiction,
-                            sports_betting=provider.sports_betting,
-                            online=provider.online,
-                            source_url=provider.source_url,
-                            whitelist_snapshot_date=provider.whitelist_snapshot_date,
-                            status=provider.status.value,
-                        )
-                        for provider in catalog.providers
-                    ]
-                )
+
+                # Stable provider ids are durable identities referenced by user-owned
+                # account/capital state. Update those rows in place and only attempt
+                # deletion for providers genuinely absent from the replacement.
+                SportsbookProviderRow.objects.exclude(
+                    provider_id__in=incoming_provider_ids
+                ).delete()
+
+                for provider in catalog.providers:
+                    SportsbookProviderRow.objects.update_or_create(
+                        provider_id=provider.provider_id,
+                        defaults={
+                            "legal_name": provider.legal_name,
+                            "display_name": provider.display_name,
+                            "jurisdiction": provider.jurisdiction,
+                            "sports_betting": provider.sports_betting,
+                            "online": provider.online,
+                            "source_url": provider.source_url,
+                            "whitelist_snapshot_date": provider.whitelist_snapshot_date,
+                            "status": provider.status.value,
+                        },
+                    )
+
                 SportsbookProviderDomainRow.objects.bulk_create(
                     [
                         SportsbookProviderDomainRow(
@@ -96,5 +104,9 @@ class PostgresSportsbookCatalogRepository:
                         for mapping in catalog.mappings
                     ]
                 )
+        except ProtectedError as error:
+            raise OSError(
+                "sportsbook provider catalog cannot remove referenced providers"
+            ) from error
         except DatabaseError as error:
             raise OSError("sportsbook provider catalog is unavailable") from error
