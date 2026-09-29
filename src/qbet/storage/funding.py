@@ -106,13 +106,27 @@ class BunqSandboxSimulationFundingService:
             # Historical feedback written before #212 may already have credited the
             # ledger. Never create a new pending movement that could credit it twice.
             if not claim.record.ledger_applied:
-                self._persist_movement(claim.record, recorded_at=self._clock())
+                self._persist_movement(
+                    claim.record,
+                    recorded_at=self._movement_recorded_at(claim.record.proposal),
+                )
             return claim.record.model_copy(update={"duplicate": True})
 
         provider_result = self._adapter.execute(proposal)
         feedback = self._feedback_repository.apply(proposal, provider_result)
-        self._persist_movement(feedback, recorded_at=self._clock())
+        self._persist_movement(
+            feedback,
+            recorded_at=self._movement_recorded_at(feedback.proposal),
+        )
         return feedback
+
+    def _movement_recorded_at(self, proposal: BankFundingProposal) -> AwareDatetime:
+        approval = proposal.approval
+        if approval is None:
+            raise SandboxFundingFeedbackPersistenceError(
+                "sandbox_funding_approval_missing"
+            )
+        return max(self._clock(), approval.approved_at)
 
     def _persist_movement(
         self,
