@@ -362,7 +362,7 @@ class PollingStrategyForm(forms.Form):
             interval_value = cleaned.get("market_interval_minutes")
             interval = (
                 timedelta(minutes=int(interval_value))
-                if (interval_value is not None and target is PollingTarget.MARKET and not points)
+                if (interval_value is not None and target is PollingTarget.MARKET)
                 else None
             )
             engine = _polling_engine(cleaned.get("engine"))
@@ -391,11 +391,72 @@ class PollingStrategyForm(forms.Form):
                 ),
                 request_cost_units=int(cleaned["request_cost_units"]),
             )
-        except (PydanticValidationError, ValueError):
+        except PydanticValidationError as error:
+            message = " ".join(str(item.get("msg", "")) for item in error.errors()).lower()
+            if "refresh points or a fallback interval" in message:
+                detail = "Choose explicit refresh points or a fallback interval, not both."
+                self.add_error("market_refresh_points_minutes", detail)
+                self.add_error("market_interval_minutes", detail)
+            elif "market refresh points" in message:
+                self.add_error(
+                    "market_refresh_points_minutes",
+                    "Refresh points must be positive, unique, and ordered far-to-near without crossing the latest polling boundary.",
+                )
+            elif "freshness_window" in message:
+                self.add_error("freshness_minutes", "Freshness must be a positive duration.")
+            elif "result_retry_interval" in message:
+                self.add_error("result_retry_minutes", "Result retry must be a positive duration.")
+            elif "latest_market_poll_before_event" in message:
+                self.add_error(
+                    "latest_market_poll_before_event_minutes",
+                    "Latest market polling boundary must be a positive duration.",
+                )
+            elif "market_interval" in message:
+                self.add_error(
+                    "market_interval_minutes",
+                    "Fallback market interval must be a positive duration.",
+                )
+            else:
+                raise forms.ValidationError(
+                    "Polling strategy configuration is invalid. Check target-specific timing and capacity values."
+                ) from error
+            return cleaned
+        except ValueError as error:
             raise forms.ValidationError(
                 "Polling strategy configuration is invalid. Check target-specific timing and capacity values."
-            )
+            ) from error
         return cleaned
+
+    @staticmethod
+    def initial_from_strategy(strategy: PollingStrategy) -> dict[str, object]:
+        """Return exact editable form values for one persisted strategy."""
+
+        def minutes(value: timedelta | None) -> int | None:
+            if value is None:
+                return None
+            return int(value.total_seconds() // 60)
+
+        return {
+            "provider_id": strategy.source.provider_id,
+            "source_id": strategy.source.source_id,
+            "transport": strategy.source.transport.value,
+            "target": strategy.target.value,
+            "engine": strategy.engine or "",
+            "enabled": strategy.enabled,
+            "freshness_minutes": minutes(strategy.freshness_window),
+            "market_refresh_points_minutes": ",".join(
+                str(minutes(point)) for point in strategy.market_refresh_points
+            ),
+            "market_interval_minutes": minutes(strategy.market_interval),
+            "latest_market_poll_before_event_minutes": minutes(
+                strategy.latest_market_poll_before_event
+            ),
+            "result_retry_minutes": minutes(strategy.result_retry_interval),
+            "max_attempts": strategy.max_attempts,
+            "capacity_class": strategy.capacity_class.value,
+            "capacity_units": strategy.capacity_units,
+            "request_cost_units": strategy.request_cost_units,
+        }
 
     def to_strategy(self) -> PollingStrategy:
         if not self.is_valid() or self._strategy is None:
