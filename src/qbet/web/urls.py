@@ -6,12 +6,14 @@ from qbet.web import bonus_offers, views
 from qbet.web.engine_runtime import engine_runtime_control, sandbox_execution_control
 from qbet.web.execution_approvals import execution_approval_decision, execution_approvals
 from qbet.web.polling_settings import polling_settings
+from qbet.web.polling_tick import polling_tick
 from qbet.web.routing_settings import routing_settings
 
 urlpatterns = [
     path("", views.home, name="home"),
     path("health/", views.health, name="health"),
     path("metrics/", views.metrics, name="metrics"),
+    path("internal/polling/tick/", polling_tick, name="polling-tick"),
     path("register/", views.register, name="register"),
     path("verification/pending/", views.verification_pending, name="verification-pending"),
     path("verify-email/<str:uidb64>/<str:token>/", views.verify_email, name="verify-email"),
