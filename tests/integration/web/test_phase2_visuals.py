@@ -66,6 +66,11 @@ class Phase2VisualIntegrationTests(TestCase):
             response,
             "both routes → Settlement → Reporting / Monitoring",
         )
+        self.assertContains(
+            response,
+            "Planned paths keep component-specific preparation and risk rules before shared liquidity and dispatch stages.",
+        )
+        self.assertNotContains(response, 'd="M470 504 V210"')
         self.assertContains(response, "data-flow-packet", count=4)
         self.assertContains(response, "qbet_web/home.js")
         self.assertContains(response, "Sign in")
@@ -103,6 +108,8 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertIn('flow.querySelector("[data-flow-motion-toggle]")', script)
         self.assertIn("motionPaused", script)
         self.assertIn("setMotionPaused", script)
+        self.assertIn("cancelFutureReveal", script)
+        self.assertIn("if (!motionPaused)", script)
         self.assertIn('motionToggle.setAttribute("aria-pressed"', script)
         self.assertIn('"Resume motion" : "Pause motion"', script)
         self.assertIn("scheduleFutureReveal()", script)
@@ -139,7 +146,12 @@ class Phase2VisualIntegrationTests(TestCase):
         reduced_motion = public_styles.split("@media (prefers-reduced-motion: reduce)")[-1]
         self.assertIn(".flow-motion-toggle { display: none; }", reduced_motion)
         self.assertIn(".flow-packet { display: none; }", reduced_motion)
-        self.assertIn("transition: none !important;", reduced_motion)
+        future_reduced_rule = reduced_motion.split(".flow-future-layer {", maxsplit=1)[1].split(
+            "}", maxsplit=1
+        )[0]
+        self.assertIn("opacity: .76 !important;", future_reduced_rule)
+        self.assertIn("transform: none !important;", future_reduced_rule)
+        self.assertIn("transition: none !important;", future_reduced_rule)
 
     def test_authenticated_home_stays_presentation_first_and_links_to_dashboard(self) -> None:
         self.client.force_login(self.user)
