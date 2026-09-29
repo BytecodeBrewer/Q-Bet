@@ -3,6 +3,11 @@ from django.contrib.auth import views as auth_views
 from django.urls import path, reverse_lazy
 
 from qbet.web import bonus_offers, views
+from qbet.web.capital_approvals import (
+    capital_approval_decision,
+    capital_approvals,
+    capital_manual_performed,
+)
 from qbet.web.portfolio_locations import portfolio_central_refresh, portfolio_location_update
 from qbet.web.engine_runtime import engine_runtime_control, sandbox_execution_control
 from qbet.web.execution_approvals import execution_approval_decision, execution_approvals
@@ -32,6 +37,17 @@ urlpatterns = [
     path("portfolio/central/refresh/", portfolio_central_refresh, name="portfolio-central-refresh"),
     path("portfolio/locations/update/", portfolio_location_update, name="portfolio-location-update"),
     path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
+    path("capital/approvals/", capital_approvals, name="capital-approvals"),
+    path(
+        "capital/approvals/<uuid:proposal_id>/decision/",
+        capital_approval_decision,
+        name="capital-approval-decision",
+    ),
+    path(
+        "capital/approvals/<uuid:proposal_id>/performed/",
+        capital_manual_performed,
+        name="capital-manual-performed",
+    ),
     path("execution/approvals/", execution_approvals, name="execution-approvals"),
     path(
         "execution/approvals/<uuid:execution_id>/decision/",
