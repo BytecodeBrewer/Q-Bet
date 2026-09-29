@@ -147,7 +147,7 @@ class CapitalFundingWorkflowRepository:
         self,
         proposal_id: UUID,
         *,
-        actor: str,
+        approver: FundingApprover,
         approve: bool,
         decided_at: AwareDatetime,
     ) -> CapitalFundingWorkflowRecord:
@@ -156,7 +156,7 @@ class CapitalFundingWorkflowRepository:
                 row = CapitalFundingProposalRow.objects.select_for_update().get(
                     proposal_id=proposal_id
                 )
-                if row.owner_id != actor:
+                if row.owner_id != approver.identity:
                     raise PermissionError("capital_proposal_owner_mismatch")
                 if not row.attention_published:
                     raise CapitalFundingWorkflowConflict("capital_attention_not_published")
@@ -182,10 +182,7 @@ class CapitalFundingWorkflowRepository:
                         raise CapitalFundingWorkflowError("capital_ledger_missing")
                     outcome = policy.approve(
                         proposal,
-                        approver=FundingApprover(
-                            identity=actor,
-                            is_authenticated=True,
-                        ),
+                        approver=approver,
                         approved_at=decided_at,
                         balance=record.balance,
                         ledger=ledger,
