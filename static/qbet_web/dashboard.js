@@ -24,14 +24,22 @@
     let activePointerId = null;
     let dragStarted = false;
     let dragAxis = "free";
+    let placeholder = null;
+    let originalStyle = null;
     let startClientX = 0;
     let startClientY = 0;
-    let layoutCompensationX = 0;
-    let layoutCompensationY = 0;
     let initialOrder = [];
     let lastClientX = 0;
     let lastClientY = 0;
     let finishing = false;
+    let cancelActivePointerDrag = null;
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && cancelActivePointerDrag) {
+        event.preventDefault();
+        cancelActivePointerDrag();
+      }
+    }, true);
 
     grid.querySelectorAll("[data-drag-handle]").forEach((handle) => {
       handle.addEventListener("pointerdown", (event) => {
@@ -49,15 +57,24 @@
         activePointerId = event.pointerId;
         dragStarted = false;
         dragAxis = isSingleColumn(grid) ? "y" : "free";
+        placeholder = null;
+        originalStyle = card.getAttribute("style");
         startClientX = event.clientX;
         startClientY = event.clientY;
-        layoutCompensationX = 0;
-        layoutCompensationY = 0;
         initialOrder = dnd.order(grid);
         lastClientX = event.clientX;
         lastClientY = event.clientY;
         finishing = false;
         handle.setPointerCapture(event.pointerId);
+        cancelActivePointerDrag = () => {
+          if (
+            draggedCard &&
+            activeHandle === handle &&
+            activePointerId !== null
+          ) {
+            finishPointerDrag({ pointerId: activePointerId });
+          }
+        };
       });
 
       handle.addEventListener("pointermove", (event) => {
@@ -80,22 +97,21 @@
             return;
           }
           dragStarted = true;
+          const startRect = draggedCard.getBoundingClientRect();
           grid.classList.add("is-reordering");
           draggedCard.classList.add("is-dragging");
-          draggedCard.style.transition = "none";
+          liftCard(draggedCard, startRect);
         }
 
         positionDraggedCard(draggedCard, event.clientX, event.clientY);
-        const reordered = moveCardTowardPointer(
+        movePlaceholderTowardPointer(
           grid,
+          placeholder,
           draggedCard,
           event.clientX,
           event.clientY,
           dragAxis,
         );
-        if (reordered) {
-          positionDraggedCard(draggedCard, event.clientX, event.clientY);
-        }
       });
 
       const finishPointerDrag = (event, { commit = false } = {}) => {
@@ -112,14 +128,22 @@
         const card = draggedCard;
         const before = initialOrder;
 
+        if (dragStarted && placeholder?.parentElement === grid) {
+          grid.insertBefore(card, placeholder);
+        }
         if (dragStarted && !commit) {
           dnd.restoreOrder(grid, before);
         }
+        placeholder?.remove();
+        placeholder = null;
 
         card.classList.remove("is-dragging");
-        card.style.removeProperty("--drag-x");
-        card.style.removeProperty("--drag-y");
-        card.style.removeProperty("transition");
+        if (originalStyle === null) {
+          card.removeAttribute("style");
+        } else {
+          card.setAttribute("style", originalStyle);
+        }
+        originalStyle = null;
         grid.classList.remove("is-reordering");
 
         const after = dnd.order(grid);
@@ -137,11 +161,10 @@
         dragAxis = "free";
         startClientX = 0;
         startClientY = 0;
-        layoutCompensationX = 0;
-        layoutCompensationY = 0;
         initialOrder = [];
         lastClientX = 0;
         lastClientY = 0;
+        cancelActivePointerDrag = null;
 
         if (handle.hasPointerCapture(pointerId)) {
           handle.releasePointerCapture(pointerId);
@@ -178,12 +201,6 @@
           return;
         }
 
-        if (event.key === "Escape" && draggedCard && activeHandle === handle && activePointerId !== null) {
-          event.preventDefault();
-          finishPointerDrag({ pointerId: activePointerId });
-          return;
-        }
-
         const previousKeys = new Set(["ArrowLeft", "ArrowUp"]);
         const nextKeys = new Set(["ArrowRight", "ArrowDown"]);
         if (!previousKeys.has(event.key) && !nextKeys.has(event.key)) {
@@ -212,112 +229,57 @@
     function positionDraggedCard(card, clientX, clientY) {
       const pointerDeltaX = clientX - startClientX;
       const pointerDeltaY = clientY - startClientY;
-      const translateX = dragAxis === "y" ? 0 : pointerDeltaX + layoutCompensationX;
-      const translateY = pointerDeltaY + layoutCompensationY;
+      const translateX = dragAxis === "y" ? 0 : pointerDeltaX;
       card.style.setProperty("--drag-x", `${translateX}px`);
-      card.style.setProperty("--drag-y", `${translateY}px`);
+      card.style.setProperty("--drag-y", `${pointerDeltaY}px`);
     }
 
-    function moveCardTowardPointer(
+    function liftCard(card, rect) {
+      placeholder = document.createElement("div");
+      placeholder.className = "dashboard-drag-placeholder";
+      placeholder.setAttribute("aria-hidden", "true");
+      placeholder.style.height = `${rect.height}px`;
+      grid.insertBefore(placeholder, card);
+      document.body.appendChild(card);
+
+      card.style.position = "fixed";
+      card.style.left = `${rect.left}px`;
+      card.style.top = `${rect.top}px`;
+      card.style.width = `${rect.width}px`;
+      card.style.margin = "0";
+    }
+
+    function movePlaceholderTowardPointer(
       activeGrid,
+      activePlaceholder,
       card,
       clientX,
       clientY,
       axis,
     ) {
-      const orderedCards = Array.from(
-        activeGrid.querySelectorAll("[data-widget-id]"),
+      const cards = Array.from(activeGrid.querySelectorAll("[data-widget-id]"))
+        .filter((candidate) => candidate !== card)
+        .map((candidate) => ({ card: candidate, rect: candidate.getBoundingClientRect() }));
+      const slot = dnd.closestInsertionSlot(
+        { x: clientX, y: clientY },
+        activePlaceholder.getBoundingClientRect(),
+        cards,
+        REORDER_HYSTERESIS,
       );
-      const currentIndex = orderedCards.indexOf(card);
-      const candidates = orderedCards.filter((candidate) => candidate !== card);
-      if (currentIndex < 0 || !candidates.length) {
+      if (!slot || (axis === "y" && slot.axis !== "y")) {
         return false;
       }
 
-      const target = candidates.reduce((closest, candidate) => {
-        const rect = candidate.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        const distance = axis === "y"
-          ? Math.abs(clientY - centerY)
-          : Math.hypot(clientX - centerX, clientY - centerY);
-        return !closest || distance < closest.distance
-          ? { card: candidate, rect, distance }
-          : closest;
-      }, null);
-
-      if (!target) {
-        return false;
-      }
-
-      const targetIndex = orderedCards.indexOf(target.card);
-      if (targetIndex < 0) {
-        return false;
-      }
-
-      let reference = null;
-      if (axis === "y") {
-        const targetCenterY = target.rect.top + target.rect.height / 2;
-        if (targetIndex < currentIndex) {
-          if (clientY > targetCenterY - REORDER_HYSTERESIS) {
-            return false;
-          }
-          reference = target.card;
-        } else {
-          if (clientY < targetCenterY + REORDER_HYSTERESIS) {
-            return false;
-          }
-          reference = target.card.nextElementSibling;
-        }
-      } else {
-        const sameRow =
-          Math.abs(target.card.offsetTop - card.offsetTop) <
-          Math.min(target.card.offsetHeight, card.offsetHeight) / 2;
-        const movingBackward = targetIndex < currentIndex;
-        if (sameRow) {
-          const targetCenterX = target.rect.left + target.rect.width / 2;
-          if (movingBackward) {
-            if (clientX > targetCenterX - REORDER_HYSTERESIS) {
-              return false;
-            }
-            reference = target.card;
-          } else {
-            if (clientX < targetCenterX + REORDER_HYSTERESIS) {
-              return false;
-            }
-            reference = target.card.nextElementSibling;
-          }
-        } else {
-          const targetCenterY = target.rect.top + target.rect.height / 2;
-          if (movingBackward) {
-            if (clientY > targetCenterY - REORDER_HYSTERESIS) {
-              return false;
-            }
-            reference = target.card;
-          } else {
-            if (clientY < targetCenterY + REORDER_HYSTERESIS) {
-              return false;
-            }
-            reference = target.card.nextElementSibling;
-          }
-        }
-      }
-
-      if (
-        reference === card ||
-        (!reference && card === activeGrid.lastElementChild)
-      ) {
-        return false;
-      }
-
-      const before = capturePositions(activeGrid);
-      const draggedBefore = card.getBoundingClientRect();
-      activeGrid.insertBefore(card, reference);
-      const draggedAfter = card.getBoundingClientRect();
-      layoutCompensationX += draggedBefore.left - draggedAfter.left;
-      layoutCompensationY += draggedBefore.top - draggedAfter.top;
-      animateReflow(activeGrid, before, card);
-      return true;
+      const before = capturePositions(activeGrid, card);
+      const moved = dnd.movePlaceholder(
+        activeGrid,
+        activePlaceholder,
+        slot.card,
+        slot.position,
+        card,
+      );
+      if (moved) animateReflow(activeGrid, before, card);
+      return moved;
     }
   });
 
@@ -332,9 +294,10 @@
     );
   }
 
-  function capturePositions(grid) {
+  function capturePositions(grid, excludedCard = null) {
     return new Map(
       Array.from(grid.querySelectorAll("[data-widget-id]"))
+        .filter((card) => card !== excludedCard)
         .map((card) => [card, card.getBoundingClientRect()]),
     );
   }

@@ -42,11 +42,14 @@ Set `QBET_SIMULATION_SPORTS_SOURCE=the_odds_api` to enable the connected source.
 - `QBET_SIMULATION_ODDS_SPORT` — provider sport key.
 - `QBET_SIMULATION_ODDS_EVENT_ID` — exact event identifier.
 - `QBET_SIMULATION_ODDS_MARKET` — exact market key. The first connected path accepts only snapshots with exactly two distinct outcomes.
+- `QBET_SIMULATION_ODDS_EVENT_STARTS_AT` — timezone-aware ISO-8601 event start required by hosted Smart Polling; Q-Bet does not invent event timing when it is missing.
 - `QBET_SIMULATION_ASSUMED_LIQUIDITY` — Simulation-only assumed available stake. The Odds API does not provide this value.
 - `QBET_SIMULATION_REQUESTED_TOTAL_STAKE` — total virtual stake requested by the two-way arbitrage builder.
 - `QBET_SIMULATION_STAKE_PRECISION` — virtual stake precision used for both selected outcomes.
 
 The API credential remains `QBET_THE_ODDS_API_KEY` and must stay in the environment/deployment secret boundary. Connected Simulation never logs the key, a credential-bearing URL, or raw provider payload. Provider failures are mapped to stable Simulation reason codes and normal tests inject offline collectors/transports.
+
+Hosted Smart Polling uses the same normalized adapter but remains separate from a user-started Simulation run. The protected polling tick persists the latest normalized snapshot and Monitoring state, and the existing `SmartPollingPolicy` decides whether each scheduler wake is due, fresh, deferred, disabled, or terminal. See [Smart Polling Runtime](smart-polling-runtime.md) for the operator boundary and Supabase wake-up contract.
 
 
 ### Connected BonusEngine financial/risk inputs

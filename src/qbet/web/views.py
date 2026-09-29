@@ -103,6 +103,7 @@ from qbet.web.models import (
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.provider_activity import ProviderActivitySnapshot, provider_activity_snapshot
 from qbet.web.portfolio import PortfolioCapitalReadService
+from qbet.web.portfolio_locations import ProviderCapitalLocationForm
 from qbet.web.readiness import deployment_release_id, persistence_readiness
 from qbet.web.shell_context import display_preferences_for, shell_context
 from qbet.web.ui_copy import ui_copy
@@ -1484,6 +1485,7 @@ def portfolio(request: HttpRequest) -> HttpResponse:
                 user_id=cast(int, request.user.pk),
                 is_staff=_is_staff(request.user),
             ),
+            portfolio_location_form=ProviderCapitalLocationForm(),
         ),
     )
 
