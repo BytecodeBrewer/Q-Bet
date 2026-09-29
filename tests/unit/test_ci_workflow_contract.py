@@ -17,6 +17,7 @@ def test_pull_request_vercel_gate_builds_without_deploying() -> None:
 
     assert "github.event_name == 'pull_request'" in block
     assert "github.event.pull_request.head.sha" in block
+    assert "runs-on: ubuntu-22.04" in block
     assert "python -m pip install uv" in block
     assert "vercel pull --yes --environment=preview" in block
     assert "vercel build --yes" in block
