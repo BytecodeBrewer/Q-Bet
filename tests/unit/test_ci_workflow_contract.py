@@ -12,6 +12,14 @@ def _job(name: str, next_name: str | None = None) -> str:
     return WORKFLOW[start:end]
 
 
+def test_standard_validation_jobs_use_pinned_runner() -> None:
+    validation = _job("validation", "performance")
+    performance = _job("performance", "vercel-build-check")
+
+    assert "runs-on: ubuntu-22.04" in validation
+    assert "runs-on: ubuntu-22.04" in performance
+
+
 def test_pull_request_vercel_gate_builds_without_deploying() -> None:
     block = _job("vercel-build-check", "deploy-develop")
 

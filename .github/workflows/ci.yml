@@ -13,7 +13,7 @@ permissions:
 jobs:
   validation:
     name: PostgreSQL validation gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     services:
       postgres:
@@ -115,7 +115,7 @@ jobs:
           retention-days: 14
   performance:
     name: Phase 3 performance baseline
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     services:
       postgres:
         image: postgres:16
