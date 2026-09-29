@@ -349,23 +349,38 @@ jobs:
 
       - name: Verify deployed release health
         shell: bash
-        env:
-          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url || steps.deploy-production.outputs.url }}
         run: |
-          health_url="$DEPLOYMENT_URL"
-          if [ "$IS_PRODUCTION" = "true" ]; then
-            health_url="$STABLE_URL"
-          fi
+          deployment_url="${{ steps.deploy.outputs.url || steps.deploy-production.outputs.url }}"
           health=""
           for attempt in {1..12}; do
-            health="$(curl --fail --silent --show-error "$health_url/health/" || true)"
+            health="$(vercel curl /health/ --deployment "$deployment_url" --fail --silent || true)"
             if printf '%s' "$health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\"" &&                printf '%s' "$health" | grep -Fq '"status": "ok"' &&                printf '%s' "$health" | grep -Fq '"persistence": "ready"' &&                printf '%s' "$health" | grep -Fq '"readiness": "ready"'; then
-              echo "$VERCEL_ENVIRONMENT serves exact release $EXPECTED_RELEASE." >> "$GITHUB_STEP_SUMMARY"
-              exit 0
+              break
             fi
             sleep 5
           done
 
-          echo "::error::$VERCEL_ENVIRONMENT did not serve healthy release $EXPECTED_RELEASE."
-          printf 'Last health response: %s\n' "$health"
-          exit 1
+          if ! printf '%s' "$health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\"" || \
+             ! printf '%s' "$health" | grep -Fq '"status": "ok"' || \
+             ! printf '%s' "$health" | grep -Fq '"persistence": "ready"' || \
+             ! printf '%s' "$health" | grep -Fq '"readiness": "ready"'; then
+            echo "::error::$VERCEL_ENVIRONMENT did not serve healthy release $EXPECTED_RELEASE."
+            printf 'Last health response: %s\n' "$health"
+            exit 1
+          fi
+
+          home="$(vercel curl / --deployment "$deployment_url" --fail --silent)"
+          printf '%s' "$home" | grep -q '/static/qbet_web/app.css'
+          login="$(vercel curl /accounts/login/ --deployment "$deployment_url" --fail --silent)"
+          printf '%s' "$login" | grep -q '<form'
+          vercel curl /static/qbet_web/app.css \
+            --deployment "$deployment_url" \
+            --fail --silent --output /dev/null
+
+          if [ "$IS_PRODUCTION" = "true" ]; then
+            stable_health="$(curl --fail --silent --show-error "$STABLE_URL/health/")"
+            printf '%s' "$stable_health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\""
+            printf '%s' "$stable_health" | grep -Fq '"status": "ok"'
+          fi
+
+          echo "$VERCEL_ENVIRONMENT serves exact release $EXPECTED_RELEASE and passed hosted smoke checks." >> "$GITHUB_STEP_SUMMARY"
