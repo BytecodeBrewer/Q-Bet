@@ -116,7 +116,7 @@ class PortfolioCapitalReadService:
                     for item in allocations
                     if item.mode == balance.mode and item.currency == balance.currency
                 ]
-                allocations_by_provider = {item.provider_id: item for item in matching}
+                allocations_by_provider = {item.provider.provider_id: item for item in matching}
                 provider_total = sum((item.amount for item in matching), Decimal(0))
                 if provider_total > tracked_total:
                     return PortfolioCapitalView(
