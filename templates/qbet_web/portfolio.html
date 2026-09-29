@@ -43,6 +43,7 @@
     <div class="capital-map-heading">
       <div><span class="eyebrow">Bank</span><h3 id="central-account-heading">Central account</h3></div>
     </div>
+    <p class="portfolio-reconciliation-note">Bank observations and Q-Bet allocation totals are shown separately until they are reconciled.</p>
     <div class="portfolio-location-grid portfolio-central-grid">
       {% for location in portfolio.execution %}
         {% if location.kind == "central" or location.kind == "unallocated" %}
