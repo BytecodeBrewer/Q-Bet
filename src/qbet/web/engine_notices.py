@@ -178,6 +178,12 @@ def _bonus_input_notice(
     return None
 
 
+def provider_activity_notice(activity: ProviderActivitySnapshot) -> EngineNotice | None:
+    """Project the latest global provider observation without engine attribution."""
+
+    return _provider_notice(activity)
+
+
 def _provider_notice(activity: ProviderActivitySnapshot) -> EngineNotice | None:
     provider = f" from {activity.provider}" if activity.provider else ""
     if activity.state == "working":
