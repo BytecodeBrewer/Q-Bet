@@ -328,6 +328,20 @@ class UserRoutingPreferenceRepository:
                 "user routing preferences are unavailable"
             ) from error
 
+    def list(self) -> tuple[tuple[str, UserRoutingPreferences], ...]:
+        """Return persisted user intent only; missing preferences remain fail-closed."""
+
+        try:
+            rows = UserRoutingPreferenceRow.objects.order_by("user_id")
+            return tuple(
+                (row.user_id, UserRoutingPreferences.model_validate(row.payload))
+                for row in rows
+            )
+        except (DatabaseError, ValidationError) as error:
+            raise UserRoutingPreferencePersistenceError(
+                "user routing preferences are unavailable"
+            ) from error
+
     def save(
         self,
         user_id: str,
