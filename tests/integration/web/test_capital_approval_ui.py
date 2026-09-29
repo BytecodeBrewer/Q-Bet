@@ -221,7 +221,9 @@ class CapitalApprovalUiTests(TestCase):
             follow=True,
         )
 
-        self.assertContains(performed, "Movement state: <strong>pending</strong>", html=True)
+        self.assertContains(performed, "Movement state:")
+        self.assertContains(performed, "<strong>pending</strong>", html=True)
+        self.assertContains(performed, "pending reconciliation")
         self.assertNotContains(performed, "Mark transfer as performed")
         movement = CapitalMovementRepository().load_by_proposal(PROPOSAL_ID)
         assert movement is not None
