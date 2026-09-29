@@ -191,7 +191,7 @@ class CapitalFundingWorkflowRepository:
                 else:
                     outcome = policy.reject(proposal, rejected_at=decided_at)
 
-                if not outcome.accepted:
+                if not outcome.accepted and outcome.proposal.state is proposal.state:
                     raise CapitalFundingWorkflowConflict(
                         outcome.reason_code or "capital_decision_rejected"
                     )
