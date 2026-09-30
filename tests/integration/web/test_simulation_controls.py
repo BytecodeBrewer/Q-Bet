@@ -853,6 +853,7 @@ class _BlockingOpportunitySource:
 class SimulationRunConcurrencyTests(TransactionTestCase):
     def test_overlapping_run_requests_claim_and_execute_the_simulation_once(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
+        SimulationControlService().seed_portfolio(amount=Decimal("100"), currency="EUR")
         source = _BlockingOpportunitySource()
         service = SimulationControlService(opportunity_source=source)
         run = service.begin(
