@@ -163,17 +163,19 @@ The following decisions cover every scenario from the four named legacy files in
 
 The earlier temporary exception for `tests/integration/web/test_phase2_visuals.py` is closed by #196. Its surviving behavior now has current owners listed above, so no Phase 2-named web regression file remains solely for historical ticket context.
 
-## Previous Pre-Reconciliation Measured Result
+## Current #196 Reconciled Result
 
-Before accepted #195/#213 were merged into this branch, the implementation pass was measured on Validation #767 (`377424a064050eea4c04f0a058321a5ffbc01270`). These numbers are retained only as the pre-reconciliation comparison point and must not be used as the current Reviewer baseline:
+After merging the accepted #195 security/approval work and #213 Bonus Offer redesign into the existing #196 branch, Validation #803 measured the shared head `6c269220aaa867ab6a57d0498e2790bc1da1af09`:
 
-- **877 passed, 2 skipped** in **88.15 seconds**;
-- **89.22% total line coverage**, above the required 85% gate;
-- **119 Python test files** in the ownership inventory;
-- 12 historical/duplicate test methods were removed or moved out of the wrong layer;
-- 10 targeted methods were added or relocated, giving a net reduction of 2 tests while increasing measured coverage;
-- the slowest individual tests were notification dispatch at 0.96s, password-change security at 0.77s, and report-ownership web integration at 0.61s;
-- no individual deterministic test exceeded one second in that run, so no current test group requires a separate runtime tier beyond the existing performance suite.
+- **913 passed, 2 skipped** in **182.69 seconds**;
+- **89.10% total line coverage**, above the required 85% gate;
+- **122 Python test files** in the current ownership inventory;
+- the PR is synchronized with the reviewed `develop` baseline and the #196 diff remains limited to its 14 consolidation/configuration/test files;
+- accepted Security ownership now lives in the dedicated account/security hardening suites rather than restored GUI-control duplicates;
+- accepted Approval/manual Execution ownership remains in the explicit approval-boundary and manual-lifecycle suites;
+- accepted Bonus Offer ownership remains in promotion-intake, connected Bonus simulation, dependency invalidation, and engine-notice suites;
+- the slowest deterministic test is the real-browser Bonus Offer create/edit interaction at **16.81s**; the next slowest tests are all approximately 1.4s or less;
+- that browser interaction remains inside the normal suite because it verifies the rendered progressive-form behavior required by the Bonus Offer product contract, while the separate performance job continues to own pipeline performance budgets.
 
 Material intentionally uncovered areas remain narrow:
 
@@ -182,6 +184,8 @@ Material intentionally uncovered areas remain narrow:
 - generated Django migrations are the only configured source exclusions.
 
 The deleted `qbet.web.report_exports` module is not listed as an uncovered exception because repository reference audit proved it was obsolete and the live export boundary is `qbet.reporting.exports`.
+
+Issue #209 is still active at this measurement point. When its shared Simulation-portfolio changes land, #196 requires another reconciliation of Simulation ownership/counts/coverage before final Phase 3 acceptance; this is an expected later correction round, not a competing baseline.
 
 ## Adding Future Regressions
 
