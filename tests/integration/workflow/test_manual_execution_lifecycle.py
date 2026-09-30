@@ -365,6 +365,43 @@ class ManualExecutionLifecycleTests(TransactionTestCase):
         QBET_EXECUTION_TICK_TOKEN="test-execution-token",
         QBET_EXECUTION_TICK_MAX_WORK=1,
     )
+    def test_execution_tick_expires_silent_approval_without_dispatch(self) -> None:
+        scheduled, coordinator, _ = self.stage()
+        (waiting,) = coordinator.dispatch_due(now=NOW, owner="owner")
+        self.assertEqual(waiting.state, WorkState.RECHECK)
+        self.assertEqual(waiting.history[-1].reason, "execution_approval_required")
+        expired_at = NOW + timedelta(minutes=31)
+
+        with (
+            patch("qbet.web.execution_tick.timezone.now", return_value=expired_at),
+            patch(
+                "qbet.execution.service.BonusSandboxAdapter.dispatch",
+                side_effect=AssertionError("approval expiry maintenance must never dispatch"),
+            ),
+        ):
+            response = self.client.post(
+                "/internal/execution/tick/",
+                HTTP_AUTHORIZATION="Bearer test-execution-token",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["processed"], 1)
+        self.assertEqual(response.json()["expired_approvals"], 1)
+        self.assertEqual(response.json()["expired_manual_actions"], 0)
+        persisted = ExecutionStateRepository().load(scheduled.work.id)
+        queue = ModeWorkQueueRepository().load(scheduled.work.id)
+        assert persisted is not None and queue is not None
+        record, ledger = persisted
+        self.assertEqual(record.state, Lifecycle.CANCELLED)
+        self.assertEqual(record.error, "approval_expired")
+        self.assertEqual(queue.state, WorkState.CANCELLED)
+        self.assertEqual(queue.history[-1].reason, "approval_expired")
+        self.assertFalse(ledger.commands)
+
+    @override_settings(
+        QBET_EXECUTION_TICK_TOKEN="test-execution-token",
+        QBET_EXECUTION_TICK_MAX_WORK=1,
+    )
     def test_execution_tick_expires_silent_actions_bounded_and_restart_safe(self) -> None:
         first, _, _, _ = self.open_action_window()
         second, _, _, _ = self.open_action_window(
