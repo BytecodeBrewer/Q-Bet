@@ -778,14 +778,9 @@ class ModeDispatchCoordinator:
     def _run_simulation(self, item: QueuedWorkItem, *, now: datetime) -> None:
         engine = SimulationEngine(item.work.engine)
         ledger_repository = SimulationPortfolioLedgerRepository()
-        initial_ledger = PortfolioLedger(
-            balance=PortfolioBalance(
-                mode="simulation",
-                currency=item.request.currency,
-                available=Decimal("100"),
-            )
-        )
-        simulation_ledger = ledger_repository.load_or_create(initial_ledger)
+        simulation_ledger = ledger_repository.load(currency=item.request.currency)
+        if simulation_ledger is None:
+            raise ValueError("simulation_sandbox_portfolio_not_initialized")
         runner = WorkflowSimulationRunner(
             report_store=PostgresSimulationReportStore(),
             mode_request_handlers=self._mode_request_handlers,
