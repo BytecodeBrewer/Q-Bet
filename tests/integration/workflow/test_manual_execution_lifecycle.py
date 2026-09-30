@@ -402,6 +402,51 @@ class ManualExecutionLifecycleTests(TransactionTestCase):
         QBET_EXECUTION_TICK_TOKEN="test-execution-token",
         QBET_EXECUTION_TICK_MAX_WORK=1,
     )
+    def test_execution_tick_shares_one_budget_across_approval_and_manual_expiry(self) -> None:
+        approval, approval_coordinator, _ = self.stage(
+            opportunity_id="approval-budget-opportunity",
+            correlation_id=UUID("52345678-1234-5678-1234-567812345678"),
+        )
+        (waiting,) = approval_coordinator.dispatch_due(now=NOW, owner="owner")
+        self.assertEqual(waiting.state, WorkState.RECHECK)
+
+        manual, _, _, _ = self.open_action_window(
+            opportunity_id="manual-budget-opportunity",
+            correlation_id=UUID("62345678-1234-5678-1234-567812345678"),
+        )
+        expired_at = NOW + timedelta(minutes=31)
+
+        with patch("qbet.web.execution_tick.timezone.now", return_value=expired_at):
+            first = self.client.post(
+                "/internal/execution/tick/",
+                HTTP_AUTHORIZATION="Bearer test-execution-token",
+            )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json()["processed"], 1)
+        self.assertEqual(first.json()["expired_approvals"], 1)
+        self.assertEqual(first.json()["expired_manual_actions"], 0)
+        approval_state = ExecutionStateRepository().load(approval.work.id)
+        manual_state = ExecutionStateRepository().load(manual.work.id)
+        assert approval_state is not None and manual_state is not None
+        self.assertEqual(approval_state[0].state, Lifecycle.CANCELLED)
+        self.assertEqual(manual_state[0].state, Lifecycle.AWAITING_CONFIRMATION)
+
+        with patch("qbet.web.execution_tick.timezone.now", return_value=expired_at):
+            second = self.client.post(
+                "/internal/execution/tick/",
+                HTTP_AUTHORIZATION="Bearer test-execution-token",
+            )
+
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json()["processed"], 1)
+        self.assertEqual(second.json()["expired_approvals"], 0)
+        self.assertEqual(second.json()["expired_manual_actions"], 1)
+
+    @override_settings(
+        QBET_EXECUTION_TICK_TOKEN="test-execution-token",
+        QBET_EXECUTION_TICK_MAX_WORK=1,
+    )
     def test_execution_tick_expires_silent_actions_bounded_and_restart_safe(self) -> None:
         first, _, _, _ = self.open_action_window()
         second, _, _, _ = self.open_action_window(
