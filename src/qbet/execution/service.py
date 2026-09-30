@@ -5,7 +5,14 @@ from typing import Protocol
 
 from qbet.data.results import ResultCollectionOutcome
 from qbet.domain.ledger import LedgerOperation
-from qbet.execution.models import ApprovedExecutionRequest, ExecutionRecord, Lifecycle
+from qbet.execution.models import (
+    ApprovedExecutionRequest,
+    ExecutionRecord,
+    Lifecycle,
+    ManualExecutionConfirmation,
+    ManualExecutionDecision,
+    SandboxResult,
+)
 from qbet.execution.sandbox import (
     BonusSandboxAdapter,
     SandboxRequestHandler,
@@ -79,6 +86,204 @@ class ExecutionService:
         return updated
 
     @staticmethod
+    def _position_state(record: ExecutionRecord, ledger: PortfolioLedger) -> str | None:
+        position = ledger.positions.get(str(record.proposal.work.id))
+        return None if position is None else position.state
+
+    def _release_reserved(
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+    ) -> PortfolioLedger:
+        if self._position_state(record, ledger) != "reserved":
+            return ledger
+        return self._apply(
+            record,
+            ledger,
+            LedgerOperation.RELEASE,
+            record.proposal.capital_required,
+        )
+
+    def reserve_for_approval(
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+    ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        """Reserve manual Execution capital before the human approval decision."""
+
+        if record.state in _TERMINAL_STATES:
+            return self._persist(record, ledger)
+        if record.state is not Lifecycle.AWAITING_APPROVAL:
+            return self._persist(record, ledger)
+        position_state = self._position_state(record, ledger)
+        if position_state == "reserved":
+            return self._persist(record, ledger)
+        if position_state is not None:
+            raise ValueError("manual_execution_reservation_state_invalid")
+        reserved = self._apply(
+            record,
+            ledger,
+            LedgerOperation.RESERVE,
+            record.proposal.capital_required,
+        )
+        return self._persist(record, reserved)
+
+    def prepare_manual_action(
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+        *,
+        now: datetime,
+    ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        """Open the human action boundary without pretending provider execution occurred."""
+
+        if record.state in _TERMINAL_STATES:
+            return self._persist(record, ledger)
+        if record.state in {
+            Lifecycle.AWAITING_CONFIRMATION,
+            Lifecycle.ACTION_PROBLEM,
+            Lifecycle.ACKNOWLEDGED,
+        }:
+            return self._persist(record, ledger)
+        if record.state is not Lifecycle.APPROVED:
+            raise ValueError("manual_execution_not_approved")
+
+        reason = SandboxRequestHandler().validate(record.proposal, now)
+        if ledger.balance.mode != record.proposal.work.mode.value:
+            reason = "ledger_mode_mismatch"
+        if reason:
+            released = self._release_reserved(record, ledger)
+            return self._persist(
+                transition(record, Lifecycle.REJECTED, error=reason),
+                released,
+            )
+
+        position_state = self._position_state(record, ledger)
+        if position_state is None:
+            ledger = self._apply(
+                record,
+                ledger,
+                LedgerOperation.RESERVE,
+                record.proposal.capital_required,
+            )
+        elif position_state != "reserved":
+            raise ValueError("manual_execution_reservation_state_invalid")
+
+        return self._persist(
+            transition(record, Lifecycle.AWAITING_CONFIRMATION, error=None),
+            ledger,
+        )
+
+    def confirm_manual_action(
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+        *,
+        actor: str,
+        owner: str,
+        decision: ManualExecutionDecision,
+        now: datetime,
+        note: str = "",
+    ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        """Record explicit human attestation before any pending/settlement transition."""
+
+        if not actor or actor != owner:
+            raise PermissionError("proposal_owner_required")
+
+        last = record.manual_confirmations[-1] if record.manual_confirmations else None
+        if record.state is Lifecycle.ACKNOWLEDGED:
+            if last is not None and last.decision is ManualExecutionDecision.DONE:
+                return self._persist(record, ledger)
+            raise ValueError("manual_execution_already_confirmed")
+        if record.state is Lifecycle.CANCELLED:
+            if last is not None and last.decision is ManualExecutionDecision.NOT_DONE:
+                return self._persist(record, ledger)
+            return self._persist(record, ledger)
+        if record.state is Lifecycle.ACTION_PROBLEM and last is not None:
+            if last.decision is ManualExecutionDecision.PROBLEM and last.note == note.strip():
+                return self._persist(record, ledger)
+        if record.state not in {
+            Lifecycle.AWAITING_CONFIRMATION,
+            Lifecycle.ACTION_PROBLEM,
+        }:
+            raise ValueError("manual_execution_not_awaiting_confirmation")
+        if decision is not ManualExecutionDecision.NOT_DONE and now >= record.proposal.expires_at:
+            raise ValueError("manual_execution_confirmation_expired")
+
+        confirmation = ManualExecutionConfirmation(
+            decision=decision,
+            confirmed_by=actor,
+            confirmed_at=now,
+            note=note.strip(),
+        )
+        confirmations = (*record.manual_confirmations, confirmation)
+
+        if decision is ManualExecutionDecision.PROBLEM:
+            return self._persist(
+                transition(
+                    record,
+                    Lifecycle.ACTION_PROBLEM,
+                    manual_confirmations=confirmations,
+                    error="manual_action_problem",
+                ),
+                ledger,
+            )
+
+        if decision is ManualExecutionDecision.NOT_DONE:
+            released = self._release_reserved(record, ledger)
+            return self._persist(
+                transition(
+                    record,
+                    Lifecycle.CANCELLED,
+                    manual_confirmations=confirmations,
+                    error="manual_action_not_performed",
+                ),
+                released,
+            )
+
+        if self._position_state(record, ledger) != "reserved":
+            raise ValueError("manual_execution_reservation_state_invalid")
+        locked = self._apply(
+            record,
+            ledger,
+            LedgerOperation.LOCK,
+            record.proposal.capital_required,
+        )
+        dispatched = transition(
+            record,
+            Lifecycle.DISPATCHED,
+            manual_confirmations=confirmations,
+            error=None,
+        )
+        dispatched, locked = self._persist(dispatched, locked)
+        pending = self._apply(
+            dispatched,
+            locked,
+            LedgerOperation.PENDING,
+            record.proposal.capital_required,
+        )
+        result = SandboxResult(
+            dispatch_id=record.proposal.work.id,
+            correlation_id=record.proposal.work.correlation_id,
+            mode=record.proposal.work.mode.value,
+            currency=record.proposal.currency,
+            payout=record.proposal.payout,
+            status="success",
+            observed_at=now,
+            source="user_attested",
+        )
+        return self._persist(
+            transition(
+                dispatched,
+                Lifecycle.ACKNOWLEDGED,
+                result=result,
+                manual_confirmations=confirmations,
+                error=None,
+            ),
+            pending,
+        )
+
+    @staticmethod
     def _awaits_post_event_result(
         record: ExecutionRecord,
         collected_result: ResultCollectionOutcome | None,
@@ -117,7 +322,7 @@ class ExecutionService:
         if not approve:
             return self._persist(
                 transition(record, Lifecycle.REJECTED),
-                ledger,
+                self._release_reserved(record, ledger),
             )
 
         reason = SandboxRequestHandler().validate(record.proposal, now)
@@ -126,7 +331,7 @@ class ExecutionService:
         if reason:
             return self._persist(
                 transition(record, Lifecycle.REJECTED, error=reason),
-                ledger,
+                self._release_reserved(record, ledger),
             )
 
         approval = ApprovedExecutionRequest(
@@ -156,7 +361,7 @@ class ExecutionService:
             raise ValueError("execution_already_dispatched")
         return self._persist(
             transition(record, Lifecycle.CANCELLED, error=reason),
-            ledger,
+            self._release_reserved(record, ledger),
         )
 
     def execute_approved(
