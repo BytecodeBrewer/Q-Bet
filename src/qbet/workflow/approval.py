@@ -56,19 +56,15 @@ class ExecutionApprovalService:
         *,
         now: datetime | None = None,
     ) -> tuple[PendingExecutionApproval, ...]:
+        """Project non-expired approvals without mutating execution or queue state."""
+
         observed_at = now or datetime.now(UTC)
         records = self._record_repository.list_awaiting_approval(owner=owner)
-        approvals: list[PendingExecutionApproval] = []
-        for record in records:
-            if observed_at >= record.proposal.expires_at:
-                self._reconcile_expired(
-                    record.proposal.work.id,
-                    owner=owner,
-                    now=observed_at,
-                )
-                continue
-            approvals.append(self._summary(record, now=observed_at))
-        return tuple(approvals)
+        return tuple(
+            self._summary(record, now=observed_at)
+            for record in records
+            if observed_at < record.proposal.expires_at
+        )
 
     def active_count_for(self, owner: str, *, now: datetime | None = None) -> int:
         """Return an owner-scoped count without causing write side effects."""
