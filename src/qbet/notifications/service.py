@@ -299,7 +299,11 @@ def _eligibility_reason(
     now: datetime,
 ) -> str | None:
     work = record.proposal.work
-    if record.state is not Lifecycle.APPROVED or record.approval is None:
+    if record.state not in {
+        Lifecycle.APPROVED,
+        Lifecycle.AWAITING_CONFIRMATION,
+        Lifecycle.ACTION_PROBLEM,
+    } or record.approval is None:
         return "execution_not_approved"
     if work.mode.value != "execution":
         return "execution_mode_required"
@@ -320,6 +324,59 @@ def _eligibility_reason(
     return None
 
 
+def execution_instructions(
+    record: ExecutionRecord,
+    queued: QueuedWorkItem,
+    *,
+    evaluation=None,
+) -> tuple[ExecutionNotificationInstruction, ...]:
+    """Build customer-safe manual instructions from the approved plan snapshot."""
+
+    request = record.proposal.request
+    evaluated = evaluation or (
+        BonusEngine().evaluate(request)
+        if isinstance(request, BonusEngineRequest)
+        else SportsCapitalEngine().evaluate(request)
+    )
+    steps = evaluated.execution_plan.steps
+    revalidation = queued.market_revalidation
+    expected_offers = revalidation.expected_offers if revalidation is not None else ()
+
+    inputs = request.inputs
+    if hasattr(inputs, "offers"):
+        calculation_offers = tuple(inputs.offers)
+    elif hasattr(inputs, "first_offer") and hasattr(inputs, "second_offer"):
+        calculation_offers = (inputs.first_offer, inputs.second_offer)
+    elif hasattr(inputs, "promotion_offer") and hasattr(inputs, "hedge_offer"):
+        calculation_offers = (inputs.promotion_offer, inputs.hedge_offer)
+    else:
+        calculation_offers = ()
+
+    instructions: list[ExecutionNotificationInstruction] = []
+    for index, step in enumerate(steps):
+        expected = expected_offers[index] if index < len(expected_offers) else None
+        calculation_offer = (
+            calculation_offers[index] if index < len(calculation_offers) else None
+        )
+        instructions.append(
+            ExecutionNotificationInstruction(
+                provider=(expected.provider if expected is not None else step.offer_id),
+                offer_id=step.offer_id,
+                amount=step.stake,
+                currency=record.proposal.currency,
+                selection=(expected.selection if expected is not None else None),
+                side=(expected.side if expected is not None else None),
+                odds=(
+                    expected.odds
+                    if expected is not None
+                    else getattr(calculation_offer, "odds", None)
+                ),
+                available_limit=getattr(calculation_offer, "available_liquidity", None),
+            )
+        )
+    return tuple(instructions)
+
+
 def _build_task(
     record: ExecutionRecord,
     queued: QueuedWorkItem,
@@ -336,16 +393,9 @@ def _build_task(
         if isinstance(request, BonusEngineRequest)
         else SportsCapitalEngine().evaluate(request)
     )
-    instructions = tuple(
-        ExecutionNotificationInstruction(
-            provider=step.offer_id,
-            offer_id=step.offer_id,
-            amount=step.stake,
-            currency=record.proposal.currency,
-        )
-        for step in evaluation.execution_plan.steps
-    )
+    instructions = execution_instructions(record, queued, evaluation=evaluation)
     work = record.proposal.work
+    revalidation = queued.market_revalidation
     deadline = min(record.proposal.expires_at, queued.expires_at)
     return ExecutionNotificationTask(
         id=uuid5(work.id, recipient.user_id),
@@ -359,6 +409,9 @@ def _build_task(
         opportunity_id=work.opportunity_id,
         engine="BonusEngine" if work.engine == "bonus" else "SportsCapitalEngine",
         strategy=evaluation.strategy_result.strategy,
+        event_id=(revalidation.event_id if revalidation is not None else work.opportunity_id),
+        sport=(revalidation.sport if revalidation is not None else None),
+        market=(revalidation.market if revalidation is not None else None),
         instructions=instructions,
         action_starts_at=queued.scheduled_for,
         action_deadline=deadline,
