@@ -41,7 +41,13 @@ def _browser_binary() -> str | None:
     )
 
 
-def _browser_probe(rendered_html: str, *, width: int, height: int) -> dict[str, Any]:
+def _browser_probe(
+    rendered_html: str,
+    *,
+    width: int,
+    height: int,
+    dismiss_guidance: bool = False,
+) -> dict[str, Any]:
     browser = _browser_binary()
     if browser is None:
         raise RuntimeError("No Chromium/Chrome binary is available.")
@@ -64,8 +70,14 @@ window.addEventListener("load", () => {
     const visibleForm = forms.find(visible) || null;
     const fields = visibleForm?.querySelector("[data-bonus-offer-form-fields]") || null;
     const material = visibleForm?.querySelector("[data-bonus-material-conditions]") || null;
+    const initialGuidance = document.querySelector("[data-bonus-offer-guidance]");
+    const guidanceInitiallyVisible = visible(initialGuidance);
+    const dismissControl = initialGuidance?.querySelector("[data-notice-dismiss]") || null;
+    if (__DISMISS_GUIDANCE__ && dismissControl instanceof HTMLButtonElement) {
+      dismissControl.click();
+    }
     const guidance = document.querySelector("[data-bonus-offer-guidance]");
-    const entry = guidance?.closest(".bonus-offer-entry") || null;
+    const entry = (guidance || initialGuidance)?.closest(".bonus-offer-entry") || null;
     const addButton = entry?.querySelector("[data-bonus-offer-dialog-open]") || null;
     const actionButtons = [...document.querySelectorAll(".icon-action-button")];
     const helpTexts = visibleForm
@@ -77,12 +89,16 @@ window.addEventListener("load", () => {
     const evidence = {
       viewportWidth: window.innerWidth,
       overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      guidanceInitiallyVisible,
       guidanceVisible: visible(guidance),
-      guidanceDismiss: Boolean(guidance?.querySelector("[data-notice-dismiss]")),
+      guidanceDismiss: Boolean(initialGuidance?.querySelector("[data-notice-dismiss]")),
+      guidanceRemovedAfterDismiss: Boolean(
+        __DISMISS_GUIDANCE__ && guidanceInitiallyVisible && guidance === null
+      ),
       guidanceBeforeAdd: Boolean(
-        guidance &&
+        initialGuidance &&
         addButton &&
-        guidance.getBoundingClientRect().bottom <= addButton.getBoundingClientRect().top
+        initialGuidance.getBoundingClientRect().bottom <= addButton.getBoundingClientRect().top
       ),
       editLabel: document.querySelector('[aria-label^="Edit Bonus Offer"]')?.getAttribute("aria-label") || "",
       removeLabel: document.querySelector('[aria-label^="Remove Bonus Offer"]')?.getAttribute("aria-label") || "",
@@ -109,6 +125,10 @@ window.addEventListener("load", () => {
 });
 </script>
 """
+    instrumentation = instrumentation.replace(
+        "__DISMISS_GUIDANCE__",
+        "true" if dismiss_guidance else "false",
+    )
     html = html.replace("</body>", instrumentation + "</body>")
 
     with tempfile.TemporaryDirectory(prefix="qbet-browser-") as tmp:
@@ -296,6 +316,7 @@ class BonusOfferWebTests(TestCase):
         management_html = management.content.decode("utf-8")
         for width, height in ((1280, 900), (390, 844)):
             evidence = _browser_probe(management_html, width=width, height=height)
+            self.assertTrue(evidence["guidanceInitiallyVisible"])
             self.assertTrue(evidence["guidanceVisible"])
             self.assertTrue(evidence["guidanceDismiss"])
             self.assertTrue(evidence["guidanceBeforeAdd"])
@@ -308,6 +329,26 @@ class BonusOfferWebTests(TestCase):
             self.assertLessEqual(int(evidence["overflowX"]), 1)
             self.assertFalse(evidence["personalNotesVisible"])
             self.assertFalse(evidence["notesInputPresent"])
+
+        dismissed = _browser_probe(
+            management_html,
+            width=1280,
+            height=900,
+            dismiss_guidance=True,
+        )
+        self.assertTrue(dismissed["guidanceInitiallyVisible"])
+        self.assertTrue(dismissed["guidanceDismiss"])
+        self.assertTrue(dismissed["guidanceRemovedAfterDismiss"])
+        self.assertFalse(dismissed["guidanceVisible"])
+
+        fresh_management = self.client.get("/bonus-offers/")
+        fresh_evidence = _browser_probe(
+            fresh_management.content.decode("utf-8"),
+            width=1280,
+            height=900,
+        )
+        self.assertTrue(fresh_evidence["guidanceInitiallyVisible"])
+        self.assertTrue(fresh_evidence["guidanceVisible"])
 
         session = self.client.session
         session["qbet.bonus_offer.dialog_open"] = True
