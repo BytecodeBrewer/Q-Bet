@@ -1,9 +1,11 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
+from decimal import Decimal
 
 from qbet.simulation import SimulationEngine
 from qbet.storage.ledger import RoutingConfigurationRepository
 from qbet.web.models import SimulationAvailability, SimulationRunState
+from qbet.web.simulation_control import SimulationControlService
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
 
@@ -16,6 +18,7 @@ class SimulationReportRedirectTests(TestCase):
         )
         SimulationAvailability.objects.all().delete()
         SimulationRunState.objects.all().delete()
+        SimulationControlService().seed_portfolio(amount=Decimal("100"), currency="EUR")
 
     def test_successful_gui_start_exposes_running_state_then_returns_report_url(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
@@ -28,7 +31,7 @@ class SimulationReportRedirectTests(TestCase):
             "/simulation/start/",
             {
                 "engine": SimulationEngine.SPORTS_CAPITAL.value,
-                "starting_capital": "100.00",
+                "currency": "EUR",
             },
         )
 
