@@ -36,6 +36,7 @@ The review treats the Phase 3 Django application as Internet-exposed and assumes
 | Capital decision / manual performed | POST | Authenticated owner | CSRF, owner check, approval lifecycle; performed acknowledgement remains pending reconciliation |
 | Execution approvals | GET | Authenticated owner | Read-only approval and manual-action projections. Expired records are hidden without mutating Execution, queue, Monitoring, or ledger state |
 | Execution decision | POST | Authenticated owner | CSRF, owner check, expiry handling, revalidation remains required before dispatch |
+| Manual Execution confirmation | POST | Authenticated owner | CSRF, owner check, constrained decision/note fields; acknowledgement or cancellation stays inside the controlled Execution/settlement lifecycle |
 | Engine runtime controls | POST | Staff | Explicit staff check, typed engine/mode/action |
 | Sandbox Execution controls | POST | Staff | Explicit staff check, supported-engine/action validation |
 | Simulation page | GET | Staff | Staff-only control plane |
@@ -136,7 +137,7 @@ Browser requests cannot directly bypass the canonical boundaries:
 
 `Domain Risk -> LiquidityChecker -> Approval -> pre-execution revalidation -> Execution -> Settlement -> PortfolioLedger`.
 
-Simulation and Execution remain separate. Execution approval does not itself submit an external order. Capital-movement performed acknowledgement does not credit or debit the authoritative ledger until reconciliation. bunq remains read-only/sandbox according to configured mode. No provider order, bank transfer, deposit, withdrawal, or credential-dependent action is added by this review.
+Simulation and Execution remain separate. Execution approval does not itself submit an external order. Manual Execution confirmation records only the user's attestation/problem state for the already prepared action; it does not create a new provider-side automated order path and remains inside the existing settlement/ledger lifecycle. Capital-movement performed acknowledgement does not credit or debit the authoritative ledger until reconciliation. bunq remains read-only/sandbox according to configured mode. No provider order, bank transfer, deposit, withdrawal, or credential-dependent action is added by this review.
 
 ## Residual risks and explicit non-claims
 
