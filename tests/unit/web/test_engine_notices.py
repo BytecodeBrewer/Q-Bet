@@ -59,6 +59,7 @@ def _run(reason_code: str) -> SimulationRunSnapshot:
         run_id=uuid4(),
         engine="bonus",
         status="failed",
+        portfolio_currency="EUR",
         progress=Decimal("0"),
         current_capital=Decimal("100"),
         report_id=None,
