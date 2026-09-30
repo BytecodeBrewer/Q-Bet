@@ -1,0 +1,12 @@
+{% extends "qbet_web/base.html" %}
+{% block content %}
+<section class="content-section auth-form">
+  <h1>Confirm your email</h1>
+  <p>The verification link is valid. Confirming will activate this Q-Bet account.</p>
+  <form method="post">
+    {% csrf_token %}
+    <button class="primary" type="submit">Confirm email</button>
+  </form>
+  <p><a href="{% url 'login' %}">Return to sign in</a></p>
+</section>
+{% endblock %}

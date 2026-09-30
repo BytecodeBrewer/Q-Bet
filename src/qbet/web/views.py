@@ -22,7 +22,7 @@ from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from pydantic import ValidationError
 
 from qbet.web.avatars import (
@@ -244,6 +244,8 @@ def _provider_activity(correlation_id: UUID | None = None) -> ProviderActivitySn
 @require_GET
 def provider_activity(request: HttpRequest) -> JsonResponse:
     correlation = request.GET.get("correlation")
+    if correlation and not _is_staff(request.user):
+        raise Http404("Correlation-scoped provider activity is staff-only.")
     try:
         correlation_id = UUID(correlation) if correlation else None
     except ValueError:
@@ -372,6 +374,7 @@ def _dashboard_context(
     return _context(request, **values)
 
 
+@require_GET
 def health(_: HttpRequest) -> JsonResponse:
     readiness = persistence_readiness()
     return JsonResponse(
@@ -387,6 +390,7 @@ def health(_: HttpRequest) -> JsonResponse:
     )
 
 
+@require_GET
 def home(request: HttpRequest) -> HttpResponse:
     return render(
         request,
@@ -412,10 +416,12 @@ def _send_verification_email(request: HttpRequest, user: User) -> bool:
     return delivered == 1
 
 
+@require_http_methods(["GET", "POST"])
 def register(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
         return redirect("dashboard")
-    remove_expired_unverified_accounts()
+    if request.method == "POST":
+        remove_expired_unverified_accounts()
     form = RegistrationForm(request.POST or None)
     if request.method == "POST":
         if form.is_valid():
@@ -449,6 +455,7 @@ def register(request: HttpRequest) -> HttpResponse:
     return render(request, "qbet_web/register.html", _context(request, form=form))
 
 
+@require_GET
 def verification_pending(request: HttpRequest) -> HttpResponse:
     pending_user = None
     pending_status = None
@@ -471,12 +478,30 @@ def verification_pending(request: HttpRequest) -> HttpResponse:
     )
 
 
+@require_http_methods(["GET", "POST"])
 def verify_email(request: HttpRequest, uidb64: str, token: str) -> HttpResponse:
-    remove_expired_unverified_accounts()
     try:
         user_id = force_str(urlsafe_base64_decode(uidb64))
     except (ValueError, TypeError, OverflowError):
         user_id = ""
+
+    if request.method == "GET":
+        try:
+            user = User.objects.get(pk=user_id, is_active=False)
+            verification = AccountVerification.objects.get(user=user)
+            state = account_verification_status(user)
+            if (
+                verification.verified_at is not None
+                or state.expired
+                or not email_verification_token.check_token(user, token)
+            ):
+                raise ValueError("invalid verification")
+        except (User.DoesNotExist, AccountVerification.DoesNotExist, ValueError):
+            messages.error(request, "This verification link is invalid or has expired.")
+            return redirect("verification-pending")
+        return render(request, "qbet_web/verification_confirm.html", _context(request))
+
+    remove_expired_unverified_accounts()
     try:
         with transaction.atomic():
             user = User.objects.select_for_update().get(pk=user_id, is_active=False)
@@ -502,6 +527,7 @@ def verify_email(request: HttpRequest, uidb64: str, token: str) -> HttpResponse:
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
 def profile(request: HttpRequest) -> HttpResponse:
     user = cast(User, request.user)
     form = NotificationProfileForm(request.POST or None, instance=user)
@@ -642,6 +668,7 @@ def account_avatar(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
+@require_GET
 def dashboard(request: HttpRequest) -> HttpResponse:
     return render(
         request,
@@ -670,6 +697,7 @@ def dashboard_layout_update(request: HttpRequest) -> JsonResponse:
 
 
 @login_required
+@require_GET
 def engine_detail(request: HttpRequest, engine_id: str) -> HttpResponse:
     routing_configuration, routing_available = _routing_configuration()
     execution_activity, execution_activity_available = _execution_runtime_activity()
@@ -884,6 +912,7 @@ def pipeline_dry_run(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
 def presentation_settings(request: HttpRequest) -> HttpResponse:
     user = cast(User, request.user)
     preferences = presentation_preferences(request.session)
@@ -1050,6 +1079,7 @@ def _report_history_selection(
 
 
 @login_required
+@require_GET
 def report_history(request: HttpRequest) -> HttpResponse:
     dashboard, preset, start, end = _report_history_selection(request)
     reports = getattr(dashboard, "reports", ())
@@ -1166,6 +1196,7 @@ def report_history_export(request: HttpRequest, export_format: str) -> HttpRespo
 
 
 @login_required
+@require_GET
 def notification_inbox(request: HttpRequest) -> HttpResponse:
     inbox = NOTIFICATION_INBOX.list(request.user.get_username())
     return render(request, "qbet_web/inbox.html", _context(request, inbox=inbox))
@@ -1180,6 +1211,7 @@ def notification_inbox_read(request: HttpRequest, task_id: UUID) -> HttpResponse
 
 
 @login_required
+@require_GET
 def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
     if not _can_view_customer_report(request, run_id):
         raise Http404("Report not found.")
@@ -1213,6 +1245,7 @@ def report_detail(request: HttpRequest, run_id: UUID) -> HttpResponse:
 
 
 @login_required
+@require_GET
 def report_export(request: HttpRequest, run_id: UUID, export_format: str) -> HttpResponse:
     if not _can_view_customer_report(request, run_id):
         raise Http404("Report not found.")
@@ -1481,6 +1514,7 @@ def _monitoring_query_parameters(request: HttpRequest) -> str:
 
 
 @user_passes_test(_is_staff, login_url="login")
+@require_GET
 def admin_area(request: HttpRequest) -> HttpResponse:
     return render(
         request,
@@ -1542,5 +1576,6 @@ def portfolio(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
+@require_GET
 def account_boundary(_: HttpRequest) -> HttpResponse:
     return HttpResponse("Authenticated Q-Bet web-shell boundary.")

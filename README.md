@@ -20,6 +20,8 @@ Engine runtime state is explicit: `Inactive` means routing is disabled, `Ready` 
 
 Display preferences are durable per user. Language affects the supported authenticated application chrome and locale-sensitive date/number formatting. The currency setting is a non-converting **preferred recorded currency**: Q-Bet prioritizes and highlights report sections whose authoritative values are already recorded in that currency. It never converts or relabels transaction/report amounts without an explicitly approved FX presentation source.
 
+The Phase 3 web surface has an explicit security-hardening baseline: hosted Preview and Production share the same fail-closed Django security boundary, customer-owned resources remain server-side scoped, correlation-filtered provider diagnostics are staff-only, browser state changes are CSRF-protected and method-constrained, and email verification requires an explicit POST confirmation rather than mutating state on link-prefetch GET. The review and Phase 4 security handoff are recorded in `docs/security-review-phase3.md`.
+
 The current operating direction is API- and notification-first. Additional engines, broader live execution, and browser-based execution are deliberately not part of the current scope; the focus is on connecting the existing components into complete, realistic system flows and hardening those paths before expanding the product surface.
 
 > [!NOTE]
@@ -114,5 +116,6 @@ The README stays intentionally high-level. The detailed design lives in the proj
 - [bunq Adapter](docs/bunq.md) — read-only/sandbox modes, secret configuration, and protected E2E execution
 - [The Odds API](docs/the-odds-api.md) — current market-data adapter and development smoke path
 - [Django Web Shell](docs/django-web-shell.md) — Django/Supabase bootstrap and operational notes
+- [Phase 3 Web Security Review](docs/security-review-phase3.md) — route/authority matrix, hardening findings, residual risks, and Phase 4 security seams
 
 For implementation history and detailed changes, use the GitHub Issues, Pull Requests, and Releases.

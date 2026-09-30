@@ -104,6 +104,14 @@ jobs:
         run: python -m pytest
       - name: Check Django configuration
         run: python manage.py check
+      - name: Check hosted production security
+        env:
+          QBET_HOSTED_RUNTIME: "true"
+          VERCEL_ENV: production
+          QBET_DJANGO_SECRET_KEY: qbet-ci-hosted-security-secret-0123456789abcdefghijklmnopqrstuvwxyz
+          QBET_DJANGO_DEBUG: "false"
+          QBET_DJANGO_ALLOWED_HOSTS: q-bet.vercel.app
+        run: python manage.py check --deploy
       - name: Build distribution
         run: python -m build
       - name: Upload develop distribution
@@ -215,9 +223,10 @@ jobs:
         env:
           QBET_DATABASE_URL: postgresql://qbet:qbet@127.0.0.1:5432/qbet_build_only
           QBET_DJANGO_SECRET_KEY: qbet-ci-build-only-secret
+          QBET_HOSTED_RUNTIME: "true"
           QBET_HOSTED_PREVIEW: "true"
           QBET_DJANGO_DEBUG: "false"
-          QBET_DJANGO_ALLOWED_HOSTS: .vercel.app
+          QBET_DJANGO_ALLOWED_HOSTS: q-bet.vercel.app
           QBET_RELEASE_SHA: ${{ github.event.pull_request.head.sha }}
           QBET_SIMULATION_MODE_ENABLED: "false"
         run: |
@@ -294,9 +303,10 @@ jobs:
         env:
           QBET_DATABASE_URL: postgresql://qbet:qbet@127.0.0.1:5432/qbet_build_only
           QBET_DJANGO_SECRET_KEY: qbet-ci-build-only-secret
+          QBET_HOSTED_RUNTIME: "true"
           QBET_HOSTED_PREVIEW: "true"
           QBET_DJANGO_DEBUG: "false"
-          QBET_DJANGO_ALLOWED_HOSTS: .vercel.app
+          QBET_DJANGO_ALLOWED_HOSTS: q-bet.vercel.app
           QBET_RELEASE_SHA: ${{ github.sha }}
           QBET_SIMULATION_MODE_ENABLED: "false"
         run: vercel build --token "$VERCEL_TOKEN"
@@ -306,9 +316,10 @@ jobs:
         env:
           QBET_DATABASE_URL: postgresql://qbet:qbet@127.0.0.1:5432/qbet_build_only
           QBET_DJANGO_SECRET_KEY: qbet-ci-build-only-secret
+          QBET_HOSTED_RUNTIME: "true"
           QBET_HOSTED_PREVIEW: "false"
           QBET_DJANGO_DEBUG: "false"
-          QBET_DJANGO_ALLOWED_HOSTS: .vercel.app
+          QBET_DJANGO_ALLOWED_HOSTS: q-bet.vercel.app
           QBET_RELEASE_SHA: ${{ github.sha }}
           QBET_SIMULATION_MODE_ENABLED: "false"
         run: vercel build --prod --token "$VERCEL_TOKEN"
@@ -321,9 +332,10 @@ jobs:
           deployment_url="$(
             vercel deploy --prebuilt --yes \
               --token "$VERCEL_TOKEN" \
+              --env QBET_HOSTED_RUNTIME=true \
               --env QBET_HOSTED_PREVIEW=true \
               --env QBET_DJANGO_DEBUG=false \
-              --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app \
+              --env QBET_DJANGO_ALLOWED_HOSTS=q-bet.vercel.app \
               --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
               --env QBET_SIMULATION_MODE_ENABLED=false
           )"
@@ -338,9 +350,10 @@ jobs:
           deployment_url="$(
             vercel deploy --prebuilt --prod --yes \
               --token "$VERCEL_TOKEN" \
+              --env QBET_HOSTED_RUNTIME=true \
               --env QBET_HOSTED_PREVIEW=false \
               --env QBET_DJANGO_DEBUG=false \
-              --env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app \
+              --env QBET_DJANGO_ALLOWED_HOSTS=q-bet.vercel.app \
               --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
               --env QBET_SIMULATION_MODE_ENABLED=false
           )"
