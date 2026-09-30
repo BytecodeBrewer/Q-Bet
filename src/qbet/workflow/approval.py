@@ -56,19 +56,15 @@ class ExecutionApprovalService:
         *,
         now: datetime | None = None,
     ) -> tuple[PendingExecutionApproval, ...]:
+        """Project non-expired approvals without mutating authoritative state."""
+
         observed_at = now or datetime.now(UTC)
         records = self._record_repository.list_awaiting_approval(owner=owner)
-        approvals: list[PendingExecutionApproval] = []
-        for record in records:
-            if observed_at >= record.proposal.expires_at:
-                self._reconcile_expired(
-                    record.proposal.work.id,
-                    owner=owner,
-                    now=observed_at,
-                )
-                continue
-            approvals.append(self._summary(record, now=observed_at))
-        return tuple(approvals)
+        return tuple(
+            self._summary(record, now=observed_at)
+            for record in records
+            if observed_at < record.proposal.expires_at
+        )
 
     def active_count_for(self, owner: str, *, now: datetime | None = None) -> int:
         """Return an owner-scoped count without causing write side effects."""
@@ -76,6 +72,32 @@ class ExecutionApprovalService:
         observed_at = now or datetime.now(UTC)
         records = self._record_repository.list_awaiting_approval(owner=owner)
         return sum(record.proposal.expires_at > observed_at for record in records)
+
+    def expire_due(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int = 10,
+    ) -> tuple[ExecutionRecord, ...]:
+        """Expire a bounded batch from the protected Execution maintenance worker."""
+
+        observed_at = now or datetime.now(UTC)
+        expired_records: list[ExecutionRecord] = []
+        for record in self._record_repository.list_due_awaiting_approval(
+            now=observed_at,
+            limit=limit,
+        ):
+            owner = record.proposal.work.owner
+            if owner is None:
+                raise ValueError("proposal_owner_required")
+            expired = self._reconcile_expired(
+                record.proposal.work.id,
+                owner=owner,
+                now=observed_at,
+            )
+            if expired.state is Lifecycle.CANCELLED:
+                expired_records.append(expired)
+        return tuple(expired_records)
 
     def decide(
         self,
