@@ -37,6 +37,7 @@ from qbet.workflow import WorkState
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration, resolve_routes
+from qbet.web.simulation_control import SimulationControlService
 from tests.support.workflow import bonus_request, sandbox_mode_handlers
 
 NOW = datetime(2026, 9, 6, 12, tzinfo=UTC)
@@ -213,6 +214,7 @@ class ModeQueueAndIsolationIntegrationTests(TransactionTestCase):
         self.assertEqual(tuple(item.state for item in completed), (WorkState.COMPLETED,))
 
     def test_async_wait_reschedule_dispatches_once_at_the_controlled_time(self) -> None:
+        SimulationControlService().seed_portfolio(amount=Decimal("100"), currency="EUR")
         request = _bonus_request()
         coordinator = self._coordinator(
             RoutingConfiguration(bonus=EngineModes(simulation=True)), request.opportunity_id
