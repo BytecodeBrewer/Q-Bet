@@ -6,6 +6,12 @@ from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid5
 
+from qbet.calculations import (
+    DutchingInput,
+    SportsbookFreeBetInput,
+    SportsbookQualifyingBetInput,
+    TwoWayArbitrageInput,
+)
 from qbet.engines import BonusEngine, BonusEngineRequest, SportsCapitalEngine
 from qbet.execution.models import ExecutionRecord, Lifecycle
 from qbet.monitoring import MonitoringLevel, MonitoringRecord
@@ -343,11 +349,11 @@ def execution_instructions(
     expected_offers = revalidation.expected_offers if revalidation is not None else ()
 
     inputs = request.inputs
-    if hasattr(inputs, "offers"):
+    if isinstance(inputs, DutchingInput):
         calculation_offers = tuple(inputs.offers)
-    elif hasattr(inputs, "first_offer") and hasattr(inputs, "second_offer"):
+    elif isinstance(inputs, TwoWayArbitrageInput):
         calculation_offers = (inputs.first_offer, inputs.second_offer)
-    elif hasattr(inputs, "promotion_offer") and hasattr(inputs, "hedge_offer"):
+    elif isinstance(inputs, (SportsbookQualifyingBetInput, SportsbookFreeBetInput)):
         calculation_offers = (inputs.promotion_offer, inputs.hedge_offer)
     else:
         calculation_offers = ()
