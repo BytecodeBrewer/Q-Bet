@@ -11,6 +11,7 @@ from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
 from qbet.providers import GERMAN_JURISDICTION, ProviderStatus
@@ -171,6 +172,13 @@ def bonus_offer_create(request: HttpRequest) -> HttpResponse:
 
 def _safe_return_path(request: HttpRequest) -> str:
     candidate = str(request.POST.get("return_to") or "").strip()
-    if candidate.startswith("/") and not candidate.startswith("//"):
+    if (
+        candidate.startswith("/")
+        and url_has_allowed_host_and_scheme(
+            candidate,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        )
+    ):
         return candidate
     return "/bonus-offers/"
