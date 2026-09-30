@@ -302,6 +302,14 @@ class WorkflowSimulationRunner:
                 reservation_applied = liquidity_checker.reservation_applied
             workflow_results.append(workflow_result)
             if workflow_result.final_decision is not WorkflowDecision.ALLOW:
+                if reservation_applied and not apply_ledger(
+                    step,
+                    LedgerOperation.RELEASE,
+                    amount,
+                ):
+                    raise ValueError(
+                        "simulation liquidity reservation release failed"
+                    )
                 return False
             if amount == 0:
                 return True
