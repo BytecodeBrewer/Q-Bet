@@ -49,7 +49,13 @@ class AccountSecurityTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
 
         path = _path_from_email(mail.outbox[0].body, "/verify-email/")
-        verified = self.client.get(path)
+        preview = self.client.get(path)
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, "Confirm email")
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+
+        verified = self.client.post(path)
         self.assertRedirects(verified, "/accounts/login/")
         user.refresh_from_db()
         self.assertTrue(user.is_active)
@@ -58,7 +64,7 @@ class AccountSecurityTests(TestCase):
         reused = self.client.get(path)
         self.assertRedirects(reused, "/verification/pending/")
 
-    def test_expired_inactive_registration_is_cleaned_up_by_request_middleware(self) -> None:
+    def test_expired_inactive_registration_cleanup_never_runs_on_get(self) -> None:
         user = User.objects.create_user(
             "expired-user",
             email="expired@example.com",
@@ -71,6 +77,9 @@ class AccountSecurityTests(TestCase):
         )
 
         self.assertEqual(self.client.get("/verification/pending/").status_code, 200)
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+
+        self.client.post("/register/", {"username": ""})
         self.assertFalse(User.objects.filter(pk=user.pk).exists())
 
     def test_verification_rejects_registration_after_24_hours(self) -> None:
@@ -87,9 +96,13 @@ class AccountSecurityTests(TestCase):
             created_at=timezone.now() - timedelta(hours=25)
         )
 
-        response = self.client.get(f"/verify-email/{uid}/{token}/")
+        path = f"/verify-email/{uid}/{token}/"
+        response = self.client.get(path)
 
         self.assertRedirects(response, "/verification/pending/")
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+
+        self.client.post(path)
         self.assertFalse(User.objects.filter(pk=user.pk).exists())
 
     def test_verified_email_cannot_be_replaced_from_profile_without_reverification(self) -> None:
