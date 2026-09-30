@@ -128,6 +128,7 @@ class WebSecurityHardeningTests(TestCase):
             "/dashboard/layout/",
             f"/notifications/{uuid4()}/read/",
             "/portfolio/central/refresh/",
+            f"/execution/actions/{uuid4()}/confirmation/",
         )
         for path in user_routes:
             with self.subTest(path=path):
@@ -148,6 +149,13 @@ class WebSecurityHardeningTests(TestCase):
         csrf_client = Client(enforce_csrf_checks=True)
         csrf_client.force_login(self.user)
         self.assertEqual(csrf_client.post("/dashboard/layout/", {}).status_code, 403)
+        self.assertEqual(
+            csrf_client.post(
+                f"/execution/actions/{uuid4()}/confirmation/",
+                {"decision": "done"},
+            ).status_code,
+            403,
+        )
 
         csrf_client.force_login(self.staff)
         self.assertEqual(
