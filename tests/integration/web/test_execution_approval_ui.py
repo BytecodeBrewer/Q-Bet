@@ -81,8 +81,12 @@ class ExecutionApprovalWebTests(TestCase):
         )
         self.assertEqual(waiting.state, WorkState.RECHECK)
         return scheduled.work.id
-    def _stage_manual_action(self) -> tuple[UUID, UUID]:
-        observed_at = datetime.now(UTC)
+    def _stage_manual_action(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[UUID, UUID]:
+        observed_at = now or datetime.now(UTC)
         correlation_id = uuid4()
         coordinator = ModeDispatchCoordinator(
             RoutingConfiguration(
@@ -295,13 +299,16 @@ class ExecutionApprovalWebTests(TestCase):
         self.assertContains(response, str(execution_id))
         self.assertNotContains(response, "Active")
 
-    def test_expired_approval_disappears_and_navigation_count_stays_actionable(self) -> None:
+    def test_expired_approval_get_is_hidden_without_mutating_state(self) -> None:
         staged_at = datetime.now(UTC) - timedelta(minutes=10)
         execution_id = self._stage_execution(
             opportunity_id="expired-web-approval",
             now=staged_at,
             expires_at=staged_at + timedelta(minutes=5),
         )
+        before = ExecutionStateRepository().load(execution_id)
+        before_queue = ModeWorkQueueRepository().load(execution_id)
+        assert before is not None and before_queue is not None
         self.client.force_login(self.user)
 
         response = self.client.get("/execution/approvals/")
@@ -314,11 +321,35 @@ class ExecutionApprovalWebTests(TestCase):
         queue = ModeWorkQueueRepository().load(execution_id)
         assert persisted is not None and queue is not None
         record, ledger = persisted
-        self.assertEqual(record.state, Lifecycle.CANCELLED)
-        self.assertEqual(record.error, "approval_expired")
-        self.assertEqual(queue.state, WorkState.CANCELLED)
-        self.assertEqual(queue.history[-1].reason, "approval_expired")
-        self.assertFalse(ledger.commands)
+        before_record, before_ledger = before
+        self.assertEqual(record, before_record)
+        self.assertEqual(record.state, Lifecycle.AWAITING_APPROVAL)
+        self.assertEqual(queue, before_queue)
+        self.assertEqual(queue.state, WorkState.RECHECK)
+        self.assertEqual(ledger.commands, before_ledger.commands)
+
+    def test_expired_manual_action_get_is_hidden_without_mutating_state(self) -> None:
+        staged_at = datetime.now(UTC) - timedelta(minutes=40)
+        execution_id, _ = self._stage_manual_action(now=staged_at)
+        before = ExecutionStateRepository().load(execution_id)
+        before_queue = ModeWorkQueueRepository().load(execution_id)
+        assert before is not None and before_queue is not None
+        self.client.force_login(self.user)
+
+        response = self.client.get("/execution/approvals/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "manual-web-opportunity")
+        persisted = ExecutionStateRepository().load(execution_id)
+        queue = ModeWorkQueueRepository().load(execution_id)
+        assert persisted is not None and queue is not None
+        record, ledger = persisted
+        before_record, before_ledger = before
+        self.assertEqual(record, before_record)
+        self.assertEqual(record.state, Lifecycle.AWAITING_CONFIRMATION)
+        self.assertEqual(queue, before_queue)
+        self.assertEqual(queue.state, WorkState.RECHECK)
+        self.assertEqual(ledger.commands, before_ledger.commands)
 
     def test_navigation_count_failure_does_not_break_authenticated_pages(self) -> None:
         self._stage_execution()
