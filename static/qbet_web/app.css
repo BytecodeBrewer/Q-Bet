@@ -641,3 +641,71 @@ body[data-theme="dark"] .portfolio-state-verified { background: #264238; color: 
   .engine-notice { grid-template-columns: 28px minmax(0, 1fr) auto; padding: 10px; }
   .engine-notice-icon { width: 26px; height: 26px; }
 }
+
+
+/* Sportsbook account registry */
+.provider-account-explainer {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+.provider-account-explainer p { margin: 4px 0 0; color: var(--muted); }
+.provider-account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.provider-account-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.provider-account-card.is-provider-ineligible { opacity: .78; }
+.provider-account-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+.provider-account-heading h2 { margin: 3px 0 0; font-size: 18px; }
+.provider-account-nickname { margin: 4px 0 0; color: var(--muted); }
+.provider-account-status {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  font-size: 12px;
+  font-weight: 700;
+}
+.provider-account-status.status-active { border-color: var(--success); color: var(--success); }
+.provider-account-status.status-needs_verification,
+.provider-account-status.status-declared { border-color: var(--warning); color: var(--warning); }
+.provider-account-status.status-unavailable,
+.provider-account-status.status-frozen { border-color: var(--danger); color: var(--danger); }
+.provider-account-meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 8px; }
+.provider-account-note { margin: 8px 0; }
+.provider-account-editor { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.provider-account-editor summary { cursor: pointer; font-weight: 700; }
+.provider-account-form { display: grid; gap: 10px; margin-top: 12px; }
+.provider-account-form label { display: grid; gap: 5px; }
+.provider-account-form input,
+.provider-account-form select,
+.provider-account-form textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font: inherit;
+}
+.provider-account-form textarea { resize: vertical; }
+@media (max-width: 760px) {
+  .provider-account-grid { grid-template-columns: 1fr; }
+}
