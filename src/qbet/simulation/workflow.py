@@ -133,7 +133,7 @@ class _SimulationPortfolioLiquidityChecker:
                 currency=cast(Currency, balance.currency),
             ),
             required_capital=self._required_capital,
-            currency=self._currency,
+            currency=cast(Currency, self._currency),
         )
 
 
