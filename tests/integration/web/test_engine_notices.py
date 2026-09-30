@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase
 
+from qbet.web.engine_notices import BonusInputSnapshot
 from qbet.web.provider_activity import ProviderActivitySnapshot
 from qbet.workflow.routing import RoutingConfiguration
 
@@ -21,11 +22,13 @@ class ContextualEngineNoticeWebTests(TestCase):
     def _dashboard(
         self,
         provider_activity: ProviderActivitySnapshot | None = None,
+        bonus_input: BonusInputSnapshot | None = None,
     ):
         activity = provider_activity or ProviderActivitySnapshot(
             state="ready",
             label="Market data ready; no query running.",
         )
+        bonus = bonus_input or BonusInputSnapshot()
         with (
             patch(
                 "qbet.web.views._routing_configuration",
@@ -38,6 +41,10 @@ class ContextualEngineNoticeWebTests(TestCase):
             patch(
                 "qbet.web.views._provider_activity",
                 return_value=activity,
+            ),
+            patch(
+                "qbet.web.views.bonus_input_snapshot",
+                return_value=bonus,
             ),
         ):
             return self.client.get("/dashboard/")
@@ -55,39 +62,44 @@ class ContextualEngineNoticeWebTests(TestCase):
         ):
             return self.client.get("/engines/bonus/")
 
-    def test_normal_user_dashboard_explains_missing_bonus_input_without_counters(self) -> None:
+    def test_dashboard_keeps_low_bonus_offer_counts_off_engine_card(self) -> None:
         self.client.force_login(self.user)
 
-        response = self._dashboard()
+        response = self._dashboard(
+            bonus_input=BonusInputSnapshot(
+                active_offers=3,
+                ready_offers=3,
+                provider_count=2,
+                coverage_state="limited",
+            )
+        )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bonus input needed")
-        self.assertContains(response, "No active Bonus Offers are available for BonusEngine.")
-        self.assertContains(response, 'data-notice-reason="bonus_offer_missing"')
-        self.assertContains(response, 'href="/bonus-offers/"')
-        self.assertNotContains(response, "Warnings / errors")
-        self.assertNotContains(response, "Technical history:")
+        self.assertNotContains(response, "Bonus coverage")
+        self.assertNotContains(response, "usable active offer")
+        self.assertNotContains(response, "Add promotion data")
+        self.assertNotContains(response, 'data-notice-reason="bonus_coverage_limited"')
 
-    def test_unresolved_notice_returns_after_page_reload(self) -> None:
-        self.client.force_login(self.user)
-
-        first = self._dashboard()
-        second = self._dashboard()
-
-        self.assertContains(first, 'data-notice-reason="bonus_offer_missing"')
-        self.assertContains(second, 'data-notice-reason="bonus_offer_missing"')
-
-    def test_engine_detail_uses_contextual_notice_instead_of_warning_error_metrics(self) -> None:
+    def test_engine_detail_does_not_turn_missing_offers_into_persistent_warning(self) -> None:
         self.client.force_login(self.user)
 
         response = self._engine_detail()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Current notices")
-        self.assertContains(response, "Bonus input needed")
+        self.assertNotContains(response, "Bonus input needed")
+        self.assertNotContains(response, "Bonus coverage")
         self.assertNotContains(response, "<dt>Warnings</dt>", html=True)
         self.assertNotContains(response, "<dt>Errors</dt>", html=True)
-        self.assertNotContains(response, "Technical history:")
+
+    def test_dashboard_keeps_actual_bonus_input_read_failure_as_error(self) -> None:
+        self.client.force_login(self.user)
+
+        response = self._dashboard(
+            bonus_input=BonusInputSnapshot(available=False),
+        )
+
+        self.assertContains(response, "Bonus input unavailable")
+        self.assertContains(response, 'data-notice-reason="bonus_input_unavailable"')
 
     def test_dashboard_renders_working_and_success_provider_activity_notices(self) -> None:
         self.client.force_login(self.user)

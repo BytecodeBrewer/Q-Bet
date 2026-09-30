@@ -22,10 +22,12 @@ With the intended Q-Bet development configuration, local and hosted application 
 
 - `QBET_DJANGO_SECRET_KEY`: required unique secret outside local development.
 - `QBET_DJANGO_DEBUG`: `true` locally, `false` in deployed environments.
-- `QBET_DJANGO_ALLOWED_HOSTS`: comma-separated host allowlist.
+- `QBET_DJANGO_ALLOWED_HOSTS`: comma-separated exact host allowlist. Hosted runtimes reject `*` and suffix-wide entries such as `.vercel.app`; the current exact Vercel deployment host is also derived from `VERCEL_URL`.
 - `QBET_DATABASE_URL`: required PostgreSQL connection URL for every normal Q-Bet runtime. A Supabase transaction-pooler URL is appropriate for Vercel's serverless runtime; a session/direct connection can be used for administrative migration work where appropriate.
 - `QBET_SUPABASE_URL` and `QBET_SUPABASE_STORAGE_SECRET_KEY`: server-only configuration for private profile-avatar object storage. Keep the bucket private and configure the key only in the deployment environment's secret store; never expose it to templates, browser code, or logs. Avatar files are normalized before upload and served only through the authenticated Django account route.
-- `QBET_HOSTED_PREVIEW`: marks a hosted Vercel-style runtime so hosted security requirements such as SSL and disabled debug are enforced.
+- `QBET_HOSTED_RUNTIME`: explicit hosted-runtime signal used by Preview and Production security checks. Vercel `preview` and `production` environments are also detected automatically.
+- `QBET_HOSTED_PREVIEW`: retained as a compatibility signal for Preview; it no longer defines the complete hosted security boundary.
+- `QBET_SESSION_COOKIE_AGE_SECONDS`: optional positive session lifetime override. The default is 12 hours.
 - `QBET_SIMULATION_MODE_ENABLED`: bootstrap/default Simulation availability. Preview CI sets this to `false`; another deployed environment may explicitly enable it.
 - `QBET_TEST_DATABASE_URL`: disposable PostgreSQL connection used by pytest. Tests replace `QBET_DATABASE_URL` inside the pytest process with this value so they cannot accidentally mutate the shared Supabase database.
 - `QBET_EMAIL_BACKEND`: optional explicit Django email backend. Local/test runtime defaults to the in-memory backend; hosted preview/runtime defaults to SMTP so verification/reset links are never printed to console logs.
@@ -68,9 +70,11 @@ PostgreSQL is the durable operational source of truth for Django authentication,
 
 ## Account Security
 
-New public registrations remain inactive until the address is verified through a one-time, 24-hour verification link. Expired inactive registrations remain unusable and are lazily cleaned when account-verification surfaces are visited. Password changes use Django's authenticated password-change boundary; forgotten-password flows use Django's one-time, 24-hour password-reset tokens.
+New public registrations remain inactive until the address is verified through a one-time, 24-hour verification link. Opening the link with GET is intentionally read-only and renders an explicit confirmation step; activation requires a CSRF-protected POST that revalidates the token and expiry under database row locks. Expired inactive registrations remain unusable and cleanup is performed only inside the CSRF-protected registration/verification POST views, never from GET or pre-view request middleware. Password changes use Django's authenticated password-change boundary; forgotten-password flows use Django's one-time, 24-hour password-reset tokens.
 
 Verification and reset token paths are redacted by Q-Bet request logging. The hosted email path uses SMTP rather than the console backend so token-bearing links are not written to application logs. If hosted mail delivery is unavailable, registration fails closed and does not leave a newly created inactive account behind.
+
+Hosted Preview and Production both enforce the non-development Django secret, `DEBUG=false`, PostgreSQL SSL, Secure/HttpOnly/SameSite cookies, HTTPS redirect, explicit browser security headers, and exact Host validation. Production additionally emits one-year HSTS without subdomain/preload claims because Q-Bet does not own the shared `vercel.app` parent domain. The current CSP is intentionally compatible with Django Admin and existing inline frontend fragments; stricter nonce/hash CSP is a later hardening seam. See [Phase 3 Web Security Review](security-review-phase3.md) for the reviewed route matrix, residual risks, and Phase 4 handoff.
 
 ## Django Admin
 

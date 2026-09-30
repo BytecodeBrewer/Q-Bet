@@ -239,7 +239,13 @@ class AccountVerification(models.Model):
 
 
 class BonusOffer(models.Model):
-    """User-owned promotion terms that may feed BonusEngine preparation."""
+    """User-owned sportsbook promotion contract feeding BonusEngine preparation."""
+
+    class PromotionShape(models.TextChoices):
+        BET_AND_GET = "bet_and_get", "Bet & get a free bet"
+        FREE_BET = "free_bet", "Free bet already available"
+        OTHER = "other", "Other / unsupported promotion"
+        LEGACY_QUALIFYING_STAGE = "qualifying_stage", "Qualifying wager stage (legacy)"
 
     class PromotionType(models.TextChoices):
         QUALIFYING_BET = "qualifying_bet", "Qualifying bet"
@@ -260,7 +266,18 @@ class BonusOffer(models.Model):
         related_name="bonus_offers",
     )
     name = models.CharField(max_length=160)
-    promotion_type = models.CharField(max_length=32, choices=PromotionType.choices)
+    promotion_shape = models.CharField(
+        max_length=32,
+        choices=PromotionShape.choices,
+        blank=True,
+        default="",
+    )
+    promotion_type = models.CharField(
+        max_length=32,
+        choices=PromotionType.choices,
+        blank=True,
+        default="",
+    )
     promotion_value = models.DecimalField(
         max_digits=18,
         decimal_places=2,
@@ -301,7 +318,10 @@ class BonusOffer(models.Model):
         default="",
     )
     valid_until = models.DateTimeField(db_index=True)
+    unsupported_terms = models.TextField(blank=True, default="")
     notes = models.TextField(blank=True, default="")
+    version = models.PositiveIntegerField(default=1)
+    retired_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -314,8 +334,68 @@ class BonusOffer(models.Model):
         return self.valid_until <= timezone.now()
 
     @property
+    def is_retired(self) -> bool:
+        return self.retired_at is not None
+
+    @property
+    def effective_promotion_shape(self) -> str:
+        """Return the user-facing contract, including a safe legacy fallback."""
+
+        if self.promotion_shape:
+            return self.promotion_shape
+        if self.promotion_type == self.PromotionType.FREE_BET:
+            return self.PromotionShape.FREE_BET
+        if self.promotion_type == self.PromotionType.QUALIFYING_BET:
+            return self.PromotionShape.LEGACY_QUALIFYING_STAGE
+        return self.PromotionShape.OTHER
+
+    @property
+    def promotion_shape_label(self) -> str:
+        value = self.effective_promotion_shape
+        return str(
+            dict(self.PromotionShape.choices).get(
+                value,
+                "Other / unsupported promotion",
+            )
+        )
+
+    @property
+    def automation_stage_label(self) -> str:
+        if self.promotion_type == self.PromotionType.QUALIFYING_BET:
+            return "Qualifying wager"
+        if self.promotion_type == self.PromotionType.FREE_BET:
+            return "Free-bet hedge"
+        return "Manual review"
+
+    @property
+    def promotion_stage_summary(self) -> str:
+        """Describe the advertised promotion stages without inventing execution state."""
+
+        if self.effective_promotion_shape == self.PromotionShape.BET_AND_GET:
+            return "Stage 1: qualifying wager → Stage 2: free bet after sportsbook credit"
+        if self.effective_promotion_shape == self.PromotionShape.FREE_BET:
+            return "Stage: available free bet"
+        if self.effective_promotion_shape == self.PromotionShape.LEGACY_QUALIFYING_STAGE:
+            return "Stage: qualifying wager (legacy record)"
+        return "Stage: manual review required"
+
+    @property
+    def unsupported_reason(self) -> str:
+        if self.effective_promotion_shape == self.PromotionShape.OTHER:
+            return "This promotion shape is not supported by current BonusEngine mathematics."
+        if self.unsupported_terms.strip():
+            return "Other material promotion conditions require manual review."
+        if self.wagering_requirement not in (None, Decimal(0)):
+            return "Turnover requirements are not supported by current BonusEngine mathematics."
+        return ""
+
+    @property
+    def needs_review(self) -> bool:
+        return bool(self.unsupported_reason)
+
+    @property
     def is_preparation_ready(self) -> bool:
-        if self.is_expired:
+        if self.is_expired or self.is_retired or self.needs_review:
             return False
         provider = self.provider
         if (
@@ -325,14 +405,13 @@ class BonusOffer(models.Model):
             or not provider.online
         ):
             return False
-        if self.wagering_requirement not in (None, Decimal(0)):
-            return False
         if self.promotion_type == self.PromotionType.QUALIFYING_BET:
-            if (
-                self.required_stake is None
-                or self.promotion_value is not None
-                or self.stake_return_rule
-            ):
+            if self.required_stake is None:
+                return False
+            if self.effective_promotion_shape == self.PromotionShape.BET_AND_GET:
+                if self.promotion_value is None:
+                    return False
+            elif self.effective_promotion_shape != self.PromotionShape.LEGACY_QUALIFYING_STAGE:
                 return False
         elif self.promotion_type == self.PromotionType.FREE_BET:
             if (
@@ -352,6 +431,33 @@ class BonusOffer(models.Model):
 
     @property
     def status_label(self) -> str:
+        if self.is_retired:
+            return "Removed"
         if self.is_expired:
             return "Expired"
+        if self.needs_review:
+            return "Needs review"
         return "Active" if self.is_preparation_ready else "Unavailable"
+
+
+class BonusOfferRevision(models.Model):
+    """Immutable before-edit snapshot for one user-owned Bonus Offer."""
+
+    offer = models.ForeignKey(
+        BonusOffer,
+        on_delete=models.CASCADE,
+        related_name="revisions",
+    )
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="qbet_bonus_offer_revisions",
+        null=True,
+        blank=True,
+    )
+    snapshot = models.JSONField()
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "qbet_bonus_offer_revisions"
+        ordering = ("-changed_at", "-id")

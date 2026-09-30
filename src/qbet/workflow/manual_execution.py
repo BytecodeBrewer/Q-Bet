@@ -64,14 +64,13 @@ class ManualExecutionService:
         *,
         now: datetime | None = None,
     ) -> tuple[PendingManualExecution, ...]:
+        """Project actionable manual work without mutating authoritative state."""
+
         observed_at = now or datetime.now(UTC)
         actions: list[PendingManualExecution] = []
         for record in self._record_repository.list_manual_action_pending(owner=owner):
             queued = self._queue_repository.load(record.proposal.work.id)
-            if queued is None:
-                continue
-            if observed_at >= record.proposal.expires_at:
-                self._expire(record, queued, owner=owner, now=observed_at)
+            if queued is None or observed_at >= record.proposal.expires_at:
                 continue
             actions.append(self._projection(record, queued))
         return tuple(actions)

@@ -43,31 +43,37 @@
     button.addEventListener("click", openDialog);
   });
 
-  if (!(dialog instanceof HTMLDialogElement)) return;
-
-  dialog.querySelectorAll("[data-bonus-offer-dialog-close]").forEach((button) => {
-    button.addEventListener("click", () => dialog.close());
-  });
-  dialog.addEventListener("click", (event) => {
-    if (event.target === dialog) dialog.close();
-  });
-
-  const promotionType = dialog.querySelector('[name="promotion_type"]');
-  const sections = [...dialog.querySelectorAll("[data-bonus-offer-strategy]")];
-  const syncStrategyFields = () => {
-    const selected = promotionType instanceof HTMLSelectElement ? promotionType.value : "";
-    sections.forEach((section) => {
-      const active = section.getAttribute("data-bonus-offer-strategy") === selected;
-      section.hidden = !active;
-      section.querySelectorAll("input, select, textarea").forEach((field) => {
-        field.disabled = !active;
-      });
+  if (dialog instanceof HTMLDialogElement) {
+    dialog.querySelectorAll("[data-bonus-offer-dialog-close]").forEach((button) => {
+      button.addEventListener("click", () => dialog.close());
     });
-  };
-  if (promotionType) promotionType.addEventListener("change", syncStrategyFields);
-  syncStrategyFields();
-
-  if (dialog.getAttribute("data-open") === "true") {
-    openDialog();
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+    if (dialog.getAttribute("data-open") === "true") {
+      openDialog();
+    }
   }
+
+  const syncPromotionFields = (form) => {
+    const promotionShape = form.querySelector('[name="promotion_shape"]');
+    const sections = [...form.querySelectorAll("[data-bonus-offer-shapes]")];
+    const sync = () => {
+      const selected = promotionShape instanceof HTMLSelectElement ? promotionShape.value : "";
+      sections.forEach((section) => {
+        const shapes = (section.getAttribute("data-bonus-offer-shapes") || "")
+          .split(/\s+/)
+          .filter(Boolean);
+        const active = shapes.includes(selected);
+        section.hidden = !active;
+        section.querySelectorAll("input, select, textarea").forEach((field) => {
+          field.disabled = !active;
+        });
+      });
+    };
+    if (promotionShape) promotionShape.addEventListener("change", sync);
+    sync();
+  };
+
+  document.querySelectorAll("[data-bonus-offer-form]").forEach(syncPromotionFields);
 })();

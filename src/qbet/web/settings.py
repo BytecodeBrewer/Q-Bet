@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -31,6 +32,37 @@ def _environment_positive_int(name: str, default: int) -> int:
     if value <= 0:
         raise ImproperlyConfigured(f"{name} must be a positive integer")
     return value
+
+
+def hosted_runtime_from_environment(
+    environ: Mapping[str, str] | None = None,
+) -> bool:
+    """Detect every supported hosted Vercel runtime, not Preview only."""
+
+    values = os.environ if environ is None else environ
+    explicit = values.get("QBET_HOSTED_RUNTIME", "").strip().lower() == "true"
+    legacy_preview = values.get("QBET_HOSTED_PREVIEW", "").strip().lower() == "true"
+    vercel_environment = values.get("VERCEL_ENV", "").strip().lower()
+    return explicit or legacy_preview or vercel_environment in {"preview", "production"}
+
+
+def exact_vercel_host(value: str) -> str:
+    """Return one exact credential-free Vercel host, or an empty string."""
+
+    normalized = value.strip()
+    if not normalized:
+        return ""
+    parsed = urlsplit(normalized if "://" in normalized else f"https://{normalized}")
+    if (
+        parsed.scheme != "https"
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in {"", "/"}
+    ):
+        return ""
+    return parsed.hostname or ""
 
 
 def require_database_url(value: str) -> str:
@@ -88,20 +120,37 @@ def database_config_from_url(value: str, *, require_ssl: bool = False) -> dict[s
     }
 
 
-QBET_HOSTED_PREVIEW = _environment_flag("QBET_HOSTED_PREVIEW")
+_VERCEL_ENVIRONMENT = os.environ.get("VERCEL_ENV", "").strip().lower()
+QBET_HOSTED_PREVIEW = _environment_flag("QBET_HOSTED_PREVIEW") or _VERCEL_ENVIRONMENT == "preview"
+QBET_HOSTED_RUNTIME = hosted_runtime_from_environment()
+QBET_HOSTED_PRODUCTION = _VERCEL_ENVIRONMENT == "production"
 QBET_DATABASE_URL = require_database_url(os.environ.get("QBET_DATABASE_URL", ""))
 SECRET_KEY = os.environ.get("QBET_DJANGO_SECRET_KEY", _LOCAL_SECRET_KEY)
 DEBUG = _environment_flag("QBET_DJANGO_DEBUG", "true")
+_DEFAULT_ALLOWED_HOSTS = "" if QBET_HOSTED_RUNTIME else "localhost,127.0.0.1,testserver"
 ALLOWED_HOSTS = parse_allowed_hosts(
-    os.environ.get("QBET_DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")
+    os.environ.get("QBET_DJANGO_ALLOWED_HOSTS", _DEFAULT_ALLOWED_HOSTS)
 )
+_CURRENT_VERCEL_HOST = exact_vercel_host(os.environ.get("VERCEL_URL", ""))
+if _CURRENT_VERCEL_HOST and _CURRENT_VERCEL_HOST not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_CURRENT_VERCEL_HOST)
 
-if QBET_HOSTED_PREVIEW and SECRET_KEY == _LOCAL_SECRET_KEY:
+if QBET_HOSTED_RUNTIME and SECRET_KEY == _LOCAL_SECRET_KEY:
     raise ImproperlyConfigured(
-        "QBET_DJANGO_SECRET_KEY must be configured for hosted preview deployments"
+        "QBET_DJANGO_SECRET_KEY must be configured for hosted deployments"
     )
-if QBET_HOSTED_PREVIEW and DEBUG:
-    raise ImproperlyConfigured("QBET_DJANGO_DEBUG must be false for hosted preview deployments")
+if QBET_HOSTED_RUNTIME and DEBUG:
+    raise ImproperlyConfigured("QBET_DJANGO_DEBUG must be false for hosted deployments")
+if QBET_HOSTED_RUNTIME and any(
+    host == "*" or host.startswith(".") for host in ALLOWED_HOSTS
+):
+    raise ImproperlyConfigured(
+        "Hosted QBET_DJANGO_ALLOWED_HOSTS must contain exact hosts, not wildcards"
+    )
+if QBET_HOSTED_RUNTIME and not ALLOWED_HOSTS:
+    raise ImproperlyConfigured(
+        "Hosted deployments require QBET_DJANGO_ALLOWED_HOSTS or an exact VERCEL_URL"
+    )
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -116,12 +165,12 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "qbet.web.middleware.BrowserSecurityHeadersMiddleware",
     "qbet.web.middleware.RequestCorrelationMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "qbet.web.account_security.ExpiredUnverifiedAccountCleanupMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -148,7 +197,7 @@ WSGI_APPLICATION = "vercel_wsgi.application"
 DATABASES = {
     "default": database_config_from_url(
         QBET_DATABASE_URL,
-        require_ssl=QBET_HOSTED_PREVIEW,
+        require_ssl=QBET_HOSTED_RUNTIME,
     )
 }
 
@@ -204,6 +253,30 @@ QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS = os.environ.get(
     "QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS",
     "",
 ).strip()
+QBET_BONUS_COVERAGE_COMPARE_OFFERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_COMPARE_OFFERS",
+    5,
+)
+QBET_BONUS_COVERAGE_COMPARE_PROVIDERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_COMPARE_PROVIDERS",
+    2,
+)
+QBET_BONUS_COVERAGE_GOOD_OFFERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_GOOD_OFFERS",
+    10,
+)
+QBET_BONUS_COVERAGE_GOOD_PROVIDERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_GOOD_PROVIDERS",
+    3,
+)
+QBET_BONUS_COVERAGE_HEALTHY_OFFERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_HEALTHY_OFFERS",
+    15,
+)
+QBET_BONUS_COVERAGE_HEALTHY_PROVIDERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_HEALTHY_PROVIDERS",
+    4,
+)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -225,7 +298,7 @@ LOGOUT_REDIRECT_URL = "home"
 
 _DEFAULT_EMAIL_BACKEND = (
     "django.core.mail.backends.smtp.EmailBackend"
-    if QBET_HOSTED_PREVIEW
+    if QBET_HOSTED_RUNTIME
     else "django.core.mail.backends.locmem.EmailBackend"
 )
 EMAIL_BACKEND = os.environ.get("QBET_EMAIL_BACKEND", _DEFAULT_EMAIL_BACKEND)
@@ -237,6 +310,25 @@ EMAIL_HOST_PASSWORD = os.environ.get("QBET_EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = _environment_flag("QBET_EMAIL_USE_TLS")
 PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 QBET_EMAIL_VERIFICATION_TIMEOUT = 60 * 60 * 24
+
+SESSION_COOKIE_SECURE = QBET_HOSTED_RUNTIME
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_AGE = _environment_positive_int("QBET_SESSION_COOKIE_AGE_SECONDS", 60 * 60 * 12)
+CSRF_COOKIE_SECURE = QBET_HOSTED_RUNTIME
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"
+SECURE_SSL_REDIRECT = QBET_HOSTED_RUNTIME
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "no-referrer"
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
+SECURE_HSTS_SECONDS = 60 * 60 * 24 * 365 if QBET_HOSTED_PRODUCTION else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
+DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 
 LOGGING = {
     "version": 1,

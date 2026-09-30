@@ -29,6 +29,7 @@ from qbet.simulation.models import SimulationResult, SimulationRunConfig, Simula
 from qbet.simulation.reporting import ReportingSimulationRunner
 from qbet.simulation.runner import SimulationStepObserver
 from qbet.storage import SimulationReportStore
+from qbet.storage.bonus_dependencies import PostgresBonusOfferDependencyValidator
 from qbet.workflow import (
     LiquidityChecker,
     StaticLiquidityChecker,
@@ -83,14 +84,23 @@ class _RiskStageHandler(WorkflowStageHandler):
         provider_state: ProviderState,
         log_context: SimulationLogContext,
         correlation_id: UUID,
+        bonus_dependency_validator: PostgresBonusOfferDependencyValidator,
     ) -> None:
         self._risk_layer = risk_layer
         self._opportunity = opportunity
         self._provider_state = provider_state
         self._log_context = log_context
         self._correlation_id = correlation_id
+        self._bonus_dependency_validator = bonus_dependency_validator
 
     def decide(self, context: WorkflowContext) -> WorkflowStageDecision:
+        if isinstance(self._opportunity, BonusEngineRequest):
+            dependency = self._bonus_dependency_validator.check(self._opportunity)
+            if not dependency.is_current:
+                return WorkflowStageDecision(
+                    decision=WorkflowDecision.RECHECK,
+                    reason=dependency.reason_code or "bonus_offer_dependency_invalid",
+                )
         result = self._risk_layer.verify_opportunity(
             self._opportunity,
             self._provider_state,
@@ -120,6 +130,7 @@ class WorkflowSimulationRunner:
         mode_request_handlers: ModeRequestHandlers | None = None,
         simulation_ledger: PortfolioLedger | None = None,
         ledger_writer: Callable[[PortfolioLedger], PortfolioLedger] | None = None,
+        bonus_dependency_validator: PostgresBonusOfferDependencyValidator | None = None,
     ) -> None:
         self._liquidity_checker = liquidity_checker or StaticLiquidityChecker(
             WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
@@ -128,6 +139,9 @@ class WorkflowSimulationRunner:
         self._mode_request_handlers = mode_request_handlers
         self._simulation_ledger = simulation_ledger
         self._ledger_writer = ledger_writer
+        self._bonus_dependency_validator = (
+            bonus_dependency_validator or PostgresBonusOfferDependencyValidator()
+        )
         self._runner = ReportingSimulationRunner(report_store)
         self.last_report: SimulationReport | None = None
         self.last_records = ()
@@ -186,6 +200,7 @@ class WorkflowSimulationRunner:
                         request.provider_state,
                         log_context,
                         correlation_id,
+                        self._bonus_dependency_validator,
                     )
                 },
                 liquidity_checker=self._liquidity_checker,

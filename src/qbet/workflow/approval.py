@@ -9,9 +9,11 @@ from uuid import UUID
 
 from django.db import DatabaseError, transaction
 
+from qbet.engines import BonusEngineRequest
 from qbet.execution.models import ExecutionRecord, Lifecycle
 from qbet.execution.service import ExecutionService
 from qbet.monitoring import MonitoringLevel, MonitoringRecord
+from qbet.storage.bonus_dependencies import PostgresBonusOfferDependencyValidator
 from qbet.storage.ledger import (
     ExecutionRecordRepository,
     ExecutionStateRepository,
@@ -44,11 +46,15 @@ class ExecutionApprovalService:
         record_repository: ExecutionRecordRepository | None = None,
         queue_repository: ModeWorkQueueRepository | None = None,
         monitoring_writer: PostgresMonitoringRepository | None = None,
+        bonus_dependency_validator: PostgresBonusOfferDependencyValidator | None = None,
     ) -> None:
         self._state_repository = state_repository or ExecutionStateRepository()
         self._record_repository = record_repository or ExecutionRecordRepository()
         self._queue_repository = queue_repository or ModeWorkQueueRepository()
         self._monitoring_writer = monitoring_writer or PostgresMonitoringRepository()
+        self._bonus_dependency_validator = (
+            bonus_dependency_validator or PostgresBonusOfferDependencyValidator()
+        )
 
     def pending_for(
         self,
@@ -56,16 +62,16 @@ class ExecutionApprovalService:
         *,
         now: datetime | None = None,
     ) -> tuple[PendingExecutionApproval, ...]:
+        """Project non-expired approvals without mutating authoritative state."""
+
         observed_at = now or datetime.now(UTC)
         records = self._record_repository.list_awaiting_approval(owner=owner)
         approvals: list[PendingExecutionApproval] = []
         for record in records:
             if observed_at >= record.proposal.expires_at:
-                self._reconcile_expired(
-                    record.proposal.work.id,
-                    owner=owner,
-                    now=observed_at,
-                )
+                continue
+            queue_item = self._queue_repository.load(record.proposal.work.id)
+            if queue_item is None or self._bonus_dependency_is_stale(queue_item):
                 continue
             approvals.append(self._summary(record, now=observed_at))
         return tuple(approvals)
@@ -75,7 +81,41 @@ class ExecutionApprovalService:
 
         observed_at = now or datetime.now(UTC)
         records = self._record_repository.list_awaiting_approval(owner=owner)
-        return sum(record.proposal.expires_at > observed_at for record in records)
+        active = 0
+        for record in records:
+            if record.proposal.expires_at <= observed_at:
+                continue
+            queue_item = self._queue_repository.load(record.proposal.work.id)
+            if queue_item is None or self._bonus_dependency_is_stale(queue_item):
+                continue
+            active += 1
+        return active
+
+    def expire_due(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int = 10,
+    ) -> tuple[ExecutionRecord, ...]:
+        """Expire a bounded batch from the protected Execution maintenance worker."""
+
+        observed_at = now or datetime.now(UTC)
+        expired_records: list[ExecutionRecord] = []
+        for record in self._record_repository.list_due_awaiting_approval(
+            now=observed_at,
+            limit=limit,
+        ):
+            owner = record.proposal.work.owner
+            if owner is None:
+                raise ValueError("proposal_owner_required")
+            expired, changed = self._reconcile_expired(
+                record.proposal.work.id,
+                owner=owner,
+                now=observed_at,
+            )
+            if changed:
+                expired_records.append(expired)
+        return tuple(expired_records)
 
     def decide(
         self,
@@ -100,6 +140,13 @@ class ExecutionApprovalService:
             queue_item = self._queue_repository.load(execution_id)
             if queue_item is None:
                 raise ValueError("execution_queue_item_missing")
+
+            if self._bonus_dependency_is_stale(queue_item):
+                return self._cancel_stale_dependency(
+                    record,
+                    queue_item,
+                    now=decision_time,
+                )
 
             if (
                 record.state is Lifecycle.AWAITING_APPROVAL
@@ -169,13 +216,46 @@ class ExecutionApprovalService:
                 )
             return decided
 
+    def _bonus_dependency_is_stale(self, queue_item: QueuedWorkItem) -> bool:
+        request = queue_item.request
+        if not isinstance(request, BonusEngineRequest):
+            return False
+        return not self._bonus_dependency_validator.check(request).is_current
+
+    def _cancel_stale_dependency(
+        self,
+        record: ExecutionRecord,
+        queue_item: QueuedWorkItem,
+        *,
+        now: datetime,
+    ) -> ExecutionRecord:
+        loaded = self._state_repository.load(record.proposal.work.id)
+        if loaded is None:
+            raise ValueError("execution_state_missing")
+        current, ledger = loaded
+        if current.state in {Lifecycle.AWAITING_APPROVAL, Lifecycle.APPROVED}:
+            current, _ = ExecutionService(
+                state_writer=self._state_repository
+            ).cancel_before_dispatch(
+                current,
+                ledger,
+                reason="bonus_offer_dependency_stale",
+            )
+        if queue_item.state in {WorkState.PENDING, WorkState.RECHECK}:
+            self._queue_repository.cancel(
+                record.proposal.work.id,
+                now=now,
+                reason="bonus_offer_dependency_stale",
+            )
+        return current
+
     def _reconcile_expired(
         self,
         execution_id: UUID,
         *,
         owner: str,
         now: datetime,
-    ) -> ExecutionRecord:
+    ) -> tuple[ExecutionRecord, bool]:
         with transaction.atomic():
             loaded = self._state_repository.load(execution_id)
             if loaded is None:
@@ -187,12 +267,12 @@ class ExecutionApprovalService:
                 record.state is not Lifecycle.AWAITING_APPROVAL
                 or now < record.proposal.expires_at
             ):
-                return record
+                return record, False
 
             queue_item = self._queue_repository.load(execution_id)
             if queue_item is None:
                 raise ValueError("execution_queue_item_missing")
-            return self._expire_locked(record, ledger, queue_item, now=now)
+            return self._expire_locked(record, ledger, queue_item, now=now), True
 
     def _expire_locked(
         self,
