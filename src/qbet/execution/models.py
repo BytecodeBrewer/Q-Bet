@@ -16,6 +16,8 @@ class Lifecycle(StrEnum):
     PROPOSED = "proposed"
     AWAITING_APPROVAL = "awaiting_approval"
     APPROVED = "approved"
+    AWAITING_CONFIRMATION = "awaiting_confirmation"
+    ACTION_PROBLEM = "action_problem"
     REJECTED = "rejected"
     DISPATCHED = "dispatched"
     ACKNOWLEDGED = "acknowledged"
@@ -51,6 +53,19 @@ class ApprovedExecutionRequest(DomainModel):
     notification_display_name: str = ""
 
 
+class ManualExecutionDecision(StrEnum):
+    DONE = "done"
+    NOT_DONE = "not_done"
+    PROBLEM = "problem"
+
+
+class ManualExecutionConfirmation(DomainModel):
+    decision: ManualExecutionDecision
+    confirmed_by: str = Field(min_length=1)
+    confirmed_at: AwareDatetime
+    note: str = Field(default="", max_length=500)
+
+
 class SandboxResult(DomainModel):
     dispatch_id: UUID
     correlation_id: UUID
@@ -59,6 +74,7 @@ class SandboxResult(DomainModel):
     payout: FiniteBalance
     status: str
     observed_at: AwareDatetime
+    source: Literal["sandbox", "user_attested"] = "sandbox"
 
 
 class ExecutionRecord(DomainModel):
@@ -68,4 +84,5 @@ class ExecutionRecord(DomainModel):
     approval: ApprovedExecutionRequest | None = None
     result: SandboxResult | None = None
     collected_result: NormalizedMatchResult | None = None
+    manual_confirmations: tuple[ManualExecutionConfirmation, ...] = ()
     error: str | None = None
