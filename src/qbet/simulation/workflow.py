@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 from pydantic import Field, model_validator
 
-from qbet.domain.models import DomainModel
+from qbet.domain.models import Currency, DomainModel
 from qbet.domain.ledger import LedgerCommand, LedgerOperation, PortfolioBalance
 from qbet.domain.verification import (
     DomainRiskStatus,
@@ -18,6 +18,7 @@ from qbet.domain.verification import (
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.layers import OperationalRiskLayer, SimulationLogContext
 from qbet.ledger import PortfolioLedger
+from qbet.orchestrator import CapitalSnapshot, LiquidityChecker as CapitalLiquidityChecker
 from qbet.reporting import CustomerReportInput, SimulationReport
 from qbet.request_handler import ModeRequestHandlers
 from qbet.simulation.adapters import (
@@ -30,8 +31,7 @@ from qbet.simulation.reporting import ReportingSimulationRunner
 from qbet.simulation.runner import SimulationStepObserver
 from qbet.storage import SimulationReportStore
 from qbet.workflow import (
-    LiquidityChecker,
-    StaticLiquidityChecker,
+    LiquidityChecker as WorkflowLiquidityChecker,
     WorkflowContext,
     WorkflowDecision,
     WorkflowMode,
@@ -108,22 +108,49 @@ class _RiskStageHandler(WorkflowStageHandler):
         return WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
 
 
+class _SimulationPortfolioLiquidityChecker:
+    """Evaluate Simulation proposals against the current shared sandbox balance."""
+
+    def __init__(
+        self,
+        *,
+        ledger: Callable[[], PortfolioLedger],
+        required_capital: Decimal,
+        currency: Currency,
+    ) -> None:
+        self._ledger = ledger
+        self._required_capital = required_capital
+        self._currency = currency
+        self._checker = CapitalLiquidityChecker()
+
+    def check(self, context: WorkflowContext) -> WorkflowStageDecision:
+        if context.stage is not WorkflowStage.LIQUIDITY_CHECK:
+            raise ValueError("simulation portfolio liquidity requires liquidity_check stage")
+        balance = self._ledger().balance
+        return self._checker.capital_decision(
+            CapitalSnapshot(
+                available_capital=balance.available,
+                currency=balance.currency,
+            ),
+            required_capital=self._required_capital,
+            currency=self._currency,
+        )
+
+
 class WorkflowSimulationRunner:
     """Routes virtual engine steps through the workflow without execution adapters."""
 
     def __init__(
         self,
         *,
-        liquidity_checker: LiquidityChecker | None = None,
+        liquidity_checker: WorkflowLiquidityChecker | None = None,
         risk_layer: OperationalRiskLayer | None = None,
         report_store: SimulationReportStore | None = None,
         mode_request_handlers: ModeRequestHandlers | None = None,
         simulation_ledger: PortfolioLedger | None = None,
         ledger_writer: Callable[[PortfolioLedger], PortfolioLedger] | None = None,
     ) -> None:
-        self._liquidity_checker = liquidity_checker or StaticLiquidityChecker(
-            WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
-        )
+        self._liquidity_checker = liquidity_checker
         self._risk_layer = risk_layer or OperationalRiskLayer()
         self._mode_request_handlers = mode_request_handlers
         self._simulation_ledger = simulation_ledger
@@ -178,6 +205,15 @@ class WorkflowSimulationRunner:
         def route_step(step: SimulationStep) -> bool:
             assert step.evaluation is not None
             opportunity = opportunities_by_id[step.evaluation.strategy_result.opportunity_id]
+            amount = step.evaluation.strategy_result.stake
+            liquidity_checker = (
+                self._liquidity_checker
+                or _SimulationPortfolioLiquidityChecker(
+                    ledger=lambda: ledger,
+                    required_capital=amount,
+                    currency=opportunity.currency,
+                )
+            )
             orchestrator = WorkflowOrchestrator(
                 {
                     WorkflowStage.DOMAIN_RISK: _RiskStageHandler(
@@ -188,7 +224,7 @@ class WorkflowSimulationRunner:
                         correlation_id,
                     )
                 },
-                liquidity_checker=self._liquidity_checker,
+                liquidity_checker=liquidity_checker,
                 mode_request_handlers=self._mode_request_handlers,
             )
             workflow_result = orchestrator.process(
@@ -212,7 +248,6 @@ class WorkflowSimulationRunner:
             workflow_results.append(workflow_result)
             if workflow_result.final_decision is not WorkflowDecision.ALLOW:
                 return False
-            amount = step.evaluation.strategy_result.stake
             if amount == 0:
                 return True
             for operation in (
