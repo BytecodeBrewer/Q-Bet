@@ -174,6 +174,33 @@ class ExecutionService:
             ledger,
         )
 
+    def expire_manual_action(
+        self,
+        record: ExecutionRecord,
+        ledger: PortfolioLedger,
+        *,
+        now: datetime,
+    ) -> tuple[ExecutionRecord, PortfolioLedger]:
+        """Mark an unconfirmed manual action as missed once its action window closes."""
+
+        if record.state in _TERMINAL_STATES:
+            return self._persist(record, ledger)
+        if record.state not in {
+            Lifecycle.AWAITING_CONFIRMATION,
+            Lifecycle.ACTION_PROBLEM,
+        }:
+            return self._persist(record, ledger)
+        if now < record.proposal.expires_at:
+            return self._persist(record, ledger)
+        return self._persist(
+            transition(
+                record,
+                Lifecycle.CANCELLED,
+                error="manual_action_window_expired",
+            ),
+            self._release_reserved(record, ledger),
+        )
+
     def confirm_manual_action(
         self,
         record: ExecutionRecord,
