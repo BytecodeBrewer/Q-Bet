@@ -396,7 +396,8 @@ class ManualExecutionLifecycleTests(TransactionTestCase):
         self.assertEqual(record.error, "approval_expired")
         self.assertEqual(queue.state, WorkState.CANCELLED)
         self.assertEqual(queue.history[-1].reason, "approval_expired")
-        self.assertFalse(ledger.commands)
+        self.assertEqual(ledger.positions[str(scheduled.work.id)].state, "released")
+        self.assertEqual(ledger.balance.available, Decimal("1000"))
 
     @override_settings(
         QBET_EXECUTION_TICK_TOKEN="test-execution-token",
