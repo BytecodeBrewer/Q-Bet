@@ -50,6 +50,18 @@ class QueuedWorkItem(DomainModel):
             raise ValueError("sports capital work requires a SportsCapitalEngineRequest")
         if self.work.opportunity_id != self.request.opportunity_id:
             raise ValueError("work and request opportunity_id must match")
+        if isinstance(self.request, BonusEngineRequest):
+            dependency = self.request.bonus_offer_dependency
+            context = self.market_revalidation
+            if dependency is not None and context is not None:
+                if (
+                    dependency.sport != context.sport
+                    or dependency.event_id != context.event_id
+                    or dependency.market != context.market
+                ):
+                    raise ValueError(
+                        "bonus dependency and market revalidation identity must match"
+                    )
         if self.scheduled_for >= self.expires_at:
             raise ValueError("scheduled_for must be before expires_at")
         if self.history[-1].state is not self.state:
@@ -79,7 +91,12 @@ class QueuedWorkItem(DomainModel):
         self, state: WorkState, *, now: datetime, reason: str | None = None
     ) -> "QueuedWorkItem":
         permitted = {
-            WorkState.PENDING: {WorkState.PROCESSING, WorkState.EXPIRED, WorkState.CANCELLED},
+            WorkState.PENDING: {
+                WorkState.PROCESSING,
+                WorkState.RECHECK,
+                WorkState.EXPIRED,
+                WorkState.CANCELLED,
+            },
             WorkState.PROCESSING: {
                 WorkState.RECHECK,
                 WorkState.COMPLETED,
