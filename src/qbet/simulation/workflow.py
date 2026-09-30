@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Callable
+from typing import Callable, cast
 from uuid import UUID, uuid4
 
 from pydantic import Field, model_validator
@@ -130,7 +130,7 @@ class _SimulationPortfolioLiquidityChecker:
         return self._checker.capital_decision(
             CapitalSnapshot(
                 available_capital=balance.available,
-                currency=balance.currency,
+                currency=cast(Currency, balance.currency),
             ),
             required_capital=self._required_capital,
             currency=self._currency,
