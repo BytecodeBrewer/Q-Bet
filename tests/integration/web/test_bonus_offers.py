@@ -94,7 +94,7 @@ window.addEventListener("load", () => {
       formVisible: visible(visibleForm),
       gridColumnCount: gridColumns.trim() ? gridColumns.trim().split(/\s+/).length : 0,
       helpTexts,
-      personalNotesVisible: document.body.textContent.includes("Personal notes"),
+      personalNotesVisible: document.body.innerText.includes("Personal notes"),
       notesInputPresent: Boolean(document.querySelector('[name="notes"]')),
       materialVisible: visible(material),
       materialEnabled: material
