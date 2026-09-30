@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from threading import Barrier, Event, Thread
 from uuid import uuid4
+from unittest.mock import Mock
 
 from django.db import close_old_connections
 from django.test import TransactionTestCase
@@ -85,6 +86,47 @@ def _request(engine, opportunity, *, correlation_id):
 
 class SimulationSharedLiquidityConcurrencyTests(TransactionTestCase):
     reset_sequences = True
+
+    def test_atomic_product_path_rejects_foreign_currency_without_reserving(self) -> None:
+        now = datetime.now(UTC)
+        for currency in ("EUR", "GBP", "USD"):
+            for engine, opportunity in (
+                (SimulationEngine.BONUS, bonus_request("currency-bonus", generated_at=now)),
+                (SimulationEngine.SPORTS_CAPITAL, _sports_request(now)),
+            ):
+                with self.subTest(currency=currency, engine=engine):
+                    repository = SimulationPortfolioLedgerRepository()
+                    initial = repository.load_or_create(
+                        PortfolioLedger(
+                            balance=PortfolioBalance(
+                                mode="simulation", currency=currency, available=Decimal("100"),
+                            )
+                        )
+                    )
+                    reserver = Mock(wraps=repository.reserve_with_liquidity)
+                    writer = Mock(wraps=repository.merge)
+                    runner = WorkflowSimulationRunner(
+                        simulation_ledger=initial,
+                        ledger_writer=writer,
+                        liquidity_reserver=reserver,
+                    )
+                    result = runner.run(_request(engine, opportunity, correlation_id=uuid4()))
+                    workflow = result.workflow_results[0]
+                    transition = next(
+                        item for item in workflow.transitions
+                        if item.stage is WorkflowStage.LIQUIDITY_CHECK
+                    )
+                    persisted = repository.load(currency=currency)
+                    if currency == "EUR":
+                        self.assertEqual(workflow.final_decision, WorkflowDecision.ALLOW)
+                        reserver.assert_called_once()
+                        self.assertNotEqual(persisted, initial)
+                    else:
+                        self.assertEqual(workflow.final_decision, WorkflowDecision.REJECT)
+                        self.assertEqual(transition.reason, "currency_mismatch")
+                        reserver.assert_not_called()
+                        writer.assert_not_called()
+                        self.assertEqual(persisted, initial)
 
     def test_bonus_and_sports_contend_at_authoritative_liquidity_boundary(self) -> None:
         now = datetime.now(UTC)

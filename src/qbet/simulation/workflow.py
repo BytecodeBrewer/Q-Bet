@@ -148,13 +148,22 @@ class _SimulationPortfolioLiquidityChecker:
     def check(self, context: WorkflowContext) -> WorkflowStageDecision:
         if context.stage is not WorkflowStage.LIQUIDITY_CHECK:
             raise ValueError("simulation portfolio liquidity requires liquidity_check stage")
+        balance = self._ledger().balance
+        if balance.currency != self._currency:
+            return self._checker.capital_decision(
+                CapitalSnapshot(
+                    available_capital=balance.available,
+                    currency=cast(Currency, balance.currency),
+                ),
+                required_capital=self._required_capital,
+                currency=cast(Currency, self._currency),
+            )
         if self._authoritative_reserver is not None and self._reserve_command is not None:
             ledger, decision = self._authoritative_reserver(self._reserve_command)
             self.authoritative_ledger = ledger
             self.reservation_applied = decision.decision is WorkflowDecision.ALLOW
             return decision
 
-        balance = self._ledger().balance
         return self._checker.capital_decision(
             CapitalSnapshot(
                 available_capital=balance.available,
