@@ -438,6 +438,7 @@ class SimulationControlService:
             report_store=report_store,
             simulation_ledger=simulation_ledger,
             ledger_writer=ledger_repository.merge,
+            liquidity_reserver=ledger_repository.reserve_with_liquidity,
         )
         self._update_run(
             run_id,
