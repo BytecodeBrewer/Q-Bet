@@ -5,51 +5,135 @@
 <section class="page-heading">
   <span class="eyebrow">Controlled execution</span>
   <h1>Execution approvals</h1>
-  <p>Review opportunities that are ready to continue. Approval records your decision only; Q-Bet revalidates the opportunity before any dispatch.</p>
+  <p>Review approvals and manual provider actions. Approval records your decision only; Q-Bet revalidates before opening the action window, and only your explicit confirmation can mark a manual action as performed.</p>
 </section>
 
 {% if not approvals_available %}
   <section class="surface-panel">
-    <h2>Approvals temporarily unavailable</h2>
-    <p class="muted">Q-Bet cannot read the durable approval state right now. No execution decision was changed.</p>
-  </section>
-{% elif approvals %}
-  <section class="engine-grid" aria-label="Pending execution approvals">
-    {% for approval in approvals %}
-      <article class="engine-card">
-        <div class="card-heading">
-          <div>
-            <span class="eyebrow">Pending approval</span>
-            <h2>{{ approval.engine }}</h2>
-          </div>
-          <span class="tag neutral-tag">Execution</span>
-        </div>
-        <dl class="detail-list">
-          <div><dt>Opportunity</dt><dd>{{ approval.opportunity_id }}</dd></div>
-          <div><dt>Capital required</dt><dd>{% localized_money approval.capital_required approval.currency display_preferences %}</dd></div>
-          <div><dt>Valid until</dt><dd>{% localized_datetime approval.expires_at display_preferences %}</dd></div>
-          <div><dt>Remaining</dt><dd>{{ approval.remaining_validity }} remaining</dd></div>
-        </dl>
-        <p class="muted">{% currency_preference_note approval.currency display_preferences %}</p>
-        <div class="hero-actions">
-          <form method="post" action="{% url 'execution-approval-decision' approval.execution_id %}">
-            {% csrf_token %}
-            <input type="hidden" name="decision" value="approve">
-            <button class="primary" type="submit">Approve</button>
-          </form>
-          <form method="post" action="{% url 'execution-approval-decision' approval.execution_id %}">
-            {% csrf_token %}
-            <input type="hidden" name="decision" value="reject">
-            <button type="submit">Reject</button>
-          </form>
-        </div>
-      </article>
-    {% endfor %}
+    <h2>Execution actions temporarily unavailable</h2>
+    <p class="muted">Q-Bet cannot read the durable execution state right now. No decision or confirmation was changed.</p>
   </section>
 {% else %}
-  <section class="surface-panel">
-    <h2>No pending approvals</h2>
-    <p class="muted">There is currently no execution opportunity waiting for your decision.</p>
-  </section>
+  {% if manual_actions %}
+    <section class="page-heading" aria-labelledby="manual-actions-heading">
+      <span class="eyebrow">Manual provider action</span>
+      <h2 id="manual-actions-heading">Actions awaiting your confirmation</h2>
+      <p>Use the approved snapshot below at the provider. Q-Bet does not place the action for you. Afterward, explicitly record what happened.</p>
+    </section>
+    <section class="engine-grid" aria-label="Manual execution actions">
+      {% for action in manual_actions %}
+        <article class="engine-card">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">{% if action.state.value == "action_problem" %}Problem recorded{% else %}Awaiting confirmation{% endif %}</span>
+              <h2>{{ action.engine }}</h2>
+            </div>
+            <span class="tag neutral-tag">Manual Execution</span>
+          </div>
+          <dl class="detail-list">
+            <div><dt>Event</dt><dd>{{ action.event_id }}</dd></div>
+            {% if action.sport %}<div><dt>Sport</dt><dd>{{ action.sport }}</dd></div>{% endif %}
+            {% if action.market %}<div><dt>Market</dt><dd>{{ action.market }}</dd></div>{% endif %}
+            <div><dt>Action starts</dt><dd>{% localized_datetime action.action_starts_at display_preferences %}</dd></div>
+            <div><dt>Action deadline</dt><dd>{% localized_datetime action.action_deadline display_preferences %}</dd></div>
+            <div><dt>Execution reference</dt><dd><code>{{ action.execution_id }}</code></dd></div>
+            <div><dt>Correlation reference</dt><dd><code>{{ action.correlation_id }}</code></dd></div>
+          </dl>
+
+          <div class="detail-panel">
+            <h3>Exact manual instructions</h3>
+            <ol>
+              {% for instruction in action.instructions %}
+                <li>
+                  <strong>{{ instruction.provider }}</strong>
+                  {% if instruction.selection %} · {{ instruction.selection }}{% endif %}
+                  {% if instruction.side %} · {{ instruction.side.value|default:instruction.side }}{% endif %}
+                  · {% localized_money instruction.amount instruction.currency display_preferences %}
+                  {% if instruction.odds %} · odds {{ instruction.odds }}{% endif %}
+                  {% if instruction.available_limit != None %} · observed limit {% localized_money instruction.available_limit instruction.currency display_preferences %}{% endif %}
+                </li>
+              {% endfor %}
+            </ol>
+            <p class="muted">These values are the approved/revalidated snapshot. Re-check the provider screen before acting if anything differs.</p>
+          </div>
+
+          {% if action.problem_note %}
+            <p class="status-warning"><strong>Recorded problem:</strong> {{ action.problem_note }}</p>
+          {% endif %}
+
+          <div class="hero-actions">
+            <form method="post" action="{% url 'execution-manual-confirmation' action.execution_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="decision" value="done">
+              <button class="primary" type="submit">Done</button>
+            </form>
+            <form method="post" action="{% url 'execution-manual-confirmation' action.execution_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="decision" value="not_done">
+              <button type="submit">Not completed</button>
+            </form>
+          </div>
+          <details class="provider-account-editor">
+            <summary>Report a problem or partial action</summary>
+            <form method="post" action="{% url 'execution-manual-confirmation' action.execution_id %}" class="provider-account-form">
+              {% csrf_token %}
+              <input type="hidden" name="decision" value="problem">
+              <label>
+                <span>What happened?</span>
+                <textarea name="note" maxlength="500" required>{{ action.problem_note }}</textarea>
+              </label>
+              <button type="submit">Record problem</button>
+            </form>
+          </details>
+        </article>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  {% if approvals %}
+    <section class="page-heading" aria-labelledby="pending-approvals-heading">
+      <span class="eyebrow">Decision required</span>
+      <h2 id="pending-approvals-heading">Pending approvals</h2>
+    </section>
+    <section class="engine-grid" aria-label="Pending execution approvals">
+      {% for approval in approvals %}
+        <article class="engine-card">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">Pending approval</span>
+              <h2>{{ approval.engine }}</h2>
+            </div>
+            <span class="tag neutral-tag">Execution</span>
+          </div>
+          <dl class="detail-list">
+            <div><dt>Opportunity</dt><dd>{{ approval.opportunity_id }}</dd></div>
+            <div><dt>Capital required</dt><dd>{% localized_money approval.capital_required approval.currency display_preferences %}</dd></div>
+            <div><dt>Valid until</dt><dd>{% localized_datetime approval.expires_at display_preferences %}</dd></div>
+            <div><dt>Remaining</dt><dd>{{ approval.remaining_validity }} remaining</dd></div>
+          </dl>
+          <p class="muted">{% currency_preference_note approval.currency display_preferences %}</p>
+          <div class="hero-actions">
+            <form method="post" action="{% url 'execution-approval-decision' approval.execution_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="decision" value="approve">
+              <button class="primary" type="submit">Approve</button>
+            </form>
+            <form method="post" action="{% url 'execution-approval-decision' approval.execution_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="decision" value="reject">
+              <button type="submit">Reject</button>
+            </form>
+          </div>
+        </article>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  {% if not approvals and not manual_actions %}
+    <section class="surface-panel">
+      <h2>No execution actions</h2>
+      <p class="muted">There is currently no execution opportunity waiting for approval or manual confirmation.</p>
+    </section>
+  {% endif %}
 {% endif %}
 {% endblock %}
