@@ -22,7 +22,7 @@ from qbet.storage.ledger import (
     ExecutionStateRepository,
     ModeWorkQueueRepository,
 )
-from qbet.storage.monitoring import PostgresMonitoringRepository
+from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
 from qbet.workflow.queue import QueuedWorkItem, WorkState
 
 
@@ -223,28 +223,32 @@ class ManualExecutionService:
         reason_code: str,
         now: datetime,
     ) -> None:
-        self._monitoring_writer.append(
-            MonitoringRecord(
-                correlation_id=record.proposal.work.correlation_id,
-                occurred_at=now,
-                engine=record.proposal.work.engine,
-                mode="execution",
-                stage="execution",
-                event_type="manual_action_confirmation",
-                status=status,
-                reason_code=reason_code,
-                level=(
-                    MonitoringLevel.WARNING
-                    if status in {
-                        Lifecycle.ACTION_PROBLEM.value,
-                        Lifecycle.CANCELLED.value,
-                    }
-                    else MonitoringLevel.INFO
-                ),
-                references={
-                    "execution_id": str(record.proposal.work.id),
-                    "work_id": str(record.proposal.work.id),
-                    "opportunity_id": record.proposal.work.opportunity_id,
-                },
+        try:
+            self._monitoring_writer.append(
+                MonitoringRecord(
+                    correlation_id=record.proposal.work.correlation_id,
+                    occurred_at=now,
+                    engine=record.proposal.work.engine,
+                    mode="execution",
+                    stage="execution",
+                    event_type="manual_action_confirmation",
+                    status=status,
+                    reason_code=reason_code,
+                    level=(
+                        MonitoringLevel.WARNING
+                        if status in {
+                            Lifecycle.ACTION_PROBLEM.value,
+                            Lifecycle.CANCELLED.value,
+                        }
+                        else MonitoringLevel.INFO
+                    ),
+                    references={
+                        "execution_id": str(record.proposal.work.id),
+                        "work_id": str(record.proposal.work.id),
+                        "opportunity_id": record.proposal.work.opportunity_id,
+                    },
+                )
             )
-        )
+        except MonitoringPersistenceError:
+            # Monitoring is observational and cannot roll back authoritative state.
+            pass
