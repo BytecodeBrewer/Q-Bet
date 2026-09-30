@@ -8,9 +8,13 @@ Q-Bet combines quantitative strategy logic with a persistent workflow platform. 
 
 Q-Bet is a cloud-backed Python/Django application with PostgreSQL/Supabase as its durable operational backend and Vercel as the web deployment layer. The web application already exposes user and administrator capabilities on top of persistent workflow, ledger, reporting, monitoring, simulation, approval, and notification state. Local development and validation run against isolated PostgreSQL environments, while CI/CD covers the automated quality gates and deployment checks.
 
-The core system is structurally available from data ingestion to user-facing output. `SportsCapitalEngine` has a connected fixed-odds sportsbook Simulation path through The Odds API and the Sports Match Builder. `BonusEngine` now has a promotion-aware fixed-odds sportsbook Simulation path for the supported qualifying-bet and free-bet strategies: user-owned Bonus Offers provide promotion terms, the versioned GGL-backed catalog validates sportsbook identity, and fresh The Odds API data provides current opposing quotations for two-outcome markets. Unsupported promotion conditions, missing provider/account risk state, missing explicit provider fee/tax terms, and incompatible or stale market data fail closed. Legacy exchange-hedged calculators and fixtures remain only for regression compatibility, while `SportsExchangeEngine` stays a separate planned peer-to-peer exchange engine. bunq sandbox funding feedback, controlled post-event settlement, Portfolio Ledger state, Monitoring, Reporting, notifications, and approval boundaries remain part of the application.
+The core system is structurally available from data ingestion to user-facing output. `SportsCapitalEngine` has a connected fixed-odds sportsbook Simulation path through The Odds API and the Sports Match Builder. `BonusEngine` now has a promotion-aware fixed-odds sportsbook Simulation path for the supported qualifying-bet and free-bet strategies: user-owned Bonus Offers provide promotion terms, the versioned GGL-backed catalog validates sportsbook identity, and fresh The Odds API data provides current opposing quotations for two-outcome markets. Unsupported promotion conditions, missing provider/account risk state, missing explicit provider fee/tax terms, and incompatible or stale market data fail closed. Legacy exchange-hedged calculators and fixtures remain only for regression compatibility, while `SportsExchangeEngine` stays a separate planned peer-to-peer exchange engine. Capital movements now use an explicit requirement → attention → approval → pending → reconciliation lifecycle; manual or bunq-sandbox acknowledgement alone never changes authoritative `PortfolioLedger` balances. Confirmed reconciliation is the boundary that applies funding or withdrawal state. Controlled post-event settlement, Monitoring, Reporting, notifications, and approval boundaries remain part of the application.
 
 Users can persist personal `BonusEngine` / `SportsCapitalEngine` Simulation and Execution selections inside the global staff routing guardrails. Missing preferences fail closed, globally disabled routes remain unavailable without deleting stored user intent, and Execution selection does not bypass approval or capital boundaries.
+
+Users can also record their sportsbook-account presence and business-safe account status against the canonical provider catalog. Manual account states remain explicitly unverified and are kept separate from Portfolio Ledger balances and provider capital locations.
+
+Smart Polling now has restart-safe PostgreSQL work state and a protected bounded hosted tick for the connected SportsCapital Simulation / The Odds API route. Supabase Cron is a wake-up mechanism only: the Python `SmartPollingPolicy` remains authoritative for freshness, timing, capacity, terminal state, and whether a provider request is actually made. Disabling a route stops future polling without deleting its durable history.
 
 Engine runtime state is explicit: `Inactive` means routing is disabled, `Ready` means the engine is enabled and ready to accept work, and `Running` is reserved for durable work that is actually processing. Monitoring, engine detail, and the dashboard use the same persisted state sources and vocabulary for that distinction.
 
@@ -83,11 +87,11 @@ The GitHub Actions **PostgreSQL validation gate** is the authoritative standard 
 
 ## Deployment
 
-Pull requests and changes on `develop` can produce gated Vercel Preview deployments after CI passes.
+Pull requests run a Vercel Preview build check against the exact PR head after the normal validation and performance jobs. It verifies that the app can be built, but does not create a deployment for feature branches. A push to `develop` also runs the Vercel Preview build check, then creates a Preview deployment. Only a push to `main` builds and deploys to the Production Vercel environment and checks the public stable Q-Bet URL.
 
-The Vercel project receives its runtime configuration through environment variables, including `QBET_DATABASE_URL` and the Django secret. Preview environments keep high-authority behavior disabled unless explicitly enabled.
+Production and Preview configuration, including runtime secrets, live in the corresponding Vercel environments. GitHub Actions does not connect to the application database or copy secrets out of Supabase during deployment. Deployments do not run schema migrations or gate on migration state; schema changes remain an explicit operator-controlled task.
 
-Day-to-day deployment and preview management is handled through the Vercel project UI and the GitHub Actions workflow; the README intentionally does not duplicate Vercel's own operating instructions.
+Day-to-day deployment management is handled through the Vercel project UI and the GitHub Actions workflow; the README intentionally does not duplicate Vercel's own operating instructions.
 
 ## Execution Strategy
 

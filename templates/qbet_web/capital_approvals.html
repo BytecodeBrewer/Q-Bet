@@ -1,0 +1,85 @@
+{% extends "qbet_web/base.html" %}
+{% block title %}Capital Approvals · Q-Bet{% endblock %}
+{% block content %}
+{% load display_preferences %}
+<section class="page-heading">
+  <span class="eyebrow">Capital control</span>
+  <h1>Capital approvals</h1>
+  <p>Review proposed capital movements. Approval records permission only; it does not move or settle money.</p>
+</section>
+
+{% if not approvals_available %}
+  <section class="surface-panel">
+    <h2>Capital approvals temporarily unavailable</h2>
+    <p class="muted">Q-Bet cannot read the durable capital workflow state right now. No movement was started.</p>
+  </section>
+{% elif approvals %}
+  <section class="engine-grid" aria-label="Capital movement proposals">
+    {% for item in approvals %}
+      <article class="engine-card">
+        <div class="card-heading">
+          <div>
+            <span class="eyebrow">
+              {% if item.awaiting_approval %}Pending approval
+              {% elif item.movement %}{{ item.movement.state.value|title }}
+              {% else %}{{ item.proposal.state.value|title }}
+              {% endif %}
+            </span>
+            <h2>{{ item.proposal.direction.value|title }}</h2>
+          </div>
+          <span class="tag neutral-tag">{{ item.record.action_method.value }}</span>
+        </div>
+
+        <dl class="detail-list">
+          <div><dt>Amount</dt><dd>{% localized_money item.proposal.amount item.proposal.currency display_preferences %}</dd></div>
+          <div><dt>Source</dt><dd>{{ item.proposal.source_location|default:"Unavailable" }}</dd></div>
+          <div><dt>Destination</dt><dd>{{ item.proposal.destination_location|default:"Unavailable" }}</dd></div>
+          <div><dt>Reason</dt><dd>{{ item.proposal.reason }}</dd></div>
+          <div><dt>Engine</dt><dd>{{ item.proposal.engine|default:"—" }}</dd></div>
+          <div><dt>Valid until</dt><dd>{% localized_datetime item.proposal.expires_at display_preferences %}</dd></div>
+        </dl>
+
+        {% if item.awaiting_approval %}
+          <p class="muted">Approve or reject this proposal. Neither choice performs a transfer by itself.</p>
+          <div class="hero-actions">
+            <form method="post" action="{% url 'capital-approval-decision' item.proposal.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="decision" value="approve">
+              <button class="primary" type="submit">Approve</button>
+            </form>
+            <form method="post" action="{% url 'capital-approval-decision' item.proposal.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="decision" value="reject">
+              <button type="submit">Reject</button>
+            </form>
+          </div>
+        {% elif item.rejected %}
+          <p class="muted">Rejected. No transfer instruction or movement action is available.</p>
+        {% elif item.movement %}
+          <p class="muted">
+            Movement state: <strong>{{ item.movement.state.value }}</strong>.
+            {% if not item.movement.ledger_applied %}Authoritative ledger capital has not been updated.{% endif %}
+          </p>
+        {% elif item.approved and item.manual and item.manual_instruction %}
+          <section aria-label="Manual capital instruction">
+            <h3>Manual instruction</h3>
+            <p>Transfer exactly {% localized_money item.manual_instruction.amount item.manual_instruction.currency display_preferences %} from {{ item.manual_instruction.source_location }} to {{ item.manual_instruction.destination_location }} for {{ item.manual_instruction.reason }}.</p>
+            <form method="post" action="{% url 'capital-manual-performed' item.proposal.id %}">
+              {% csrf_token %}
+              <button class="primary" type="submit">Mark transfer as performed</button>
+            </form>
+            <p class="muted">This records Pending only. Reconciliation is still required before PortfolioLedger changes.</p>
+          </section>
+        {% elif item.approved and item.sandbox %}
+          <p class="muted">Approved for the supported sandbox adapter. Provider execution remains a separate action and any acknowledgement becomes Pending until reconciliation.</p>
+        {% endif %}
+      </article>
+    {% endfor %}
+  </section>
+{% else %}
+  <section class="surface-panel">
+    <h2>No capital proposals</h2>
+    <p class="muted">There is currently no capital movement requiring your attention.</p>
+  </section>
+{% endif %}
+{% endblock %}

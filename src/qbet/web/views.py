@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.contrib import messages
@@ -24,6 +25,14 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.views.decorators.http import require_GET, require_POST
 from pydantic import ValidationError
 
+from qbet.web.avatars import (
+    AvatarStorageError,
+    AvatarValidationError,
+    avatar_fallback_svg,
+    get_avatar_storage,
+    is_valid_stored_avatar,
+    normalize_avatar,
+)
 from qbet.monitoring import MonitoringQuery, MonitoringService as WorkflowMonitoringService
 from qbet.monitoring.exports import csv_header as monitoring_csv_header
 from qbet.monitoring.exports import csv_rows as monitoring_csv_rows
@@ -64,6 +73,11 @@ from qbet.web.account_security import (
     email_verification_token,
     remove_expired_unverified_accounts,
 )
+from qbet.web.engine_notices import (
+    bonus_input_snapshot,
+    contextual_engine_statuses,
+    provider_activity_notice,
+)
 from qbet.web.display_preferences import (
     DisplayPreferenceRepository,
     DisplayPreferences,
@@ -86,9 +100,16 @@ from qbet.web.forms import (
     SimulationStartForm,
     UserRoutingPreferencesForm,
 )
-from qbet.web.models import AccountVerification, CustomerReportAccess, SimulationRunState
+from qbet.web.models import (
+    AccountVerification,
+    CustomerReportAccess,
+    SimulationRunState,
+    UserAvatar,
+)
 from qbet.web.monitoring import MonitoringEngineStatus, MonitoringService, execution_snapshot
 from qbet.web.provider_activity import ProviderActivitySnapshot, provider_activity_snapshot
+from qbet.web.portfolio import PortfolioCapitalReadService
+from qbet.web.portfolio_locations import ProviderCapitalLocationForm
 from qbet.web.readiness import deployment_release_id, persistence_readiness
 from qbet.web.shell_context import display_preferences_for, shell_context
 from qbet.web.ui_copy import ui_copy
@@ -133,6 +154,7 @@ WORKFLOW_MONITORING_SERVICE = WorkflowMonitoringService(WORKFLOW_MONITORING_REPO
 SIMULATION_CONTROL = SimulationControlService()
 DISPLAY_PREFERENCES = DisplayPreferenceRepository()
 OBSERVABILITY_REPOSITORY = PostgresObservabilityRepository()
+PORTFOLIO_CAPITAL = PortfolioCapitalReadService()
 
 
 def _simulation_enabled() -> bool:
@@ -298,14 +320,28 @@ def _dashboard_context(
         configuration_available=routing_available and execution_activity_available,
         runtime_activity=execution_activity,
     )
+    user = cast(User, request.user)
+    bonus_input = bonus_input_snapshot(user_id=cast(int, user.pk))
+    provider_activity = _provider_activity()
+    execution_engines = contextual_engine_statuses(
+        execution.engines,
+        bonus_input=bonus_input,
+        bonus_offers_url=reverse("bonus-offer-list"),
+    )
     values: dict[str, object] = {
         "execution_monitoring": execution,
-        "execution_engines": _ordered_engines(execution.engines, layout.execution),
+        "execution_engines": _ordered_engines(execution_engines, layout.execution),
+        "execution_attention": any(
+            engine.enabled and notice.severity in {"warning", "error"}
+            for engine in execution_engines
+            for notice in engine.notices
+        ),
         "execution_layer_active": execution.summary.active_engines > 0,
         "execution_layer_running": execution.summary.running_engines > 0,
         "dashboard_layout": layout,
         "routing_available": routing_available,
-        "provider_activity": _provider_activity(),
+        "provider_activity": provider_activity,
+        "provider_notice": provider_activity_notice(provider_activity),
         "simulation_enabled": False,
     }
     if _is_staff(request.user) and _simulation_enabled():
@@ -315,11 +351,17 @@ def _dashboard_context(
             runtime_available=routing_available,
             runtime_activity=_simulation_runtime_activity(simulation_control),
         )
+        simulation_engines = contextual_engine_statuses(
+            simulation_monitoring.engines,
+            bonus_input=bonus_input,
+            runs=simulation_control.runs,
+            bonus_offers_url=reverse("bonus-offer-list"),
+        )
         values.update(
             simulation_enabled=True,
             simulation_monitoring=simulation_monitoring,
             simulation_engines=_ordered_engines(
-                simulation_monitoring.engines,
+                simulation_engines,
                 layout.simulation,
             ),
             simulation_layer_active=simulation_monitoring.summary.active_engines > 0,
@@ -499,8 +541,104 @@ def profile(request: HttpRequest) -> HttpResponse:
             preferences_form=preferences_form,
             status=status,
             verification_status=account_verification_status(user),
+            avatar=UserAvatar.objects.filter(user=user).first(),
         ),
     )
+
+
+@login_required
+@require_POST
+def profile_avatar_update(request: HttpRequest) -> HttpResponse:
+    user = cast(User, request.user)
+    uploaded_file = request.FILES.get("avatar")
+    if uploaded_file is None:
+        messages.error(request, "Choose an image to upload.")
+        return redirect("profile")
+    try:
+        normalized = normalize_avatar(uploaded_file)
+        storage = get_avatar_storage()
+        object_key = f"{user.pk}/{uuid4().hex}.jpg"
+        storage.upload(object_key, normalized.content)
+    except AvatarValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect("profile")
+    except AvatarStorageError:
+        messages.error(request, "Avatar storage is unavailable. Please try again later.")
+        return redirect("profile")
+
+    try:
+        with transaction.atomic():
+            avatar = UserAvatar.objects.select_for_update().filter(user=user).first()
+            previous_key = avatar.object_key if avatar is not None else None
+            if avatar is None:
+                UserAvatar.objects.create(
+                    user=user,
+                    object_key=object_key,
+                    content_type="image/jpeg",
+                    byte_size=len(normalized.content),
+                )
+            else:
+                avatar.object_key = object_key
+                avatar.content_type = "image/jpeg"
+                avatar.byte_size = len(normalized.content)
+                avatar.save(update_fields=("object_key", "content_type", "byte_size", "updated_at"))
+    except DatabaseError:
+        try:
+            storage.delete(object_key)
+        except AvatarStorageError:
+            pass
+        raise
+
+    if previous_key:
+        try:
+            storage.delete(previous_key)
+        except AvatarStorageError:
+            pass
+    messages.success(request, "Profile picture updated.")
+    return redirect("profile")
+
+
+@login_required
+@require_POST
+def profile_avatar_remove(request: HttpRequest) -> HttpResponse:
+    user = cast(User, request.user)
+    with transaction.atomic():
+        avatar = UserAvatar.objects.select_for_update().filter(user=user).first()
+        object_key = avatar.object_key if avatar is not None else None
+        if avatar is not None:
+            avatar.delete()
+    if object_key is None:
+        messages.success(request, "The generated profile picture is active.")
+        return redirect("profile")
+    try:
+        get_avatar_storage().delete(object_key)
+    except AvatarStorageError:
+        messages.warning(
+            request,
+            "Your generated profile picture is active, but stored image cleanup could not finish.",
+        )
+        return redirect("profile")
+    messages.success(request, "Profile picture removed.")
+    return redirect("profile")
+
+
+@login_required
+@require_GET
+def account_avatar(request: HttpRequest) -> HttpResponse:
+    user = cast(User, request.user)
+    try:
+        avatar = UserAvatar.objects.get(user=user)
+        content = get_avatar_storage().download(avatar.object_key)
+        if avatar.content_type != "image/jpeg" or not is_valid_stored_avatar(content):
+            raise AvatarStorageError("Stored avatar is invalid.")
+    except (UserAvatar.DoesNotExist, AvatarStorageError):
+        content = avatar_fallback_svg(user.get_username(), user.first_name, user.last_name)
+        response = HttpResponse(content, content_type="image/svg+xml")
+    else:
+        response = HttpResponse(content, content_type="image/jpeg")
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @login_required
@@ -540,8 +678,14 @@ def engine_detail(request: HttpRequest, engine_id: str) -> HttpResponse:
         configuration_available=routing_available and execution_activity_available,
         runtime_activity=execution_activity,
     )
+    user = cast(User, request.user)
+    enriched = contextual_engine_statuses(
+        snapshot.engines,
+        bonus_input=bonus_input_snapshot(user_id=cast(int, user.pk)),
+        bonus_offers_url=reverse("bonus-offer-list"),
+    )
     engine = next(
-        (candidate for candidate in snapshot.engines if candidate.engine_id == engine_id),
+        (candidate for candidate in enriched if candidate.engine_id == engine_id),
         None,
     )
     if engine is None:
@@ -562,21 +706,34 @@ def simulation(request: HttpRequest) -> HttpResponse:
         raise Http404("Simulation visibility is disabled.")
     routing_configuration, routing_available = _routing_configuration()
     auto_run = request.GET.get("autostart", "")
+    monitoring = MONITORING_SERVICE.snapshot(
+        runtime_configuration=routing_configuration,
+        runtime_available=routing_available,
+        runtime_activity=_simulation_runtime_activity(control),
+    )
+    user = cast(User, request.user)
+    monitoring = replace(
+        monitoring,
+        engines=contextual_engine_statuses(
+            monitoring.engines,
+            bonus_input=bonus_input_snapshot(user_id=cast(int, user.pk)),
+            runs=control.runs,
+            bonus_offers_url=reverse("bonus-offer-list"),
+        ),
+    )
+    provider_activity = _provider_activity()
     return render(
         request,
         "qbet_web/simulation.html",
         _context(
             request,
-            monitoring=MONITORING_SERVICE.snapshot(
-                runtime_configuration=routing_configuration,
-                runtime_available=routing_available,
-                runtime_activity=_simulation_runtime_activity(control),
-            ),
+            monitoring=monitoring,
             simulation_control=control,
             start_form=SimulationStartForm(),
             pipeline_dry_run_form=PipelineDryRunForm(),
             pipeline_dry_run=request.session.pop("pipeline_dry_run", None),
-            provider_activity=_provider_activity(),
+            provider_activity=provider_activity,
+            provider_notice=provider_activity_notice(provider_activity),
             auto_run_id=auto_run,
             simulation_enabled=True,
         ),
@@ -1363,6 +1520,25 @@ def admin_simulation_availability(request: HttpRequest) -> HttpResponse:
         state = "enabled" if enabled else "disabled"
         messages.success(request, f"Simulation availability {state}.")
     return redirect("presentation-settings")
+
+
+@login_required
+@require_GET
+def portfolio(request: HttpRequest) -> HttpResponse:
+    """Render authoritative capital state without deriving balances from engines."""
+
+    return render(
+        request,
+        "qbet_web/portfolio.html",
+        _context(
+            request,
+            portfolio=PORTFOLIO_CAPITAL.snapshot(
+                user_id=cast(int, request.user.pk),
+                is_staff=_is_staff(request.user),
+            ),
+            portfolio_location_form=ProviderCapitalLocationForm(),
+        ),
+    )
 
 
 @login_required

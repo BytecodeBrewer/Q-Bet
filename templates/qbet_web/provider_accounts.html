@@ -1,0 +1,88 @@
+{% extends "qbet_web/base.html" %}
+{% block content %}
+<section class="page-heading">
+  <p><a href="{% url 'presentation-settings' %}">Settings</a></p>
+  <span class="eyebrow">Account context</span>
+  <h1>Sportsbook accounts</h1>
+  <p>Record whether you have an account at a sportsbook and its current business status. Manual entries are unverified until a permitted API or read-only adapter verifies them.</p>
+</section>
+
+<section class="provider-account-explainer" aria-label="Provider account boundary">
+  <strong>Account status is not a balance.</strong>
+  <p>Portfolio capital and provider balances remain owned by the Portfolio Ledger. This page stores no sportsbook passwords, cookies, MFA secrets, or browser sessions.</p>
+</section>
+
+<section class="provider-account-grid" aria-label="Sportsbook account registry">
+  {% for account in accounts %}
+    <article class="provider-account-card{% if not account.provider_eligible %} is-provider-ineligible{% endif %}" data-provider-account="{{ account.provider_id|escape }}">
+      <div class="provider-account-heading">
+        <div>
+          <span class="eyebrow">Sportsbook</span>
+          <h2>{{ account.provider_name }}</h2>
+          {% if account.nickname %}<p class="provider-account-nickname">{{ account.nickname }}</p>{% endif %}
+        </div>
+        <span class="provider-account-status status-{{ account.status.value }}">
+          {% if account.status.value == "not_configured" %}Not configured
+          {% elif account.status.value == "declared" %}Declared
+          {% elif account.status.value == "active" %}Active
+          {% elif account.status.value == "needs_verification" %}Needs verification
+          {% elif account.status.value == "unavailable" %}Unavailable
+          {% elif account.status.value == "frozen" %}Frozen / restricted
+          {% else %}{{ account.status.value|title }}{% endif %}
+        </span>
+      </div>
+
+      <div class="provider-account-meta">
+        {% if account.source %}
+          {% if account.source.value == "manual" %}
+            <span class="tag neutral-tag">Manual · unverified</span>
+          {% elif account.is_verified %}
+            <span class="tag">{{ account.source.value|upper }} verified</span>
+          {% else %}
+            <span class="tag neutral-tag">{{ account.source.value|upper }} · verification unavailable</span>
+          {% endif %}
+        {% else %}
+          <span class="tag neutral-tag">No account state recorded</span>
+        {% endif %}
+        {% if not account.provider_eligible %}
+          <span class="tag neutral-tag">Provider currently ineligible</span>
+        {% endif %}
+      </div>
+
+      {% if account.last_verified_at %}
+        <p class="muted">Last verified {{ account.last_verified_at|date:"Y-m-d H:i" }}</p>
+      {% elif account.configured_at %}
+        <p class="muted">Configured {{ account.configured_at|date:"Y-m-d H:i" }}</p>
+      {% endif %}
+      {% if account.notes %}<p class="provider-account-note">{{ account.notes }}</p>{% endif %}
+
+      <details class="provider-account-editor">
+        <summary>{% if account.is_configured %}Edit account status{% else %}Configure account{% endif %}</summary>
+        <form method="post" action="{% url 'provider-account-update' account.provider_id %}" class="provider-account-form">
+          {% csrf_token %}
+          <label>
+            <span>Status</span>
+            <select name="status">
+              {% for value, label in status_choices %}
+                <option value="{{ value }}"{% if account.status.value == value %} selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            <span>Nickname / reference</span>
+            <input type="text" name="nickname" maxlength="80" value="{{ account.nickname|escape }}" placeholder="Optional">
+          </label>
+          <label>
+            <span>Safe notes</span>
+            <textarea name="notes" maxlength="500" rows="2" placeholder="No passwords, cookies, MFA codes, or credentials.">{{ account.notes|escape }}</textarea>
+          </label>
+          <p class="muted">Saving here always records a manual, unverified observation. Choosing “Not configured” removes your stored account record for this provider.</p>
+          <button class="primary" type="submit">Save account status</button>
+        </form>
+      </details>
+    </article>
+  {% empty %}
+    <p class="empty-state">No sportsbook providers are available in the current catalog.</p>
+  {% endfor %}
+</section>
+{% endblock %}

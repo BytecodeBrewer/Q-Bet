@@ -5,6 +5,7 @@
   <aside class="settings-toc" aria-label="Settings sections">
     <strong>Account</strong>
     <a href="#profile-account">Profile and account data</a>
+    <a href="{% url 'provider-account-list' %}">Sportsbook accounts</a>
     <a href="#email-verification">Email and verification</a>
     <a href="#password-security">Password and security</a>
     <a href="#notification-settings">Notifications</a>
@@ -30,7 +31,7 @@
     <section id="profile-account" class="detail-panel settings-section">
       <h2>Profile and account data</h2>
       <p>Signed in as <strong>{{ user.get_username }}</strong>.</p>
-      <p><a href="{% url 'profile' %}">Edit profile and account details</a></p>
+      <p><a href="{% url 'profile' %}">Edit profile and account details</a> · <a href="{% url 'provider-account-list' %}">Manage sportsbook accounts</a></p>
     </section>
 
     <section id="email-verification" class="detail-panel settings-section">

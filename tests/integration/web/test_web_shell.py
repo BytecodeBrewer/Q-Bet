@@ -69,16 +69,19 @@ class WebShellSmokeTests(SimpleTestCase):
         response = self.client.get("/")
 
         self.assertContains(response, "Q-Bet")
-        self.assertContains(
-            response,
-            "Separate strategies. One protected path from data to decision.",
-        )
+        self.assertContains(response, "Market data in. Strategy result out.")
         self.assertContains(response, "BonusEngine")
         self.assertContains(response, "SportsCapitalEngine")
-        self.assertContains(response, "Shared protected Q-Bet workflow")
-        self.assertContains(response, "Domain Risk")
-        self.assertContains(response, "Liquidity Check")
-        self.assertContains(response, "Simulation or Execution")
+        self.assertContains(response, "SportsExchangeEngine")
+        self.assertContains(response, "TicketEngine")
+        self.assertContains(response, "PredictionMarketEngine")
+        self.assertContains(response, "CryptoYieldEngine")
+        self.assertContains(response, "MLEdgeLayer")
+        self.assertContains(response, "Risk")
+        self.assertContains(response, "Liquidity")
+        self.assertContains(response, "Simulation")
+        self.assertContains(response, "Approval")
+        self.assertContains(response, "Execution")
         self.assertContains(response, "Current vs future")
         self.assertContains(response, "Sign in")
         self.assertContains(response, "Create account")
@@ -94,7 +97,7 @@ class WebShellSmokeTests(SimpleTestCase):
         self.assertNotContains(response, "Kubernetes")
         self.assertNotContains(response, "Azure")
         self.assertNotContains(response, "BaseEngine")
-        self.assertNotContains(response, "YieldEngine")
+        self.assertNotContains(response, ">YieldEngine<")
         self.assertNotContains(response, "AlphaEngine")
 
     def test_product_styles_respect_reduced_motion(self) -> None:

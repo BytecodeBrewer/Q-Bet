@@ -43,7 +43,7 @@ class PollingRequest(DomainModel):
     target: PollingTarget
     match_id: Identifier
     correlation_id: UUID
-    fetched_at: AwareDatetime
+    fetched_at: AwareDatetime | None
     event_starts_at: AwareDatetime
     next_poll_at: AwareDatetime
     attempt: int = Field(ge=0)
@@ -304,8 +304,12 @@ class SmartPollingPolicy:
     def _market_decision(
         self, request: PollingRequest, strategy: PollingStrategy
     ) -> PollingDecision:
-        freshness_deadline = request.fetched_at + strategy.freshness_window
-        if freshness_deadline > request.next_poll_at:
+        freshness_deadline = (
+            request.fetched_at + strategy.freshness_window
+            if request.fetched_at is not None
+            else None
+        )
+        if freshness_deadline is not None and freshness_deadline > request.next_poll_at:
             return PollingDecision(
                 request=request,
                 outcome=PollingOutcome.SKIPPED_FRESH,

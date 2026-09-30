@@ -2,30 +2,61 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path, reverse_lazy
 
-from qbet.web import bonus_offers, views
+from qbet.web import bonus_offers, provider_accounts, views
+from qbet.web.capital_approvals import (
+    capital_approval_decision,
+    capital_approvals,
+    capital_manual_performed,
+)
+from qbet.web.portfolio_locations import portfolio_central_refresh, portfolio_location_update
 from qbet.web.engine_runtime import engine_runtime_control, sandbox_execution_control
 from qbet.web.execution_approvals import execution_approval_decision, execution_approvals
 from qbet.web.polling_settings import polling_settings
+from qbet.web.polling_tick import polling_tick
 from qbet.web.routing_settings import routing_settings
 
 urlpatterns = [
     path("", views.home, name="home"),
     path("health/", views.health, name="health"),
     path("metrics/", views.metrics, name="metrics"),
+    path("internal/polling/tick/", polling_tick, name="polling-tick"),
     path("register/", views.register, name="register"),
     path("verification/pending/", views.verification_pending, name="verification-pending"),
     path("verify-email/<str:uidb64>/<str:token>/", views.verify_email, name="verify-email"),
     path("profile/", views.profile, name="profile"),
+    path("profile/avatar/", views.account_avatar, name="account-avatar"),
+    path("profile/avatar/upload/", views.profile_avatar_update, name="profile-avatar-update"),
+    path("profile/avatar/remove/", views.profile_avatar_remove, name="profile-avatar-remove"),
     path("notifications/", views.notification_inbox, name="notification-inbox"),
     path("bonus-offers/", bonus_offers.bonus_offer_list, name="bonus-offer-list"),
     path("bonus-offers/create/", bonus_offers.bonus_offer_create, name="bonus-offer-create"),
+    path("provider-accounts/", provider_accounts.provider_account_list, name="provider-account-list"),
+    path(
+        "provider-accounts/<str:provider_id>/",
+        provider_accounts.provider_account_update,
+        name="provider-account-update",
+    ),
     path(
         "notifications/<uuid:task_id>/read/",
         views.notification_inbox_read,
         name="notification-inbox-read",
     ),
     path("dashboard/", views.dashboard, name="dashboard"),
+    path("portfolio/", views.portfolio, name="portfolio"),
+    path("portfolio/central/refresh/", portfolio_central_refresh, name="portfolio-central-refresh"),
+    path("portfolio/locations/update/", portfolio_location_update, name="portfolio-location-update"),
     path("dashboard/layout/", views.dashboard_layout_update, name="dashboard-layout"),
+    path("capital/approvals/", capital_approvals, name="capital-approvals"),
+    path(
+        "capital/approvals/<uuid:proposal_id>/decision/",
+        capital_approval_decision,
+        name="capital-approval-decision",
+    ),
+    path(
+        "capital/approvals/<uuid:proposal_id>/performed/",
+        capital_manual_performed,
+        name="capital-manual-performed",
+    ),
     path("execution/approvals/", execution_approvals, name="execution-approvals"),
     path(
         "execution/approvals/<uuid:execution_id>/decision/",

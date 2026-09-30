@@ -23,50 +23,98 @@ class Phase2VisualIntegrationTests(TestCase):
             is_staff=True,
         )
 
-    def test_public_home_explains_multi_engine_product_and_shared_protection(self) -> None:
+    def test_public_home_explains_current_and_future_engine_flow(self) -> None:
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            "Separate strategies. One protected path from data to decision.",
-        )
+        self.assertContains(response, "Market data in. Strategy result out.")
         self.assertContains(response, "BonusEngine")
         self.assertContains(response, "SportsCapitalEngine")
-        self.assertContains(response, "Future engines")
-        self.assertContains(response, "Promotions + sports market data")
-        self.assertContains(response, "Structured odds and market data")
-        self.assertContains(response, "Domain-specific sources")
-        self.assertContains(response, "Shared protected Q-Bet workflow")
-        self.assertContains(response, "Domain Risk")
-        self.assertContains(response, "Liquidity Check")
-        self.assertContains(response, "User authority")
-        self.assertContains(response, "Simulation or Execution")
+        self.assertContains(response, "SportsExchangeEngine")
+        self.assertContains(response, "TicketEngine")
+        self.assertContains(response, "PredictionMarketEngine")
+        self.assertContains(response, "CryptoYieldEngine")
+        self.assertContains(response, "MLEdgeLayer")
+        self.assertContains(response, "Risk")
+        self.assertContains(response, "Liquidity")
+        self.assertContains(response, "Approval")
+        self.assertContains(response, "Simulation")
+        self.assertContains(response, "Execution")
         self.assertContains(response, "Settlement")
-        self.assertContains(response, "Portfolio, Reporting & Monitoring")
-        self.assertContains(response, "Current")
-        self.assertContains(response, "Planned")
-        self.assertContains(response, "Higher automation")
+        self.assertContains(response, "Reporting / Monitoring")
+        self.assertContains(response, 'data-home-flow')
+        self.assertContains(response, 'data-future-delay="3000"')
+        self.assertContains(response, 'data-future-layer')
+        self.assertContains(response, 'data-flow-motion-toggle')
+        self.assertContains(response, 'aria-pressed="false"')
+        self.assertContains(response, "Pause motion")
+        self.assertContains(response, 'viewBox="0 0 960 640"')
+        self.assertContains(response, 'id="flow-bonus-path"')
+        self.assertContains(response, 'id="flow-sports-path"')
+        self.assertContains(response, 'id="flow-shared-path"')
+        self.assertContains(response, 'id="flow-simulation-path"')
+        self.assertContains(response, 'id="flow-execution-path"')
+        self.assertContains(response, 'data-flow-station="simulation"')
+        self.assertContains(response, 'data-flow-station="approval"')
+        self.assertContains(response, 'data-flow-station="execution"')
+        self.assertNotContains(response, 'data-flow-station="simulation-execution"')
         self.assertContains(
             response,
-            "removing human approval allows configured actions to execute without an individual confirmation step",
+            "work either enters Simulation directly or goes through Approval before controlled Execution",
         )
+        self.assertContains(
+            response,
+            "both routes → Settlement → Reporting / Monitoring",
+        )
+        self.assertContains(
+            response,
+            "Planned paths keep component-specific preparation and risk rules before shared liquidity and dispatch stages.",
+        )
+        self.assertNotContains(response, 'd="M470 504 V210"')
+        self.assertContains(response, "data-flow-packet", count=4)
+        self.assertContains(response, "qbet_web/home.js")
         self.assertContains(response, "Sign in")
         self.assertContains(response, "Create account")
         self.assertContains(response, "phase2_visual.css")
 
+        self.assertNotContains(response, "One protected path from data to decision.")
+        self.assertNotContains(response, "Every proposal passes the same control envelope.")
         self.assertNotContains(response, "Kubernetes")
         self.assertNotContains(response, "Azure")
-        self.assertNotContains(response, "browser extension")
         self.assertNotContains(response, "provider-specific browser")
-        self.assertNotContains(response, "BaseEngine")
-        self.assertNotContains(response, "YieldEngine")
-        self.assertNotContains(response, "AlphaEngine")
-        self.assertNotContains(response, "qbet_web/home.js")
-        self.assertNotContains(response, "data-flow-packet")
-        self.assertNotContains(response, "<svg")
 
-    def test_public_home_styles_cover_narrow_layout_and_reduced_motion(self) -> None:
+    def test_public_home_flow_script_moves_packets_and_reveals_future_after_three_seconds(
+        self,
+    ) -> None:
+        script = Path(
+            settings.BASE_DIR,
+            "static",
+            "qbet_web",
+            "home.js",
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("FUTURE_REVEAL_DELAY_MS", script)
+        self.assertIn("Number(flow.dataset.futureDelay || 3000)", script)
+        self.assertIn('flow.classList.add("has-motion")', script)
+        self.assertIn('flow.classList.add("is-future-visible")', script)
+        self.assertIn("getPointAtLength", script)
+        self.assertIn("requestAnimationFrame(tick)", script)
+        self.assertIn("pulseCrossedCheckpoints", script)
+        self.assertIn('"IntersectionObserver" in window', script)
+        self.assertIn('matchMedia("(prefers-reduced-motion: reduce)")', script)
+        self.assertIn('matchMedia("(min-width: 781px)")', script)
+        self.assertIn("!desktopFlow.matches", script)
+        self.assertIn('desktopFlow.addEventListener("change"', script)
+        self.assertIn('flow.querySelector("[data-flow-motion-toggle]")', script)
+        self.assertIn("motionPaused", script)
+        self.assertIn("setMotionPaused", script)
+        self.assertIn("cancelFutureReveal", script)
+        self.assertIn("if (!motionPaused)", script)
+        self.assertIn('motionToggle.setAttribute("aria-pressed"', script)
+        self.assertIn('"Resume motion" : "Pause motion"', script)
+        self.assertIn("scheduleFutureReveal()", script)
+
+    def test_public_home_styles_keep_future_muted_and_mobile_flow_static(self) -> None:
         visual_styles = Path(
             settings.BASE_DIR,
             "static",
@@ -74,14 +122,39 @@ class Phase2VisualIntegrationTests(TestCase):
             "phase2_visual.css",
         ).read_text(encoding="utf-8")
 
+        self.assertIn(".home-flow-shell.has-motion:not(.is-future-visible) .flow-future-layer", visual_styles)
+        self.assertIn("stroke-dasharray: 5 8;", visual_styles)
+        self.assertIn(".flow-future-engine rect", visual_styles)
+        self.assertIn(".flow-packet-shared", visual_styles)
+        self.assertIn(".flow-simulation-path", visual_styles)
+        self.assertIn(".flow-execution-path", visual_styles)
+        self.assertIn(".flow-execution-station circle", visual_styles)
+        self.assertIn(".flow-toolbar", visual_styles)
+        self.assertIn(".flow-motion-toggle", visual_styles)
+        self.assertIn(".home-flow-shell.is-motion-paused .flow-future-layer", visual_styles)
+        self.assertIn(".home-flow-shell.is-motion-paused .flow-station circle", visual_styles)
+        self.assertIn(".home-flow-shell.is-motion-paused .flow-station text", visual_styles)
+        self.assertIn(".flow-engine-name", visual_styles)
+        self.assertIn("font-size: 20px;", visual_styles)
+        self.assertIn(".flow-station text", visual_styles)
+        self.assertIn("font-size: 17px;", visual_styles)
+        self.assertIn(".flow-future-engine text", visual_styles)
+        self.assertIn("font-size: 18px;", visual_styles)
         self.assertIn("@media (max-width: 780px)", visual_styles)
-        self.assertIn(".architecture-lanes,", visual_styles)
-        self.assertIn(".protected-workflow-stages { grid-template-columns: 1fr; }", visual_styles)
-        self.assertIn(".authority-grid { grid-template-columns: 1fr; }", visual_styles)
-        self.assertIn("@media (max-width: 520px)", visual_styles)
-        self.assertIn("@media (prefers-reduced-motion: reduce)", visual_styles)
-        self.assertIn("animation: none !important;", visual_styles)
-        self.assertIn("transition: none !important;", visual_styles)
+        self.assertIn(".home-flow-map,", visual_styles)
+        self.assertIn("display: none;", visual_styles)
+        self.assertIn(".home-flow-mobile {", visual_styles)
+        public_styles = visual_styles.split("/* Dashboard control strip */", maxsplit=1)[0]
+        self.assertIn("@media (prefers-reduced-motion: reduce)", public_styles)
+        reduced_motion = public_styles.split("@media (prefers-reduced-motion: reduce)")[-1]
+        self.assertIn(".flow-motion-toggle { display: none; }", reduced_motion)
+        self.assertIn(".flow-packet { display: none; }", reduced_motion)
+        future_reduced_rule = reduced_motion.split(".flow-future-layer {", maxsplit=1)[1].split(
+            "}", maxsplit=1
+        )[0]
+        self.assertIn("opacity: .76 !important;", future_reduced_rule)
+        self.assertIn("transform: none !important;", future_reduced_rule)
+        self.assertIn("transition: none !important;", future_reduced_rule)
 
     def test_authenticated_home_stays_presentation_first_and_links_to_dashboard(self) -> None:
         self.client.force_login(self.user)
@@ -119,11 +192,10 @@ class Phase2VisualIntegrationTests(TestCase):
         self.assertIn("const DRAG_START_DISTANCE = 10;", dashboard_script)
         self.assertIn("const REORDER_HYSTERESIS = 10;", dashboard_script)
         self.assertIn('dragAxis = isSingleColumn(grid) ? "y" : "free";', dashboard_script)
-        self.assertIn('draggedCard.style.transition = "none";', dashboard_script)
-        self.assertIn(
-            "layoutCompensationY += draggedBefore.top - draggedAfter.top;",
-            dashboard_script,
-        )
+        self.assertIn('placeholder.className = "dashboard-drag-placeholder";', dashboard_script)
+        self.assertIn("dnd.closestInsertionSlot(", dashboard_script)
+        self.assertIn("dnd.movePlaceholder(", dashboard_script)
+        self.assertNotIn("layoutCompensation", dashboard_script)
         self.assertIn("function isSingleColumn(grid)", dashboard_script)
 
     def test_root_canvas_uses_selected_theme_for_mobile_viewport(self) -> None:

@@ -137,6 +137,22 @@ class PortfolioLedger(DomainModel):
             )
         )
 
+    def withdraw_external(
+        self, *, command_id: str, dispatch_id: str, correlation_id: str, amount: Decimal
+    ) -> tuple["PortfolioLedger", LedgerDecision]:
+        """Debit externally confirmed withdrawn capital after reconciliation."""
+
+        return self.apply(
+            _command(
+                command_id,
+                dispatch_id,
+                correlation_id,
+                self.balance.currency,
+                LedgerOperation.WITHDRAW,
+                amount,
+            )
+        )
+
     def apply(self, command: LedgerCommand) -> tuple["PortfolioLedger", LedgerDecision]:
         def reject(reason: str) -> tuple["PortfolioLedger", LedgerDecision]:
             return self, LedgerDecision(accepted=False, balance=self.balance, reason=reason)
@@ -172,6 +188,14 @@ class PortfolioLedger(DomainModel):
             if amount <= 0:
                 return reject("funding_amount_must_be_positive")
             balances["available"] += amount
+        elif operation is LedgerOperation.WITHDRAW:
+            if position is not None:
+                return reject("withdrawal_dispatch_conflict")
+            if amount <= 0:
+                return reject("withdrawal_amount_must_be_positive")
+            if amount > self.balance.available:
+                return reject("insufficient_available_capital")
+            balances["available"] -= amount
         else:
             if position is None:
                 return reject("unknown_dispatch")

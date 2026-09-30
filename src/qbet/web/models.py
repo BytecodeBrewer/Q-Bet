@@ -8,6 +8,7 @@ from django.db import models
 from django.utils import timezone
 
 from qbet.data import THE_ODDS_API_PROVIDER_ID
+from qbet.provider_accounts import ProviderAccountSource, ProviderAccountStatus
 from qbet.providers import GERMAN_JURISDICTION, ProviderStatus
 
 
@@ -93,6 +94,99 @@ class CustomerReportAccess(models.Model):
         ordering = ("-granted_at",)
 
 
+class PortfolioLedgerAccess(models.Model):
+    """Explicit per-user permission for one shared authoritative ledger context."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_portfolio_ledger_accesses",
+    )
+    mode = models.CharField(max_length=16)
+    currency = models.CharField(max_length=3)
+    granted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "qbet_portfolio_ledger_access"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "mode", "currency"),
+                name="qbet_portfolio_ledger_access_unique",
+            )
+        ]
+        ordering = ("mode", "currency")
+
+
+class PortfolioCapitalLocation(models.Model):
+    """User-owned allocation of authoritative ledger capital to one provider location."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_portfolio_capital_locations",
+    )
+    provider = models.ForeignKey(
+        "storage.SportsbookProviderRow",
+        on_delete=models.PROTECT,
+        related_name="portfolio_capital_locations",
+    )
+    mode = models.CharField(max_length=16)
+    currency = models.CharField(max_length=3)
+    amount = models.DecimalField(max_digits=24, decimal_places=8, default=Decimal("0"), validators=[MinValueValidator(Decimal("0"))])
+    note = models.CharField(max_length=255, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_portfolio_capital_location"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "provider", "mode", "currency"),
+                name="qbet_portfolio_capital_location_unique",
+            )
+        ]
+        ordering = ("provider__display_name", "currency")
+
+
+class ProviderAccount(models.Model):
+    """User-owned sportsbook-account state without credentials or capital authority."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_provider_accounts",
+    )
+    provider = models.ForeignKey(
+        "storage.SportsbookProviderRow",
+        on_delete=models.PROTECT,
+        related_name="user_accounts",
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=tuple((value.value, value.value.replace("_", " ").title()) for value in ProviderAccountStatus if value is not ProviderAccountStatus.NOT_CONFIGURED),
+        default=ProviderAccountStatus.DECLARED.value,
+    )
+    source = models.CharField(
+        max_length=16,
+        choices=tuple((value.value, value.value.title()) for value in ProviderAccountSource),
+        default=ProviderAccountSource.MANUAL.value,
+    )
+    nickname = models.CharField(max_length=80, blank=True, default="")
+    notes = models.CharField(max_length=500, blank=True, default="")
+    configured_at = models.DateTimeField(auto_now_add=True)
+    last_verified_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_provider_accounts"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "provider"),
+                name="qbet_provider_account_user_provider_unique",
+            )
+        ]
+        ordering = ("provider__display_name", "provider_id")
+
+
 class UserDisplayPreference(models.Model):
     """Durable user-owned regional display choices with no business authority."""
 
@@ -110,6 +204,23 @@ class UserDisplayPreference(models.Model):
 
     class Meta:
         db_table = "qbet_user_display_preferences"
+
+
+class UserAvatar(models.Model):
+    """User-owned pointer to a normalized image in durable object storage."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="qbet_avatar",
+    )
+    object_key = models.CharField(max_length=255, unique=True)
+    content_type = models.CharField(max_length=32, default="image/jpeg")
+    byte_size = models.PositiveIntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_user_avatars"
 
 
 class AccountVerification(models.Model):

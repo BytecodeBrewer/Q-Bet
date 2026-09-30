@@ -1,12 +1,15 @@
 from importlib import import_module
 
 from django.apps import apps
+from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
 
+from qbet.provider_accounts import ProviderAccountStatus
 from qbet.providers import SportsbookCatalog, load_german_sportsbook_catalog
 from qbet.storage.models import ProviderStateRow, SportsbookProviderRow
 from qbet.storage.providers import PostgresSportsbookCatalogRepository
+from qbet.web.models import ProviderAccount
 
 
 def assert_catalog_equal(actual: SportsbookCatalog, expected: SportsbookCatalog) -> None:
@@ -53,6 +56,81 @@ class SportsbookCatalogRepositoryTests(TestCase):
                 external_key="tipico_de",
             ).eligible
         )
+
+    def test_catalog_refresh_updates_provider_in_place_when_user_account_references_it(self) -> None:
+        repository = PostgresSportsbookCatalogRepository()
+        original = load_german_sportsbook_catalog()
+        repository.replace(original)
+        provider = original.providers[0]
+        provider_row = SportsbookProviderRow.objects.get(provider_id=provider.provider_id)
+        user = get_user_model().objects.create_user(username="catalog-refresh-user")
+        account = ProviderAccount.objects.create(
+            user=user,
+            provider=provider_row,
+            status=ProviderAccountStatus.ACTIVE.value,
+        )
+        updated_provider = provider.model_copy(
+            update={"display_name": f"{provider.display_name} Updated"}
+        )
+        updated = original.model_copy(
+            update={
+                "providers": tuple(
+                    updated_provider
+                    if item.provider_id == provider.provider_id
+                    else item
+                    for item in original.providers
+                )
+            }
+        )
+
+        repository.replace(updated)
+
+        account.refresh_from_db()
+        provider_row.refresh_from_db()
+        self.assertEqual(account.provider_id, provider.provider_id)
+        self.assertEqual(provider_row.display_name, updated_provider.display_name)
+        assert_catalog_equal(repository.load(), updated)
+
+    def test_catalog_refresh_fails_closed_when_removed_provider_is_still_referenced(self) -> None:
+        repository = PostgresSportsbookCatalogRepository()
+        original = load_german_sportsbook_catalog()
+        repository.replace(original)
+        provider = original.providers[0]
+        provider_row = SportsbookProviderRow.objects.get(provider_id=provider.provider_id)
+        user = get_user_model().objects.create_user(username="catalog-remove-user")
+        ProviderAccount.objects.create(
+            user=user,
+            provider=provider_row,
+            status=ProviderAccountStatus.ACTIVE.value,
+        )
+        reduced = original.model_copy(
+            update={
+                "providers": tuple(
+                    item
+                    for item in original.providers
+                    if item.provider_id != provider.provider_id
+                ),
+                "mappings": tuple(
+                    mapping
+                    for mapping in original.mappings
+                    if mapping.provider_id != provider.provider_id
+                ),
+            }
+        )
+
+        with self.assertRaisesRegex(
+            OSError,
+            "cannot remove referenced providers",
+        ):
+            repository.replace(reduced)
+
+        self.assertTrue(
+            ProviderAccount.objects.filter(
+                user=user,
+                provider_id=provider.provider_id,
+            ).exists()
+        )
+        assert_catalog_equal(repository.load(), original)
 
     def test_catalog_hardening_migration_executes_on_postgresql(self) -> None:
         if connection.vendor != "postgresql":

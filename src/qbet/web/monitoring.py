@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from collections.abc import Mapping
-from typing import Final, cast
+from typing import Final, Literal, cast
 from uuid import UUID
 
 from qbet.layers.logging import SimulationLogRecord, SimulationLogRecordType
@@ -44,6 +44,18 @@ class MonitoringWorkflowStage:
 
 
 @dataclass(frozen=True)
+class EngineNotice:
+    severity: Literal["info", "success", "warning", "error"]
+    reason_code: str
+    title: str
+    detail: str
+    action_label: str | None = None
+    action_url: str | None = None
+    dismissible: bool = True
+    occurred_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class MonitoringEngineStatus:
     name: str
     status: str
@@ -61,6 +73,9 @@ class MonitoringEngineStatus:
     warning_count: int = 0
     error_count: int = 0
     latest_report_id: UUID | None = None
+    latest_report_generated_at: datetime | None = None
+    latest_no_opportunity: bool = False
+    notices: tuple[EngineNotice, ...] = ()
     workflow_stages: tuple[MonitoringWorkflowStage, ...] = ()
 
 
@@ -413,6 +428,18 @@ class MonitoringService:
             current_error_count = sum(
                 record.record_type is SimulationLogRecordType.ERROR for record in current_records
             )
+            latest_profitability = tuple(
+                bool(record.payload["is_profitable"])
+                for record in latest_records
+                if record.record_type is SimulationLogRecordType.EVALUATION
+                and isinstance(record.payload.get("is_profitable"), bool)
+            )
+            latest_no_opportunity = bool(
+                latest is not None
+                and latest.status is SimulationStatus.COMPLETED
+                and latest_profitability
+                and not any(latest_profitability)
+            )
 
             running_matches, pending_matches = activity.get(engine_id, (0, 0))
             if runtime_configuration is None:
@@ -475,6 +502,8 @@ class MonitoringService:
                     warning_count=warning_count,
                     error_count=error_count,
                     latest_report_id=latest.run_id if latest is not None else None,
+                    latest_report_generated_at=latest.generated_at if latest is not None else None,
+                    latest_no_opportunity=latest_no_opportunity,
                     workflow_stages=workflow_stages,
                 )
             )

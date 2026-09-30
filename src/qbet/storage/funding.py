@@ -1,13 +1,15 @@
-"""Durable bunq sandbox funding feedback into the Simulation ledger."""
+"""Durable bunq sandbox provider feedback staged for later capital reconciliation."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 import re
 from uuid import UUID
 
 from django.db import DatabaseError, transaction
-from pydantic import ValidationError, model_validator
+from pydantic import AwareDatetime, ValidationError, model_validator
 
 from qbet.bank.bunq import (
     BunqSandboxFundingAdapter,
@@ -16,8 +18,8 @@ from qbet.bank.bunq import (
 )
 from qbet.bank.funding import BankFundingProposal, FundingDirection, FundingProposalState
 from qbet.domain.models import DomainModel
-from qbet.ledger import PortfolioLedger
-from qbet.storage.models import PortfolioLedgerRow, SandboxFundingOutcomeRow
+from qbet.storage.capital_movement import CapitalMovementRepository
+from qbet.storage.models import SandboxFundingOutcomeRow
 
 
 _REDACTED_BUNQ_REFERENCE = re.compile(r"^bunq-payment-[0-9a-f]{12}$")
@@ -33,7 +35,7 @@ class SandboxFundingFeedbackConflict(ValueError):
 
 
 class SandboxFundingFeedbackRecord(DomainModel):
-    """Canonical provider outcome plus whether its capital feedback reached the ledger."""
+    """Canonical provider outcome; provider acknowledgement is not ledger settlement."""
 
     proposal: BankFundingProposal
     provider_result: BunqSandboxPaymentResult
@@ -72,7 +74,7 @@ class _SandboxFundingProviderClaim:
 
 
 class BunqSandboxSimulationFundingService:
-    """Production boundary for sandbox execution plus durable Simulation feedback."""
+    """Execute one fake-money provider write and persist a pending movement for reconciliation."""
 
     def __init__(
         self,
@@ -80,6 +82,8 @@ class BunqSandboxSimulationFundingService:
         transport: BunqTransport,
         recipient_email: str | None,
         feedback_repository: SandboxFundingFeedbackRepository | None = None,
+        movement_repository: CapitalMovementRepository | None = None,
+        clock: Callable[[], AwareDatetime] | None = None,
     ) -> None:
         self._adapter = BunqSandboxFundingAdapter(
             transport=transport,
@@ -87,9 +91,11 @@ class BunqSandboxSimulationFundingService:
             target_mode="simulation",
         )
         self._feedback_repository = feedback_repository or SandboxFundingFeedbackRepository()
+        self._movement_repository = movement_repository or CapitalMovementRepository()
+        self._clock = clock or (lambda: datetime.now(UTC))
 
     def execute(self, proposal: BankFundingProposal) -> SandboxFundingFeedbackRecord:
-        """Execute at most one provider write for a durable funding proposal."""
+        """Execute at most one provider write; acknowledgement remains pending."""
 
         claim = self._feedback_repository.claim(proposal)
         if not claim.acquired:
@@ -97,14 +103,57 @@ class BunqSandboxSimulationFundingService:
                 raise SandboxFundingFeedbackPersistenceError(
                     "sandbox_funding_provider_outcome_unknown"
                 )
+            # Historical feedback written before #212 may already have credited the
+            # ledger. Never create a new pending movement that could credit it twice.
+            if not claim.record.ledger_applied:
+                self._persist_movement(
+                    claim.record,
+                    recorded_at=self._movement_recorded_at(claim.record.proposal),
+                )
             return claim.record.model_copy(update={"duplicate": True})
 
         provider_result = self._adapter.execute(proposal)
-        return self._feedback_repository.apply(proposal, provider_result)
+        feedback = self._feedback_repository.apply(proposal, provider_result)
+        self._persist_movement(
+            feedback,
+            recorded_at=self._movement_recorded_at(feedback.proposal),
+        )
+        return feedback
+
+    def _movement_recorded_at(self, proposal: BankFundingProposal) -> AwareDatetime:
+        approval = proposal.approval
+        if approval is None:
+            raise SandboxFundingFeedbackPersistenceError(
+                "sandbox_funding_approval_missing"
+            )
+        return max(self._clock(), approval.approved_at)
+
+    def _persist_movement(
+        self,
+        feedback: SandboxFundingFeedbackRecord,
+        *,
+        recorded_at: AwareDatetime,
+    ) -> None:
+        result = feedback.provider_result
+        if result.sent:
+            provider_reference = result.provider_reference
+            assert provider_reference is not None
+            self._movement_repository.record_adapter_acknowledgement(
+                feedback.proposal,
+                provider_reference=provider_reference,
+                acknowledged_at=recorded_at,
+            )
+            return
+
+        self._movement_repository.record_adapter_failure(
+            feedback.proposal,
+            reason_code=result.reason_code or "sandbox_funding_failed",
+            failed_at=recorded_at,
+        )
 
 
 class SandboxFundingFeedbackRepository:
-    """Atomically persist one bunq sandbox result and its Simulation ledger credit."""
+    """Persist one bunq sandbox result without fabricating ledger settlement."""
 
     _provider_id = "bunq"
 
@@ -191,72 +240,36 @@ class SandboxFundingFeedbackRepository:
                     },
                 )
                 if created:
-                    stored = incoming
-                else:
-                    stored = self._record_from_row(row)
-                    if stored.proposal != proposal:
-                        raise SandboxFundingFeedbackConflict(
-                            "sandbox_funding_feedback_conflict"
-                        )
-                    if _is_provider_claim(stored):
-                        row.sent = canonical_result.sent
-                        row.provider_reference = canonical_result.provider_reference
-                        row.reason_code = canonical_result.reason_code
-                        row.payload = incoming.model_dump(mode="json")
-                        row.save(
-                            update_fields=(
-                                "sent",
-                                "provider_reference",
-                                "reason_code",
-                                "payload",
-                                "updated_at",
-                            )
-                        )
-                        stored = incoming
-                    else:
-                        if stored.provider_result != canonical_result:
-                            raise SandboxFundingFeedbackConflict(
-                                "sandbox_funding_feedback_conflict"
-                            )
-                        if stored.ledger_applied or not canonical_result.sent:
-                            return stored.model_copy(update={"duplicate": True})
+                    return incoming
 
-                if not canonical_result.sent:
-                    return stored
-
-                ledger_row = (
-                    PortfolioLedgerRow.objects.select_for_update()
-                    .filter(mode="simulation", currency=proposal.currency)
-                    .first()
-                )
-                if ledger_row is None:
-                    raise SandboxFundingFeedbackPersistenceError(
-                        "simulation_ledger_missing"
+                stored = self._record_from_row(row)
+                if stored.proposal != proposal:
+                    raise SandboxFundingFeedbackConflict(
+                        "sandbox_funding_feedback_conflict"
                     )
-                ledger = PortfolioLedger.model_validate(ledger_row.payload)
-                updated, decision = ledger.fund_external(
-                    command_id=_ledger_command_id(proposal.id),
-                    dispatch_id=_ledger_dispatch_id(proposal.id),
-                    correlation_id=str(proposal.correlation_id),
-                    amount=proposal.amount,
-                )
-                if not decision.accepted:
-                    if decision.reason == "idempotency_conflict":
-                        raise SandboxFundingFeedbackConflict(
-                            "sandbox_funding_ledger_conflict"
+                if _is_provider_claim(stored):
+                    row.sent = canonical_result.sent
+                    row.provider_reference = canonical_result.provider_reference
+                    row.reason_code = canonical_result.reason_code
+                    row.ledger_applied = False
+                    row.payload = incoming.model_dump(mode="json")
+                    row.save(
+                        update_fields=(
+                            "sent",
+                            "provider_reference",
+                            "reason_code",
+                            "ledger_applied",
+                            "payload",
+                            "updated_at",
                         )
-                    raise SandboxFundingFeedbackPersistenceError(
-                        "sandbox_funding_ledger_rejected"
                     )
+                    return incoming
 
-                ledger_row.payload = updated.model_dump(mode="json")
-                ledger_row.save(update_fields=("payload", "updated_at"))
-
-                applied = stored.model_copy(update={"ledger_applied": True})
-                row.ledger_applied = True
-                row.payload = applied.model_dump(mode="json")
-                row.save(update_fields=("ledger_applied", "payload", "updated_at"))
-                return applied
+                if stored.provider_result != canonical_result:
+                    raise SandboxFundingFeedbackConflict(
+                        "sandbox_funding_feedback_conflict"
+                    )
+                return stored.model_copy(update={"duplicate": True})
         except (DatabaseError, ValidationError) as error:
             raise SandboxFundingFeedbackPersistenceError(
                 "sandbox_funding_feedback_unavailable"
@@ -295,11 +308,3 @@ def _is_provider_claim(record: SandboxFundingFeedbackRecord) -> bool:
         and result.reason_code == _PROVIDER_CLAIM_REASON
         and not record.ledger_applied
     )
-
-
-def _ledger_command_id(proposal_id: UUID) -> str:
-    return f"funding:{proposal_id}:credit"
-
-
-def _ledger_dispatch_id(proposal_id: UUID) -> str:
-    return f"funding:{proposal_id}"

@@ -42,7 +42,8 @@ def provider_activity_snapshot(
     relevant = tuple(
         record
         for record in records
-        if record.event_type == "provider_query" or record.stage == "request_handler"
+        if record.event_type in {"provider_query", "polling"}
+        or record.stage == "request_handler"
     )
     if not relevant:
         return ProviderActivitySnapshot(
@@ -70,15 +71,26 @@ def _normalized_state(status: str, reason_code: object) -> str:
     reason = str(reason_code or "").lower()
     if "delay" in reason or "rate_limit" in reason or "rate_limited" in reason:
         return "delayed"
-    if status in {"working", "running", "processing", "started", "pending"}:
+    if status in {"working", "running", "processing", "started", "pending", "fetching"}:
         return "working"
-    if status in {"success", "completed", "ready", "allow"}:
+    if status in {"success", "completed", "ready", "allow", "skipped_fresh"}:
         return "success"
     if status in {"delayed", "recheck"}:
         return "delayed"
+    if status == "scheduled":
+        return "ready"
     if status in {"unavailable", "not_ready"}:
         return "unavailable"
-    if status in {"error", "failed", "reject", "rejected"}:
+    if status in {"terminal", "disabled"}:
+        return "ready"
+    if status in {
+        "error",
+        "failed",
+        "reject",
+        "rejected",
+        "provider_error",
+        "configuration_error",
+    }:
         return "error"
     return "ready"
 
