@@ -227,6 +227,20 @@ class ExecutionRecordRepository:
         )
         return tuple(ExecutionRecord.model_validate(payload) for payload in payloads)
 
+    def list_manual_action_pending(self, *, owner: str) -> tuple[ExecutionRecord, ...]:
+        payloads = (
+            ExecutionRecordRow.objects.filter(
+                state__in=(
+                    Lifecycle.AWAITING_CONFIRMATION.value,
+                    Lifecycle.ACTION_PROBLEM.value,
+                ),
+                payload__proposal__work__owner=owner,
+            )
+            .order_by("updated_at")
+            .values_list("payload", flat=True)
+        )
+        return tuple(ExecutionRecord.model_validate(payload) for payload in payloads)
+
     @transaction.atomic
     def save_transition(self, record: ExecutionRecord) -> ExecutionRecord:
         return self.save(record)
