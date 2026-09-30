@@ -333,6 +333,18 @@ class ModeDispatchCoordinator:
                 raise PermissionError("proposal_owner_required")
 
             if record.state is Lifecycle.AWAITING_APPROVAL:
+                if not item.work.execution_sandbox:
+                    before_ledger = ledger
+                    record, ledger = ExecutionService(
+                        state_writer=state_repository
+                    ).reserve_for_approval(record, ledger)
+                    self._record_ledger_transitions(
+                        item,
+                        before_ledger,
+                        ledger,
+                        dispatch_id=str(item.work.id),
+                        occurred_at=now,
+                    )
                 self._record_event(
                     item,
                     stage="execution",
@@ -369,22 +381,66 @@ class ModeDispatchCoordinator:
             if record.state is Lifecycle.SETTLED:
                 return self._save_queue(item.transition(WorkState.COMPLETED, now=now))
 
-            if not item.work.execution_sandbox:
-                self._record_event(
-                    item,
-                    stage="execution",
-                    event_type="sandbox_guard",
-                    status="rejected",
-                    reason_code="execution_sandbox_required",
-                    occurred_at=now,
-                )
+            if record.state is Lifecycle.ACKNOWLEDGED:
                 return self._save_queue(
                     item.transition(
-                        WorkState.CANCELLED,
+                        WorkState.RECHECK,
                         now=now,
-                        reason="execution_sandbox_required",
+                        reason="post_event_result_pending",
                     )
                 )
+
+            if not item.work.execution_sandbox:
+                if record.state in {
+                    Lifecycle.AWAITING_CONFIRMATION,
+                    Lifecycle.ACTION_PROBLEM,
+                }:
+                    return self._save_queue(
+                        item.transition(
+                            WorkState.RECHECK,
+                            now=now,
+                            reason="manual_action_confirmation_required",
+                        )
+                    )
+                before_record = record
+                before_ledger = ledger
+                record, ledger = ExecutionService(
+                    state_writer=state_repository
+                ).prepare_manual_action(record, ledger, now=now)
+                for state in record.transitions[len(before_record.transitions):]:
+                    self._record_event(
+                        item,
+                        stage="execution",
+                        event_type="lifecycle_transition",
+                        status=state.value,
+                        reason_code=(record.error if state is record.state else None),
+                        occurred_at=now,
+                        references={"execution_id": str(item.work.id)},
+                    )
+                self._record_ledger_transitions(
+                    item,
+                    before_ledger,
+                    ledger,
+                    dispatch_id=str(item.work.id),
+                    occurred_at=now,
+                )
+                if record.state in {Lifecycle.REJECTED, Lifecycle.CANCELLED}:
+                    return self._save_queue(
+                        item.transition(
+                            WorkState.CANCELLED,
+                            now=now,
+                            reason=record.error or "manual_execution_rejected",
+                        )
+                    )
+                self._notify_after_revalidation(record, item, now=now)
+                return self._save_queue(
+                    item.transition(
+                        WorkState.RECHECK,
+                        now=now,
+                        reason="manual_action_confirmation_required",
+                    )
+                )
+
             self._notify_after_revalidation(record, item, now=now)
 
             persisted_record = self._run_execution(
