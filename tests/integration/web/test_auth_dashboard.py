@@ -141,7 +141,7 @@ class AuthenticationAndDashboardTests(TestCase):
         self.assertEqual(content.count('data-engine-widget="sports_capital"'), 1)
         self.assertContains(dashboard, "Execution idle")
         self.assertContains(dashboard, "Engine status")
-        self.assertContains(dashboard, "Bonus input needed")
+        self.assertNotContains(dashboard, "Bonus input needed")
         self.assertNotContains(dashboard, "Warnings / errors")
         self.assertContains(dashboard, "Inactive")
         self.assertNotContains(dashboard, "BaseEngine")

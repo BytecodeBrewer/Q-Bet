@@ -34,7 +34,7 @@ from qbet.data.sports_match_builder import prepare_german_bonus_sportsbook_offer
 from qbet.domain.models import Currency, DomainModel, Identifier, PositiveDecimal
 from qbet.domain.verification import ProviderState
 from qbet.providers import SportsbookCatalog
-from qbet.engines import BonusEngineRequest
+from qbet.engines import BonusEngineRequest, BonusOfferDependency
 from qbet.reporting import (
     CustomerReportAmount,
     CustomerReportFinancialTerm,
@@ -233,10 +233,20 @@ class BonusOfferSimulationOpportunitySource:
             hedge_profile,
         )
         engine_request = BonusEngineRequest(
-            opportunity_id=f"{snapshot.id}:bonus-offer-{offer.pk}",
+            opportunity_id=(
+                f"{snapshot.id}:bonus-offer-{offer.pk}:v{offer.version}"
+            ),
             inputs=inputs,
             currency=cast(Currency, offer.currency),
             execution_offer_ids=(promotion.id, hedge.id),
+            bonus_offer_dependency=BonusOfferDependency(
+                offer_id=cast(int, offer.pk),
+                offer_version=offer.version,
+                owner_id=self._user_id,
+                sport=self._config.sport,
+                event_id=self._config.event_id,
+                market=self._config.market,
+            ),
         )
 
         assigned_amounts = _report_amounts(preview)
@@ -270,6 +280,7 @@ class BonusOfferSimulationOpportunitySource:
             BonusOffer.objects.filter(
                 user_id=self._user_id,
                 valid_until__gt=timezone.now(),
+                retired_at__isnull=True,
             )
             .select_related("provider")
             .prefetch_related("provider__external_identities")
@@ -283,6 +294,13 @@ class BonusOfferSimulationOpportunitySource:
         ready = tuple(offer for offer in active if offer.is_preparation_ready)
         if ready:
             return ready
+        review = next((offer for offer in active if offer.needs_review), None)
+        if review is not None:
+            raise _source_error(
+                "bonus_offer_conditions_unsupported",
+                review.unsupported_reason
+                or "This promotion contains conditions that require manual review.",
+            )
         raise _source_error(
             "bonus_offer_unavailable",
             "No active Bonus Offer is currently eligible for API-backed preparation.",
@@ -441,7 +459,11 @@ def _build_bonus_inputs(
         return (
             qualifying,
             calculate_sportsbook_qualifying_bet(qualifying),
-            "Qualifying bet",
+            (
+                "Bet & get · qualifying wager"
+                if offer.effective_promotion_shape == BonusOffer.PromotionShape.BET_AND_GET
+                else "Qualifying wager"
+            ),
         )
     if offer.promotion_type == BonusOffer.PromotionType.FREE_BET:
         if offer.promotion_value is None or not offer.stake_return_rule:
@@ -460,7 +482,7 @@ def _build_bonus_inputs(
         return (
             free_bet,
             calculate_sportsbook_free_bet(free_bet),
-            "Free bet",
+            "Free bet already available",
         )
     raise _source_error(
         "bonus_offer_type_unsupported",

@@ -1,0 +1,71 @@
+<div class="bonus-offer-fields" data-bonus-offer-form-fields>
+  <label class="bonus-offer-field">
+    <span>{{ form.provider.label }}</span>
+    {{ form.provider }}
+    {% if form.provider.help_text %}<small>{{ form.provider.help_text }}</small>{% endif %}
+    {{ form.provider.errors }}
+  </label>
+  <label class="bonus-offer-field">
+    <span>{{ form.name.label }}</span>
+    {{ form.name }}
+    {% if form.name.help_text %}<small>{{ form.name.help_text }}</small>{% endif %}
+    {{ form.name.errors }}
+  </label>
+  <label class="bonus-offer-field">
+    <span>{{ form.promotion_shape.label }}</span>
+    {{ form.promotion_shape }}
+    {% if form.promotion_shape.help_text %}<small>{{ form.promotion_shape.help_text }}</small>{% endif %}
+    {{ form.promotion_shape.errors }}
+  </label>
+  <label class="bonus-offer-field">
+    <span>{{ form.currency.label }}</span>
+    {{ form.currency }}
+    {{ form.currency.errors }}
+  </label>
+
+  <label class="bonus-offer-field" data-bonus-offer-shapes="bet_and_get qualifying_stage">
+    <span>{{ form.required_stake.label }}</span>
+    {{ form.required_stake }}
+    {% if form.required_stake.help_text %}<small>{{ form.required_stake.help_text }}</small>{% endif %}
+    {{ form.required_stake.errors }}
+  </label>
+
+  <label class="bonus-offer-field" data-bonus-offer-shapes="bet_and_get free_bet">
+    <span>{{ form.promotion_value.label }}</span>
+    {{ form.promotion_value }}
+    {% if form.promotion_value.help_text %}<small>{{ form.promotion_value.help_text }}</small>{% endif %}
+    {{ form.promotion_value.errors }}
+  </label>
+
+  <label class="bonus-offer-field" data-bonus-offer-shapes="free_bet">
+    <span>{{ form.stake_return_rule.label }}</span>
+    {{ form.stake_return_rule }}
+    {% if form.stake_return_rule.help_text %}<small>{{ form.stake_return_rule.help_text }}</small>{% endif %}
+    {{ form.stake_return_rule.errors }}
+  </label>
+
+  <label class="bonus-offer-field full-width" data-bonus-material-conditions>
+    <span>{{ form.unsupported_terms.label }}</span>
+    {{ form.unsupported_terms }}
+    {% if form.unsupported_terms.help_text %}<small>{{ form.unsupported_terms.help_text }}</small>{% endif %}
+    {{ form.unsupported_terms.errors }}
+  </label>
+
+  <label class="bonus-offer-field">
+    <span>{{ form.minimum_odds.label }}</span>
+    {{ form.minimum_odds }}
+    {% if form.minimum_odds.help_text %}<small>{{ form.minimum_odds.help_text }}</small>{% endif %}
+    {{ form.minimum_odds.errors }}
+  </label>
+  <label class="bonus-offer-field">
+    <span>{{ form.wagering_requirement.label }}</span>
+    {{ form.wagering_requirement }}
+    {% if form.wagering_requirement.help_text %}<small>{{ form.wagering_requirement.help_text }}</small>{% endif %}
+    {{ form.wagering_requirement.errors }}
+  </label>
+  <label class="bonus-offer-field">
+    <span>{{ form.valid_until.label }}</span>
+    {{ form.valid_until }}
+    {{ form.valid_until.errors }}
+  </label>
+</div>
