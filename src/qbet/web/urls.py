@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path, reverse_lazy
 
-from qbet.web import bonus_offers, views
+from qbet.web import bonus_offers, provider_accounts, views
 from qbet.web.capital_approvals import (
     capital_approval_decision,
     capital_approvals,
@@ -30,6 +30,12 @@ urlpatterns = [
     path("notifications/", views.notification_inbox, name="notification-inbox"),
     path("bonus-offers/", bonus_offers.bonus_offer_list, name="bonus-offer-list"),
     path("bonus-offers/create/", bonus_offers.bonus_offer_create, name="bonus-offer-create"),
+    path("provider-accounts/", provider_accounts.provider_account_list, name="provider-account-list"),
+    path(
+        "provider-accounts/<str:provider_id>/",
+        provider_accounts.provider_account_update,
+        name="provider-account-update",
+    ),
     path(
         "notifications/<uuid:task_id>/read/",
         views.notification_inbox_read,

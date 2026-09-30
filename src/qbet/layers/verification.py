@@ -17,6 +17,7 @@ from qbet.domain.verification import (
 from qbet.layers.logging import SimulationLogContext, SimulationLogRecordType
 
 if TYPE_CHECKING:
+    from qbet.provider_accounts import ProviderAccountQuery, ProviderAccountSnapshot
     from qbet.storage.protocol import ProviderStateRepository
 
 
@@ -32,9 +33,26 @@ class OperationalRiskLayer:
         policy: DomainRiskPolicy | None = None,
         *,
         provider_state_repository: ProviderStateRepository | None = None,
+        provider_account_query: ProviderAccountQuery | None = None,
     ) -> None:
         self._policy = policy or DomainRiskPolicy()
         self._provider_state_repository = provider_state_repository
+        self._provider_account_query = provider_account_query
+
+    def provider_account_snapshot(
+        self,
+        *,
+        user_id: int,
+        provider_id: Identifier,
+    ) -> ProviderAccountSnapshot:
+        """Read user-owned provider availability without coupling Domain Risk to ORM."""
+
+        if self._provider_account_query is None:
+            raise ValueError("provider account query is not configured")
+        return self._provider_account_query.get_for_user(
+            user_id=user_id,
+            provider_id=provider_id,
+        )
 
     def verify_opportunity(
         self,

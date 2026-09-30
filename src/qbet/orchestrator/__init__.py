@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import Field, model_validator
 
@@ -30,6 +30,9 @@ from qbet.workflow.models import (
     WorkflowStage,
     WorkflowStageDecision,
 )
+
+if TYPE_CHECKING:
+    from qbet.provider_accounts import ProviderAccountQuery, ProviderAccountSnapshot
 
 
 class EngineId(StrEnum):
@@ -203,6 +206,8 @@ class LiquidityChecker:
         snapshot: CapitalSnapshot | None = None,
         config: OrchestratorConfig | None = None,
         adapters: tuple[EngineAdapter, ...] | None = None,
+        *,
+        provider_account_query: ProviderAccountQuery | None = None,
     ) -> None:
         configured_values = (snapshot, config, adapters)
         if any(value is not None for value in configured_values) and any(
@@ -212,7 +217,23 @@ class LiquidityChecker:
         self._snapshot = snapshot
         self._config = config
         self._adapters = adapters
+        self._provider_account_query = provider_account_query
         self.last_result: OrchestrationResult | None = None
+
+    def provider_account_snapshot(
+        self,
+        *,
+        user_id: int,
+        provider_id: Identifier,
+    ) -> ProviderAccountSnapshot:
+        """Read provider availability without coupling LiquidityChecker to Django ORM."""
+
+        if self._provider_account_query is None:
+            raise ValueError("provider account query is not configured")
+        return self._provider_account_query.get_for_user(
+            user_id=user_id,
+            provider_id=provider_id,
+        )
 
     def check(self, context: WorkflowContext) -> WorkflowStageDecision:
         """Run the configured proposal-only allocation at the workflow gate."""

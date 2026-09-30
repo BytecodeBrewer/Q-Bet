@@ -1,9 +1,45 @@
 {% extends "qbet_web/base.html" %}
 {% block content %}
-<section class="page-heading"><p><a href="{% url 'dashboard' %}">Dashboard</a></p><h1>{{ engine.name }}</h1><p>This view shows customer-facing Execution information only.</p></section>
-<section class="detail-layout"><article class="detail-panel"><h2>Engine activity</h2><dl class="metric-list">
-  <div><dt>Operational state</dt><dd>{{ engine.live_state|title }}</dd></div><div><dt>Mode</dt><dd>{{ engine.mode }}</dd></div><div><dt>Live source</dt><dd>{{ engine.live_state }}</dd></div><div><dt>Running matches</dt><dd>{{ engine.running_matches }}</dd></div><div><dt>Pending matches</dt><dd>{{ engine.pending_matches }}</dd></div><div><dt>Total recorded activity</dt><dd>{{ engine.total_activity }}</dd></div><div><dt>Recorded capital</dt><dd>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}Unavailable{% endif %}</dd></div><div><dt>Warnings</dt><dd>{{ engine.warning_count }}</dd></div><div><dt>Errors</dt><dd>{{ engine.error_count }}</dd></div>
-</dl><p>{{ engine.detail }}</p></article>
-<article class="detail-panel"><h2>Current notices</h2><p>Warnings: {{ engine.warning_count }}</p><p>Errors: {{ engine.error_count }}</p><p class="muted">Technical diagnostics are restricted to administrators.</p></article></section>
-<section><h2>Execution history</h2><p class="empty-state">No live execution history source is connected yet. Simulation reports are available only to administrators from the Simulation plane.</p></section>
+{% load static %}
+<section class="page-heading">
+  <p><a href="{% url 'dashboard' %}">Dashboard</a></p>
+  <h1>{{ engine.name }}</h1>
+  <p>This view shows customer-facing Execution information only.</p>
+</section>
+
+<section class="detail-layout">
+  <article class="detail-panel">
+    <h2>Engine activity</h2>
+    <dl class="metric-list">
+      <div><dt>Operational state</dt><dd>{{ engine.live_state|title }}</dd></div>
+      <div><dt>Mode</dt><dd>{{ engine.mode }}</dd></div>
+      <div><dt>Live source</dt><dd>{{ engine.live_state }}</dd></div>
+      <div><dt>Running matches</dt><dd>{{ engine.running_matches }}</dd></div>
+      <div><dt>Pending matches</dt><dd>{{ engine.pending_matches }}</dd></div>
+      <div><dt>Total recorded activity</dt><dd>{{ engine.total_activity }}</dd></div>
+      <div><dt>Recorded capital</dt><dd>{% if engine.involved_capital is not None %}{{ engine.involved_capital }}{% else %}Unavailable{% endif %}</dd></div>
+    </dl>
+    <p>{{ engine.detail }}</p>
+  </article>
+
+  <article class="detail-panel">
+    <h2>Current notices</h2>
+    {% include "qbet_web/_engine_notices.html" with engine=engine %}
+    {% if not engine.notices %}
+      <p class="muted">No current action or error notice for this engine.</p>
+    {% endif %}
+    {% if user.is_staff %}
+      <p class="admin-metadata">
+        Technical history: {{ engine.warning_count }} warning(s), {{ engine.error_count }} error(s).
+        <a href="{% url 'monitoring' %}">Open Monitoring</a>
+      </p>
+    {% endif %}
+  </article>
+</section>
+
+<section>
+  <h2>Execution history</h2>
+  <p class="empty-state">No live execution history source is connected yet. Simulation reports are available only to administrators from the Simulation plane.</p>
+</section>
+<script src="{% static 'qbet_web/engine_notices.js' %}" defer></script>
 {% endblock %}

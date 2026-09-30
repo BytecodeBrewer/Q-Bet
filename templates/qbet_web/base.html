@@ -103,6 +103,7 @@
             <summary>{{ ui.execution_engine }}</summary>
             <a class="sidebar-link sidebar-sublink" href="{% url 'engine-detail' 'bonus' %}"{% if request.resolver_match.url_name == 'engine-detail' and request.resolver_match.kwargs.engine_id == 'bonus' %} aria-current="page"{% endif %}>BonusEngine</a>
             <a class="sidebar-link sidebar-sublink" href="{% url 'engine-detail' 'sports_capital' %}"{% if request.resolver_match.url_name == 'engine-detail' and request.resolver_match.kwargs.engine_id == 'sports_capital' %} aria-current="page"{% endif %}>SportsCapitalEngine</a>
+            <a class="sidebar-link sidebar-sublink" href="{% url 'provider-account-list' %}"{% if request.resolver_match.url_name == 'provider-account-list' %} aria-current="page"{% endif %}>Sportsbook accounts</a>
             <a class="sidebar-link sidebar-sublink" href="{% url 'report-history' %}?mode=execution"{% if request.resolver_match.url_name == 'report-history' and request.GET.mode != 'simulation' %} aria-current="page"{% endif %}>{{ ui.reports }}</a>
           </details>
 

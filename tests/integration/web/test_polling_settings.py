@@ -2,6 +2,7 @@ import re
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.http import HttpResponse
 from django.test import TestCase
 
 from qbet.data.polling import PollingTarget
@@ -54,7 +55,7 @@ class PollingSettingsTests(TestCase):
         return payload
 
     @staticmethod
-    def _preview_token(response: object) -> str:
+    def _preview_token(response: HttpResponse) -> str:
         content = getattr(response, "content").decode()
         match = re.search(r'name="preview_token" value="([^"]+)"', content)
         assert match is not None
@@ -63,14 +64,14 @@ class PollingSettingsTests(TestCase):
     def preview_strategy(
         self,
         payload: dict[str, str],
-    ) -> tuple[object, str]:
+    ) -> tuple[HttpResponse, str]:
         preview_payload = dict(payload)
         preview_payload["action"] = "preview"
         response = self.client.post("/admin-area/polling/", preview_payload)
         self.assertEqual(response.status_code, 200)
         return response, self._preview_token(response)
 
-    def save_strategy(self, payload: dict[str, str]) -> object:
+    def save_strategy(self, payload: dict[str, str]) -> HttpResponse:
         _, token = self.preview_strategy(payload)
         save_payload = dict(payload)
         save_payload.update({"action": "save", "preview_token": token})
