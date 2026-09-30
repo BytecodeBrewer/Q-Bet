@@ -30,6 +30,7 @@ from qbet.simulation.models import SimulationResult, SimulationRunConfig, Simula
 from qbet.simulation.reporting import ReportingSimulationRunner
 from qbet.simulation.runner import SimulationStepObserver
 from qbet.storage import SimulationReportStore
+from qbet.storage.bonus_dependencies import PostgresBonusOfferDependencyValidator
 from qbet.workflow import (
     LiquidityChecker as WorkflowLiquidityChecker,
     WorkflowContext,
@@ -83,14 +84,23 @@ class _RiskStageHandler(WorkflowStageHandler):
         provider_state: ProviderState,
         log_context: SimulationLogContext,
         correlation_id: UUID,
+        bonus_dependency_validator: PostgresBonusOfferDependencyValidator,
     ) -> None:
         self._risk_layer = risk_layer
         self._opportunity = opportunity
         self._provider_state = provider_state
         self._log_context = log_context
         self._correlation_id = correlation_id
+        self._bonus_dependency_validator = bonus_dependency_validator
 
     def decide(self, context: WorkflowContext) -> WorkflowStageDecision:
+        if isinstance(self._opportunity, BonusEngineRequest):
+            dependency = self._bonus_dependency_validator.check(self._opportunity)
+            if not dependency.is_current:
+                return WorkflowStageDecision(
+                    decision=WorkflowDecision.RECHECK,
+                    reason=dependency.reason_code or "bonus_offer_dependency_invalid",
+                )
         result = self._risk_layer.verify_opportunity(
             self._opportunity,
             self._provider_state,
@@ -108,8 +118,14 @@ class _RiskStageHandler(WorkflowStageHandler):
         return WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
 
 
+AuthoritativeLiquidityReserver = Callable[
+    [LedgerCommand],
+    tuple[PortfolioLedger, WorkflowStageDecision],
+]
+
+
 class _SimulationPortfolioLiquidityChecker:
-    """Evaluate Simulation proposals against the current shared sandbox balance."""
+    """Evaluate and optionally reserve against the authoritative shared sandbox."""
 
     def __init__(
         self,
@@ -117,15 +133,27 @@ class _SimulationPortfolioLiquidityChecker:
         ledger: Callable[[], PortfolioLedger],
         required_capital: Decimal,
         currency: Currency,
+        reserve_command: LedgerCommand | None = None,
+        authoritative_reserver: AuthoritativeLiquidityReserver | None = None,
     ) -> None:
         self._ledger = ledger
         self._required_capital = required_capital
         self._currency = currency
+        self._reserve_command = reserve_command
+        self._authoritative_reserver = authoritative_reserver
         self._checker = CapitalLiquidityChecker()
+        self.authoritative_ledger: PortfolioLedger | None = None
+        self.reservation_applied = False
 
     def check(self, context: WorkflowContext) -> WorkflowStageDecision:
         if context.stage is not WorkflowStage.LIQUIDITY_CHECK:
             raise ValueError("simulation portfolio liquidity requires liquidity_check stage")
+        if self._authoritative_reserver is not None and self._reserve_command is not None:
+            ledger, decision = self._authoritative_reserver(self._reserve_command)
+            self.authoritative_ledger = ledger
+            self.reservation_applied = decision.decision is WorkflowDecision.ALLOW
+            return decision
+
         balance = self._ledger().balance
         return self._checker.capital_decision(
             CapitalSnapshot(
@@ -149,12 +177,18 @@ class WorkflowSimulationRunner:
         mode_request_handlers: ModeRequestHandlers | None = None,
         simulation_ledger: PortfolioLedger | None = None,
         ledger_writer: Callable[[PortfolioLedger], PortfolioLedger] | None = None,
+        liquidity_reserver: AuthoritativeLiquidityReserver | None = None,
+        bonus_dependency_validator: PostgresBonusOfferDependencyValidator | None = None,
     ) -> None:
         self._liquidity_checker = liquidity_checker
         self._risk_layer = risk_layer or OperationalRiskLayer()
         self._mode_request_handlers = mode_request_handlers
         self._simulation_ledger = simulation_ledger
         self._ledger_writer = ledger_writer
+        self._liquidity_reserver = liquidity_reserver
+        self._bonus_dependency_validator = (
+            bonus_dependency_validator or PostgresBonusOfferDependencyValidator()
+        )
         self._runner = ReportingSimulationRunner(report_store)
         self.last_report: SimulationReport | None = None
         self.last_records = ()
@@ -203,15 +237,30 @@ class WorkflowSimulationRunner:
             return True
 
         def route_step(step: SimulationStep) -> bool:
+            nonlocal ledger
             assert step.evaluation is not None
             opportunity = opportunities_by_id[step.evaluation.strategy_result.opportunity_id]
             amount = step.evaluation.strategy_result.stake
+            reserve_command = (
+                LedgerCommand(
+                    id=f"{correlation_id}:{step.id}:{LedgerOperation.RESERVE.value}",
+                    dispatch_id=f"{correlation_id}:{step.id}",
+                    correlation_id=str(correlation_id),
+                    currency=ledger.balance.currency,
+                    operation=LedgerOperation.RESERVE,
+                    amount=amount,
+                )
+                if amount > 0 and self._liquidity_reserver is not None
+                else None
+            )
             liquidity_checker = (
                 self._liquidity_checker
                 or _SimulationPortfolioLiquidityChecker(
                     ledger=lambda: ledger,
                     required_capital=amount,
                     currency=opportunity.currency,
+                    reserve_command=reserve_command,
+                    authoritative_reserver=self._liquidity_reserver,
                 )
             )
             orchestrator = WorkflowOrchestrator(
@@ -222,6 +271,7 @@ class WorkflowSimulationRunner:
                         request.provider_state,
                         log_context,
                         correlation_id,
+                        self._bonus_dependency_validator,
                     )
                 },
                 liquidity_checker=liquidity_checker,
@@ -245,16 +295,26 @@ class WorkflowSimulationRunner:
                 ),
                 log_context=log_context,
             )
+            reservation_applied = False
+            if isinstance(liquidity_checker, _SimulationPortfolioLiquidityChecker):
+                if liquidity_checker.authoritative_ledger is not None:
+                    ledger = liquidity_checker.authoritative_ledger
+                reservation_applied = liquidity_checker.reservation_applied
             workflow_results.append(workflow_result)
             if workflow_result.final_decision is not WorkflowDecision.ALLOW:
                 return False
             if amount == 0:
                 return True
-            for operation in (
-                LedgerOperation.RESERVE,
-                LedgerOperation.LOCK,
-                LedgerOperation.PENDING,
-            ):
+            operations = (
+                (LedgerOperation.LOCK, LedgerOperation.PENDING)
+                if reservation_applied
+                else (
+                    LedgerOperation.RESERVE,
+                    LedgerOperation.LOCK,
+                    LedgerOperation.PENDING,
+                )
+            )
+            for operation in operations:
                 if not apply_ledger(step, operation, amount):
                     return False
             pending_amounts[step.id] = amount
