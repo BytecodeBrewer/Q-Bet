@@ -2,9 +2,11 @@
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from threading import Event, Thread
 from decimal import Decimal
 from uuid import UUID
 
+from django.db import close_old_connections
 from django.test import TransactionTestCase
 
 from qbet.calculations import ArbitrageOffer, TwoWayArbitrageInput
@@ -14,6 +16,7 @@ from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.execution.models import ExecutionProposal, ExecutionRecord, Lifecycle, SandboxResult
 from qbet.execution.sandbox import valuation
 from qbet.ledger import PortfolioLedger
+from qbet.orchestrator import RejectionReason
 from qbet.request_handler import ResultStatus, RevalidationOutcome
 from qbet.settlement import SettlementService, ledger_command, transition
 from qbet.simulation import (
@@ -33,7 +36,8 @@ from qbet.storage.models import (
     SimulationReportRow,
 )
 from qbet.storage.postgres import PostgresSimulationReportStore
-from qbet.workflow import WorkState
+from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
+from qbet.workflow import WorkflowDecision, WorkflowStage, WorkState
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration, resolve_routes
@@ -142,6 +146,125 @@ class ModeQueueAndIsolationIntegrationTests(TransactionTestCase):
             queue_repository=ModeWorkQueueRepository(),
             mode_request_handlers=_handlers(opportunity_id),
         )
+
+    def test_concurrent_engines_resolve_shared_capital_at_liquidity_gate(self) -> None:
+        SimulationControlService().seed_portfolio(amount=Decimal("20"), currency="EUR")
+        repository = SimulationPortfolioLedgerRepository()
+        bonus_snapshot = repository.load(currency="EUR")
+        sports_snapshot = repository.load(currency="EUR")
+        assert bonus_snapshot is not None and sports_snapshot is not None
+
+        bonus = bonus_request(
+            "bonus-concurrent-capital",
+            generated_at=NOW,
+            back_stake=Decimal("20"),
+            max_lay_liability=Decimal("1000"),
+        )
+        sports = _sports_request().model_copy(
+            update={"opportunity_id": "sports-concurrent-capital"}
+        )
+        reservation_held = Event()
+        release_first = Event()
+        first_errors: list[BaseException] = []
+        first_results = []
+
+        def hold_after_first_post_reserve_merge(incoming: PortfolioLedger) -> PortfolioLedger:
+            persisted = repository.merge(incoming)
+            if not reservation_held.is_set():
+                reservation_held.set()
+                if not release_first.wait(timeout=10):
+                    raise TimeoutError("test did not release first Simulation reservation")
+            return persisted
+
+        first_runner = WorkflowSimulationRunner(
+            simulation_ledger=bonus_snapshot,
+            ledger_writer=hold_after_first_post_reserve_merge,
+            liquidity_reserver=repository.reserve_with_liquidity,
+        )
+        second_runner = WorkflowSimulationRunner(
+            simulation_ledger=sports_snapshot,
+            ledger_writer=repository.merge,
+            liquidity_reserver=repository.reserve_with_liquidity,
+        )
+
+        def run_first() -> None:
+            close_old_connections()
+            try:
+                first_results.append(
+                    first_runner.run(
+                        WorkflowSimulationRequest(
+                            config=SimulationRunConfig(
+                                engine=SimulationEngine.BONUS,
+                                starting_capital=Decimal("20"),
+                            ),
+                            opportunities=(bonus,),
+                            provider_state=ProviderState(
+                                provider_id="book",
+                                active_bets_count=0,
+                            ),
+                        )
+                    )
+                )
+            except BaseException as error:
+                first_errors.append(error)
+            finally:
+                close_old_connections()
+
+        worker = Thread(target=run_first)
+        worker.start()
+        self.assertTrue(reservation_held.wait(timeout=10))
+
+        second = second_runner.run(
+            WorkflowSimulationRequest(
+                config=SimulationRunConfig(
+                    engine=SimulationEngine.SPORTS_CAPITAL,
+                    starting_capital=Decimal("20"),
+                ),
+                opportunities=(sports,),
+                provider_state=ProviderState(
+                    provider_id="book",
+                    active_bets_count=0,
+                ),
+            )
+        )
+
+        self.assertEqual(second.simulation_result.completed_steps, ())
+        self.assertEqual(
+            second.workflow_results[0].final_decision,
+            WorkflowDecision.REJECT,
+        )
+        liquidity = next(
+            transition
+            for transition in second.workflow_results[0].transitions
+            if transition.stage is WorkflowStage.LIQUIDITY_CHECK
+        )
+        self.assertEqual(liquidity.reason, RejectionReason.CAPITAL_LIMIT.value)
+        self.assertFalse(
+            any(
+                command.correlation_id == str(second.correlation_id)
+                for command in (
+                    repository.load(currency="EUR").commands.values()
+                    if repository.load(currency="EUR") is not None
+                    else ()
+                )
+            )
+        )
+
+        release_first.set()
+        worker.join(timeout=15)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(first_errors, [])
+        self.assertEqual(len(first_results), 1)
+        self.assertEqual(
+            first_results[0].workflow_results[0].final_decision,
+            WorkflowDecision.ALLOW,
+        )
+        persisted = repository.load(currency="EUR")
+        assert persisted is not None
+        correlations = {command.correlation_id for command in persisted.commands.values()}
+        self.assertIn(str(first_results[0].correlation_id), correlations)
+        self.assertNotIn(str(second.correlation_id), correlations)
 
     def test_queue_recheck_and_expiry_are_persisted_without_dispatch(self) -> None:
         request = _sports_request()
