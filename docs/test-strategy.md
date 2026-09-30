@@ -28,6 +28,26 @@ The consolidation order is deliberate:
 
 This avoids deleting tests against a product surface that is still changing.
 
+## Current Test Inventory By Purpose
+
+The current #196 working baseline contains **119 Python test files**. This inventory is grouped by regression purpose rather than historical ticket names:
+
+| Group | Files | Primary ownership |
+| --- | ---: | --- |
+| calculation/unit | 7 | deterministic formulas, Decimal/rounding and strategy math |
+| Domain Risk / ledger / operational-risk unit | 6 | policy decisions, ledger semantics and fail-closed rules |
+| provider / data / bank unit | 12 | adapter contracts, normalization and deterministic external-boundary behavior |
+| workflow / execution / simulation unit | 13 | routing, orchestration, execution and simulation service contracts |
+| other focused unit | 22 | reporting, Monitoring, notifications, storage/web helpers and CI contracts |
+| PostgreSQL integration | 7 | durable repositories, recovery, idempotency, row-level persistence guarantees |
+| web integration | 32 | authentication, authorization, state-changing HTTP actions and customer/staff surfaces |
+| workflow integration | 9 | queue lifecycle, approval/revalidation, dispatch and mode isolation |
+| other integration | 8 | bank, notifications, settlement and observability composition |
+| connected E2E | 2 | canonical product composition plus protected bunq sandbox boundary |
+| performance | 1 | Phase 3 connected performance budget |
+
+The large web-integration group is the main duplication-audit surface. File count alone is not a cleanup target: focused authorization, security, state-transition and money-safety tests stay even when a connected E2E crosses the same modules.
+
 ## Ownership By Layer
 
 | Concern | Primary test layer | Responsibility |
