@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Protocol
 from uuid import UUID, uuid5
 
+from qbet.calculations import (
+    DutchingInput,
+    FreeBetInput,
+    QualifyingBetInput,
+    SportsbookFreeBetInput,
+    SportsbookQualifyingBetInput,
+    TwoWayArbitrageInput,
+)
+from qbet.domain.models import OfferSide
 from qbet.engines import BonusEngine, BonusEngineRequest, SportsCapitalEngine
 from qbet.execution.models import ExecutionRecord, Lifecycle
 from qbet.monitoring import MonitoringLevel, MonitoringRecord
@@ -299,7 +309,11 @@ def _eligibility_reason(
     now: datetime,
 ) -> str | None:
     work = record.proposal.work
-    if record.state is not Lifecycle.APPROVED or record.approval is None:
+    if record.state not in {
+        Lifecycle.APPROVED,
+        Lifecycle.AWAITING_CONFIRMATION,
+        Lifecycle.ACTION_PROBLEM,
+    } or record.approval is None:
         return "execution_not_approved"
     if work.mode.value != "execution":
         return "execution_mode_required"
@@ -320,6 +334,107 @@ def _eligibility_reason(
     return None
 
 
+def execution_instructions(
+    record: ExecutionRecord,
+    queued: QueuedWorkItem,
+    *,
+    evaluation=None,
+) -> tuple[ExecutionNotificationInstruction, ...]:
+    """Build customer-safe manual instructions bound to each execution offer identity."""
+
+    request = record.proposal.request
+    evaluated = evaluation or (
+        BonusEngine().evaluate(request)
+        if isinstance(request, BonusEngineRequest)
+        else SportsCapitalEngine().evaluate(request)
+    )
+    steps = evaluated.execution_plan.steps
+    revalidation = queued.market_revalidation
+    expected_offers = revalidation.expected_offers if revalidation is not None else ()
+
+    offer_details: dict[str, tuple[str | None, OfferSide, Decimal, Decimal | None]] = {}
+    inputs = request.inputs
+    if isinstance(inputs, DutchingInput):
+        calculation_offers = tuple(inputs.offers)
+    elif isinstance(inputs, TwoWayArbitrageInput):
+        calculation_offers = (inputs.first_offer, inputs.second_offer)
+    elif isinstance(inputs, (SportsbookQualifyingBetInput, SportsbookFreeBetInput)):
+        calculation_offers = (inputs.promotion_offer, inputs.hedge_offer)
+    else:
+        calculation_offers = ()
+
+    if calculation_offers:
+        for offer_id, calculation_offer in zip(
+            request.execution_offer_ids,
+            calculation_offers,
+            strict=True,
+        ):
+            offer_details[offer_id] = (
+                calculation_offer.outcome,
+                OfferSide.BACK,
+                calculation_offer.odds,
+                calculation_offer.available_liquidity,
+            )
+
+    if isinstance(inputs, (QualifyingBetInput, FreeBetInput)):
+        offer_details[request.execution_offer_ids[0]] = (
+            None,
+            OfferSide.BACK,
+            inputs.back_odds,
+            None,
+        )
+        offer_details[request.execution_offer_ids[1]] = (
+            None,
+            OfferSide.LAY,
+            inputs.lay_odds,
+            None,
+        )
+
+    instructions: list[ExecutionNotificationInstruction] = []
+    for step in steps:
+        details = offer_details.get(step.offer_id)
+        if details is None:
+            raise ValueError("manual_execution_offer_identity_missing")
+        selection, side, odds, available_limit = details
+
+        if not expected_offers:
+            instructions.append(
+                ExecutionNotificationInstruction(
+                    provider=step.offer_id,
+                    offer_id=step.offer_id,
+                    amount=step.stake,
+                    currency=record.proposal.currency,
+                    odds=odds,
+                    available_limit=available_limit,
+                )
+            )
+            continue
+
+        matches = tuple(
+            expected
+            for expected in expected_offers
+            if expected.side is side
+            and expected.odds == odds
+            and (selection is None or expected.selection == selection)
+        )
+        if len(matches) != 1:
+            raise ValueError("manual_execution_offer_identity_ambiguous")
+        expected = matches[0]
+        instructions.append(
+            ExecutionNotificationInstruction(
+                provider=expected.provider,
+                offer_id=step.offer_id,
+                amount=step.stake,
+                currency=record.proposal.currency,
+                selection=expected.selection,
+                side=expected.side,
+                odds=expected.odds,
+                available_limit=available_limit,
+            )
+        )
+    return tuple(instructions)
+
+
 def _build_task(
     record: ExecutionRecord,
     queued: QueuedWorkItem,
@@ -336,16 +451,9 @@ def _build_task(
         if isinstance(request, BonusEngineRequest)
         else SportsCapitalEngine().evaluate(request)
     )
-    instructions = tuple(
-        ExecutionNotificationInstruction(
-            provider=step.offer_id,
-            offer_id=step.offer_id,
-            amount=step.stake,
-            currency=record.proposal.currency,
-        )
-        for step in evaluation.execution_plan.steps
-    )
+    instructions = execution_instructions(record, queued, evaluation=evaluation)
     work = record.proposal.work
+    revalidation = queued.market_revalidation
     deadline = min(record.proposal.expires_at, queued.expires_at)
     return ExecutionNotificationTask(
         id=uuid5(work.id, recipient.user_id),
@@ -359,6 +467,9 @@ def _build_task(
         opportunity_id=work.opportunity_id,
         engine="BonusEngine" if work.engine == "bonus" else "SportsCapitalEngine",
         strategy=evaluation.strategy_result.strategy,
+        event_id=(revalidation.event_id if revalidation is not None else work.opportunity_id),
+        sport=(revalidation.sport if revalidation is not None else None),
+        market=(revalidation.market if revalidation is not None else None),
         instructions=instructions,
         action_starts_at=queued.scheduled_for,
         action_deadline=deadline,

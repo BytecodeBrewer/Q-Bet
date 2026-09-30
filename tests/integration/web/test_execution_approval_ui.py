@@ -8,8 +8,10 @@ from django.db import DatabaseError
 from django.test import TestCase
 
 from qbet.calculations import QualifyingBetInput
+from qbet.data import DataSourceMetadata, DataTarget, SourceTransport
+from qbet.domain.models import OfferSide
 from qbet.engines import BonusEngineRequest
-from qbet.execution.models import ExecutionRecord, Lifecycle
+from qbet.execution.models import ExecutionRecord, Lifecycle, ManualExecutionDecision
 from qbet.storage.ledger import (
     AuthoritativePersistenceError,
     ExecutionRecordRepository,
@@ -19,6 +21,7 @@ from qbet.storage.ledger import (
 from qbet.storage.models import ExecutionRecordRow
 from qbet.web.display_preferences import DisplayPreferences, format_datetime, format_money
 from qbet.web.models import UserDisplayPreference
+from qbet.request_handler import ExpectedMarketOffer, TargetedMarketRevalidationContext
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.queue import WorkState
@@ -78,6 +81,119 @@ class ExecutionApprovalWebTests(TestCase):
         )
         self.assertEqual(waiting.state, WorkState.RECHECK)
         return scheduled.work.id
+    def _stage_manual_action(self) -> tuple[UUID, UUID]:
+        observed_at = datetime.now(UTC)
+        correlation_id = uuid4()
+        coordinator = ModeDispatchCoordinator(
+            RoutingConfiguration(
+                bonus=EngineModes(
+                    execution=True,
+                    execution_sandbox=False,
+                )
+            ),
+            queue_repository=ModeWorkQueueRepository(),
+        )
+        request = _request("manual-web-opportunity")
+        context = TargetedMarketRevalidationContext(
+            source=DataSourceMetadata(
+                provider_id="official-results",
+                source_id="manual-web-results",
+                transport=SourceTransport.API,
+            ),
+            target=DataTarget.BONUS,
+            sport="soccer",
+            event_id="event-web-214",
+            market="match_winner",
+            expected_offers=(
+                ExpectedMarketOffer(
+                    provider="Book One",
+                    selection="Home",
+                    side=OfferSide.BACK,
+                    odds=Decimal("2.50"),
+                ),
+                ExpectedMarketOffer(
+                    provider="Book Two",
+                    selection="Away",
+                    side=OfferSide.LAY,
+                    odds=Decimal("2.60"),
+                ),
+            ),
+            expires_at=observed_at + timedelta(minutes=30),
+        )
+        (scheduled,) = coordinator.schedule(
+            request,
+            owner=self.user.get_username(),
+            correlation_id=correlation_id,
+            scheduled_for=observed_at,
+            expires_at=observed_at + timedelta(minutes=30),
+            market_revalidation=context,
+        )
+        (waiting,) = coordinator.dispatch_due(
+            now=observed_at,
+            owner=self.user.get_username(),
+        )
+        self.assertEqual(waiting.state, WorkState.RECHECK)
+        ExecutionApprovalService().decide(
+            scheduled.work.id,
+            actor=self.user.get_username(),
+            approve=True,
+            now=observed_at + timedelta(seconds=1),
+        )
+        (action_required,) = coordinator.dispatch_due(
+            now=observed_at + timedelta(seconds=2),
+            owner=self.user.get_username(),
+        )
+        self.assertEqual(action_required.state, WorkState.RECHECK)
+        self.assertEqual(
+            action_required.history[-1].reason,
+            "manual_action_confirmation_required",
+        )
+        return scheduled.work.id, correlation_id
+
+    def test_manual_action_page_is_owner_scoped_and_confirmation_is_explicit(self) -> None:
+        execution_id, correlation_id = self._stage_manual_action()
+
+        self.client.force_login(self.other)
+        hidden = self.client.get("/execution/approvals/")
+        self.assertNotContains(hidden, "manual-web-opportunity")
+        denied = self.client.post(
+            f"/execution/actions/{execution_id}/confirmation/",
+            {"decision": ManualExecutionDecision.DONE.value},
+        )
+        self.assertEqual(denied.status_code, 404)
+
+        self.client.force_login(self.user)
+        page = self.client.get("/execution/approvals/")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Actions awaiting your confirmation")
+        self.assertContains(page, "event-web-214")
+        self.assertContains(page, "Book One")
+        self.assertContains(page, "Home")
+        self.assertContains(page, "back")
+        self.assertContains(page, "2.50")
+        self.assertContains(page, str(execution_id))
+        self.assertContains(page, str(correlation_id))
+        self.assertContains(page, "Done")
+        self.assertContains(page, "Not completed")
+        self.assertContains(page, "Report a problem or partial action")
+
+        confirmed = self.client.post(
+            f"/execution/actions/{execution_id}/confirmation/",
+            {"decision": ManualExecutionDecision.DONE.value},
+            follow=True,
+        )
+        self.assertContains(
+            confirmed,
+            "Action recorded as completed. The execution is pending result settlement.",
+        )
+        persisted = ExecutionStateRepository().load(execution_id)
+        assert persisted is not None
+        record, ledger = persisted
+        self.assertEqual(record.state, Lifecycle.ACKNOWLEDGED)
+        self.assertEqual(record.result.source, "user_attested")
+        self.assertEqual(ledger.positions[str(execution_id)].state, "pending")
+        self.assertNotContains(confirmed, "manual-web-opportunity")
+
     def test_owner_sees_only_business_level_pending_approval(self) -> None:
         execution_id = self._stage_execution()
         self.client.force_login(self.user)

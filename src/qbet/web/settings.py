@@ -172,6 +172,8 @@ QBET_PROFILE_WEB_REQUESTS = _environment_flag("QBET_PROFILE_WEB_REQUESTS") or (
     os.environ.get("VERCEL_ENV", "").strip().lower() == "preview"
 )
 QBET_METRICS_TOKEN = os.environ.get("QBET_METRICS_TOKEN", "")
+QBET_EXECUTION_TICK_TOKEN = os.environ.get("QBET_EXECUTION_TICK_TOKEN", "")
+QBET_EXECUTION_TICK_MAX_WORK = _environment_positive_int("QBET_EXECUTION_TICK_MAX_WORK", 10)
 QBET_POLLING_TICK_TOKEN = os.environ.get("QBET_POLLING_TICK_TOKEN", "")
 QBET_POLLING_TICK_MAX_WORK = _environment_positive_int("QBET_POLLING_TICK_MAX_WORK", 10)
 QBET_POLLING_CLAIM_SECONDS = _environment_positive_int("QBET_POLLING_CLAIM_SECONDS", 120)

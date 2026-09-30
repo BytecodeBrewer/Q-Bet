@@ -1,8 +1,12 @@
 """PostgreSQL repository for capital and approval lifecycle snapshots."""
 
+from datetime import datetime
 from uuid import UUID
 
 from django.db import DatabaseError, IntegrityError, transaction
+from django.db.models import DateTimeField
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Cast
 from pydantic import ValidationError
 
 from qbet.execution.models import ExecutionRecord, Lifecycle
@@ -227,6 +231,50 @@ class ExecutionRecordRepository:
         )
         return tuple(ExecutionRecord.model_validate(payload) for payload in payloads)
 
+    def list_manual_action_pending(
+        self,
+        *,
+        owner: str | None = None,
+    ) -> tuple[ExecutionRecord, ...]:
+        rows = ExecutionRecordRow.objects.filter(
+            state__in=(
+                Lifecycle.AWAITING_CONFIRMATION.value,
+                Lifecycle.ACTION_PROBLEM.value,
+            )
+        )
+        if owner is not None:
+            rows = rows.filter(payload__proposal__work__owner=owner)
+        payloads = rows.order_by("updated_at").values_list("payload", flat=True)
+        return tuple(ExecutionRecord.model_validate(payload) for payload in payloads)
+
+    def list_due_manual_action_pending(
+        self,
+        *,
+        now: datetime,
+        limit: int,
+    ) -> tuple[ExecutionRecord, ...]:
+        """Return only due manual actions, bounded before records enter Python."""
+
+        if limit <= 0:
+            raise ValueError("manual_action_expiry_limit_must_be_positive")
+        proposal_expires_at = Cast(
+            KeyTextTransform.from_lookup("payload__proposal__expires_at"),
+            output_field=DateTimeField(),
+        )
+        payloads = (
+            ExecutionRecordRow.objects.filter(
+                state__in=(
+                    Lifecycle.AWAITING_CONFIRMATION.value,
+                    Lifecycle.ACTION_PROBLEM.value,
+                )
+            )
+            .annotate(proposal_expires_at=proposal_expires_at)
+            .filter(proposal_expires_at__lte=now)
+            .order_by("proposal_expires_at", "record_id")
+            .values_list("payload", flat=True)[:limit]
+        )
+        return tuple(ExecutionRecord.model_validate(payload) for payload in payloads)
+
     @transaction.atomic
     def save_transition(self, record: ExecutionRecord) -> ExecutionRecord:
         return self.save(record)
@@ -273,7 +321,12 @@ class RoutingConfigurationRepository:
                 )
                 current = RoutingConfiguration.model_validate(row.payload)
                 modes = engine_modes(current, engine)
-                updated_modes = modes.model_copy(update={mode.value: active})
+                changes: dict[str, bool] = {mode.value: active}
+                if mode is WorkflowMode.EXECUTION:
+                    # The ordinary Execution control is the human-in-the-loop route.
+                    # Sandbox execution remains an explicit separate administrator control.
+                    changes["execution_sandbox"] = False
+                updated_modes = modes.model_copy(update=changes)
                 updated = current.model_copy(update={engine: updated_modes})
                 row.payload = updated.model_dump(mode="json")
                 row.save(update_fields=("payload", "updated_at"))

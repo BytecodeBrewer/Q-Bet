@@ -13,14 +13,16 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
-from qbet.execution.models import Lifecycle
+from qbet.execution.models import Lifecycle, ManualExecutionDecision
 from qbet.storage.ledger import AuthoritativePersistenceError
 from qbet.web.controls import presentation_preferences
 from qbet.web.display_preferences import DisplayPreferenceRepository, DisplayPreferences
 from qbet.web.ui_copy import ui_copy
 from qbet.workflow.approval import ExecutionApprovalService
+from qbet.workflow.manual_execution import ManualExecutionService
 
 _EXECUTION_APPROVALS = ExecutionApprovalService()
+_MANUAL_EXECUTION = ManualExecutionService()
 _DISPLAY_PREFERENCES = DisplayPreferenceRepository()
 
 
@@ -47,7 +49,9 @@ def _notification_recipient(request: HttpRequest) -> tuple[str, str]:
 @require_GET
 def execution_approvals(request: HttpRequest) -> HttpResponse:
     try:
-        approvals = _EXECUTION_APPROVALS.pending_for(request.user.get_username())
+        owner = request.user.get_username()
+        approvals = _EXECUTION_APPROVALS.pending_for(owner)
+        manual_actions = _MANUAL_EXECUTION.pending_for(owner)
     except (AuthoritativePersistenceError, DatabaseError, ValueError):
         return render(
             request,
@@ -55,6 +59,7 @@ def execution_approvals(request: HttpRequest) -> HttpResponse:
             _context(
                 request,
                 approvals=(),
+                manual_actions=(),
                 approvals_available=False,
             ),
             status=503,
@@ -66,6 +71,7 @@ def execution_approvals(request: HttpRequest) -> HttpResponse:
         _context(
             request,
             approvals=approvals,
+            manual_actions=manual_actions,
             approvals_available=True,
         ),
     )
@@ -110,4 +116,60 @@ def execution_approval_decision(
         messages.error(request, "This approval expired. No order was dispatched.")
     else:
         messages.info(request, "This execution decision was already finalized.")
+    return redirect("execution-approvals")
+
+
+
+@login_required
+@require_POST
+def execution_manual_confirmation(
+    request: HttpRequest,
+    execution_id: UUID,
+) -> HttpResponse:
+    allowed_fields = {"csrfmiddlewaretoken", "decision", "note"}
+    if set(request.POST) - allowed_fields:
+        raise Http404("Execution confirmation not found.")
+    try:
+        decision = ManualExecutionDecision(str(request.POST.get("decision") or ""))
+    except ValueError as error:
+        raise Http404("Execution confirmation not found.") from error
+
+    note = str(request.POST.get("note") or "").strip()
+    if len(note) > 500:
+        messages.error(request, "The confirmation note is too long.")
+        return redirect("execution-approvals")
+
+    try:
+        record = _MANUAL_EXECUTION.confirm(
+            execution_id,
+            actor=request.user.get_username(),
+            decision=decision,
+            note=note,
+        )
+    except (KeyError, PermissionError) as error:
+        raise Http404("Execution action not found.") from error
+    except (AuthoritativePersistenceError, DatabaseError, ValueError):
+        messages.error(
+            request,
+            "This manual action could not be confirmed safely. Please review the current state.",
+        )
+        return redirect("execution-approvals")
+
+    if record.state is Lifecycle.ACKNOWLEDGED:
+        messages.success(
+            request,
+            "Action recorded as completed. The execution is pending result settlement.",
+        )
+    elif record.state is Lifecycle.CANCELLED:
+        messages.success(
+            request,
+            "Action recorded as not completed. Eligible reserved capital was released.",
+        )
+    elif record.state is Lifecycle.ACTION_PROBLEM:
+        messages.warning(
+            request,
+            "Problem recorded. Reserved capital remains held until you resolve the action.",
+        )
+    else:
+        messages.info(request, "This manual action was already finalized.")
     return redirect("execution-approvals")

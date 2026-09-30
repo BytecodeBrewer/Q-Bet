@@ -515,9 +515,13 @@ def _engine_modes(choice: str) -> EngineModes:
     if choice == "simulation":
         return EngineModes(simulation=True)
     if choice == "execution":
-        return EngineModes(execution=True)
+        return EngineModes(execution=True, execution_sandbox=False)
     if choice == "both":
-        return EngineModes(simulation=True, execution=True)
+        return EngineModes(
+            simulation=True,
+            execution=True,
+            execution_sandbox=False,
+        )
     raise ValueError("unsupported routing mode")
 
 

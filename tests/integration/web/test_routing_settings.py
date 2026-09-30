@@ -85,6 +85,20 @@ class RoutingSettingsTests(TestCase):
         self.assertEqual(PortfolioLedgerRow.objects.count(), 0)
 
 
+    def test_staff_execution_choice_uses_manual_route_not_sandbox(self) -> None:
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            "/admin-area/gui-settings/",
+            {"bonus": "inactive", "sports_capital": "execution"},
+        )
+
+        self.assertRedirects(response, "/admin-area/gui-settings/")
+        configuration = RoutingConfigurationRepository().load()
+        assert configuration is not None
+        self.assertTrue(configuration.sports_capital.execution)
+        self.assertFalse(configuration.sports_capital.execution_sandbox)
+
     def test_invalid_mode_or_unknown_engine_does_not_change_saved_configuration(self) -> None:
         repository = RoutingConfigurationRepository()
         original = repository.save(
