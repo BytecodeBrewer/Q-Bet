@@ -196,17 +196,32 @@ class PollingStrategyResolver:
         self._strategies = strategies
 
     def resolve(self, request: PollingRequest) -> PollingStrategy:
+        return self.resolve_for(
+            source=request.source,
+            target=request.target,
+            engine=request.engine,
+        )
+
+    def resolve_for(
+        self,
+        *,
+        source: DataSourceMetadata,
+        target: PollingTarget,
+        engine: Identifier,
+    ) -> PollingStrategy:
+        """Resolve one effective strategy without requiring a synthetic polling request."""
+
         candidates = tuple(
             strategy
             for strategy in self._strategies
-            if strategy.source == request.source
-            and strategy.target is request.target
-            and (strategy.engine is None or strategy.engine == request.engine)
+            if strategy.source == source
+            and strategy.target is target
+            and (strategy.engine is None or strategy.engine == engine)
         )
         if not candidates:
             raise PollingStrategyResolutionError("polling_strategy_unavailable")
 
-        exact = tuple(strategy for strategy in candidates if strategy.engine == request.engine)
+        exact = tuple(strategy for strategy in candidates if strategy.engine == engine)
         selected = exact or tuple(strategy for strategy in candidates if strategy.engine is None)
         if len(selected) != 1:
             raise PollingStrategyResolutionError("ambiguous_polling_strategy")
