@@ -30,7 +30,7 @@ This permits useful consolidation now while keeping later correction rounds expl
 
 ## Current Test Inventory By Purpose
 
-The current #196 working baseline contains **119 Python test files**. This inventory is grouped by regression purpose rather than historical ticket names:
+The current #196 working baseline after reconciling accepted #195 and #213 contains **122 Python test files**. This inventory is grouped by regression purpose rather than historical ticket names:
 
 | Group | Files | Primary ownership |
 | --- | ---: | --- |
@@ -38,10 +38,10 @@ The current #196 working baseline contains **119 Python test files**. This inven
 | Domain Risk / ledger / operational-risk unit | 6 | policy decisions, ledger semantics and fail-closed rules |
 | provider / data / bank unit | 12 | adapter contracts, normalization and deterministic external-boundary behavior |
 | workflow / execution / simulation unit | 13 | routing, orchestration, execution and simulation service contracts |
-| other focused unit | 22 | reporting, Monitoring, notifications, storage/web helpers and CI contracts |
+| other focused unit | 23 | reporting, Monitoring, notifications, storage/web helpers and CI contracts |
 | PostgreSQL integration | 7 | durable repositories, recovery, idempotency, row-level persistence guarantees |
-| web integration | 32 | authentication, authorization, state-changing HTTP actions and customer/staff surfaces |
-| workflow integration | 9 | queue lifecycle, approval/revalidation, dispatch and mode isolation |
+| web integration | 33 | authentication, authorization, state-changing HTTP actions and customer/staff surfaces |
+| workflow integration | 10 | queue lifecycle, approval/revalidation, dispatch and mode isolation |
 | other integration | 8 | bank, notifications, settlement and observability composition |
 | connected E2E | 2 | canonical product composition plus protected bunq sandbox boundary |
 | performance | 1 | Phase 3 connected performance budget |
@@ -122,6 +122,10 @@ The #196 audit uses measured coverage and reference search to distinguish dead a
 - `tests/integration/web/test_phase2_visuals.py` was retired as a historical mixed-responsibility suite. Public product-shell semantics stay in `test_web_shell.py`, executable Home-flow JavaScript behavior stays in `test_home_flow_runtime.py`, drag behavior stays in `test_dashboard_drag_runtime.py`, engine runtime controls stay in `test_engine_runtime_controls.py`, and Monitoring availability/failure presentation stays in `test_monitoring_exports.py`. Source-string assertions for private CSS/JavaScript structure were not preserved when an executable or public-boundary owner already existed.
 - `test_gui_control_plane.py` remains only for cross-plane dashboard/Monitoring/Reporting composition that has no narrower owner. Duplicate access/visibility/preferences cases were removed because `test_monitoring_exports.py`, `test_simulation_controls.py`, `test_navigation_settings_structure.py`, and `test_auth_dashboard.py` already exercise those boundaries more directly.
 - Durable capital funding workflow integrity is owned by `tests/integration/postgres/test_capital_workflow_repository.py`: attention replay/idempotency, owner-scoped listing, identity conflicts, durable metadata consistency, authenticated approval authority, and missing-ledger fail-closed behavior. The web capital-approval suite keeps only HTTP/user-facing behavior.
+- The accepted Phase 3 security hardening is now owned by `test_account_security.py` and `test_security_hardening.py`; these cover token lifetime/redaction, session rotation, CSRF/method constraints, staff-only runtime controls and security headers. The earlier GUI control-plane duplicates stay removed.
+- Execution approval and manual-action lifecycle ownership now stays with `test_execution_approval_ui.py`, `test_execution_approval_boundary.py`, and `test_manual_execution_lifecycle.py`. Capital approval remains a separate money-movement concern and is not merged into those execution tests.
+- The accepted Bonus Offer redesign is owned by `test_bonus_offers.py`, `test_bonus_offer_simulation.py`, `test_bonus_offer_dependency_invalidation.py`, and `test_engine_notices.py`. These add promotion-term intake, duplicate handling, connected Bonus simulation, dependency invalidation and coverage/readiness presentation rather than duplicating the SportsCapital connected E2E.
+- Issue #209 is still active at this reconciliation point. Its shared Simulation-portfolio changes are intentionally not pre-empted here; once they land, #196 must re-run the same ownership/coverage audit for the Simulation layer before final Phase 3 acceptance.
 
 This distinction is the cleanup rule for later passes: unused code with a superseding canonical owner is removed; live safety/persistence behavior receives a focused owner before any overlapping higher-level test is considered redundant.
 
@@ -159,9 +163,9 @@ The following decisions cover every scenario from the four named legacy files in
 
 The earlier temporary exception for `tests/integration/web/test_phase2_visuals.py` is closed by #196. Its surviving behavior now has current owners listed above, so no Phase 2-named web regression file remains solely for historical ticket context.
 
-## Current #196 Measured Result
+## Previous Pre-Reconciliation Measured Result
 
-The current implementation pass was measured on the code/test head immediately preceding documentation-only updates (Validation #767, commit `377424a064050eea4c04f0a058321a5ffbc01270`):
+Before accepted #195/#213 were merged into this branch, the implementation pass was measured on Validation #767 (`377424a064050eea4c04f0a058321a5ffbc01270`). These numbers are retained only as the pre-reconciliation comparison point and must not be used as the current Reviewer baseline:
 
 - **877 passed, 2 skipped** in **88.15 seconds**;
 - **89.22% total line coverage**, above the required 85% gate;
