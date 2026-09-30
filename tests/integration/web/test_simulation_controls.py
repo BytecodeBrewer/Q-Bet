@@ -13,7 +13,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 import django
 
 from django.contrib.auth.models import User
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.test import TestCase, TransactionTestCase, override_settings
 
 from qbet.data import TheOddsApiAdapter
@@ -438,6 +438,39 @@ class SimulationGuiControlTests(TestCase):
         assert ledger is not None
         self.assertEqual(ledger.balance.available, Decimal("100"))
         self.assertFalse(ledger.commands)
+
+    def test_simulation_portfolio_tables_are_protected_from_supabase_api_roles(self) -> None:
+        if connection.vendor != "postgresql":
+            self.skipTest("PostgreSQL RLS assertion")
+
+        tables = (
+            "qbet_simulation_portfolio_state",
+            "qbet_simulation_portfolio_reset_archives",
+        )
+        with connection.cursor() as cursor:
+            for table in tables:
+                cursor.execute(
+                    "SELECT relrowsecurity FROM pg_class WHERE oid = %s::regclass",
+                    [f"public.{table}"],
+                )
+                self.assertTrue(cursor.fetchone()[0], f"{table} must have RLS enabled")
+
+                for role in ("anon", "authenticated"):
+                    cursor.execute(
+                        "SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = %s)",
+                        [role],
+                    )
+                    if not cursor.fetchone()[0]:
+                        continue
+                    for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+                        cursor.execute(
+                            "SELECT has_table_privilege(%s, %s, %s)",
+                            [role, f"public.{table}", privilege],
+                        )
+                        self.assertFalse(
+                            cursor.fetchone()[0],
+                            f"{role} retains {privilege} on {table}",
+                        )
 
     def test_portfolio_seed_is_staff_controlled_and_cannot_be_repeated(self) -> None:
         SimulationPortfolioState.objects.all().delete()
