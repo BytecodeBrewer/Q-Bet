@@ -16,17 +16,17 @@ Issue #196 treats the suite as a moving final Phase 3 baseline while the remaini
 - 183 Python files existed under `src/`;
 - the canonical connected gate remained `tests/e2e/test_phase3_connected_sports_capital.py`.
 
-These are audit-start metrics, not the final #196 numbers. They must be refreshed after the remaining dependent Phase 3 work is merged and before this ticket is handed to review.
+These are audit-start metrics. #196 proceeds against the current `develop` baseline; if another Phase 3 ticket lands later or Reviewer feedback changes the product surface, the same consolidation is reconciled again rather than keeping a competing baseline.
 
-The consolidation order is deliberate:
+The consolidation loop is deliberate:
 
 1. establish repository-wide coverage measurement and the CI gate;
-2. use the measured uncovered lines to identify real regression gaps;
-3. reconcile against newer `develop` heads as active Phase 3 tickets land;
-4. only then remove or merge redundant tests whose behavior has a stable owner;
-5. refresh final count, runtime, coverage and intentionally uncovered areas.
+2. use measured uncovered lines to identify real regression gaps;
+3. remove or merge redundancy where the current behavioral owner is already clear;
+4. reconcile against newer `develop` heads as they land;
+5. refresh count, runtime, coverage and intentionally uncovered areas before each Reviewer handoff.
 
-This avoids deleting tests against a product surface that is still changing.
+This permits useful consolidation now while keeping later correction rounds explicit.
 
 ## Current Test Inventory By Purpose
 
@@ -158,6 +158,26 @@ The following decisions cover every scenario from the four named legacy files in
 | Issue 112: routed Simulation durable merge | keep and rename | `test_durable_simulation_and_dispatch.py` |
 
 The earlier temporary exception for `tests/integration/web/test_phase2_visuals.py` is closed by #196. Its surviving behavior now has current owners listed above, so no Phase 2-named web regression file remains solely for historical ticket context.
+
+## Current #196 Measured Result
+
+The current implementation pass was measured on the code/test head immediately preceding documentation-only updates (Validation #767, commit `377424a064050eea4c04f0a058321a5ffbc01270`):
+
+- **877 passed, 2 skipped** in **88.15 seconds**;
+- **89.22% total line coverage**, above the required 85% gate;
+- **119 Python test files** in the ownership inventory;
+- 12 historical/duplicate test methods were removed or moved out of the wrong layer;
+- 10 targeted methods were added or relocated, giving a net reduction of 2 tests while increasing measured coverage;
+- the slowest individual tests were notification dispatch at 0.96s, password-change security at 0.77s, and report-ownership web integration at 0.61s;
+- no individual deterministic test exceeded one second in that run, so no current test group requires a separate runtime tier beyond the existing performance suite.
+
+Material intentionally uncovered areas remain narrow:
+
+- `qbet.web.wsgi` is a five-line deployment bootstrap. It remains in the coverage denominator rather than being excluded, while Django checks, package build and Vercel build validation own its deployability;
+- concrete external bunq SDK/network branches remain partially uncovered by normal CI because provider credentials and sandbox writes are explicitly opt-in. Deterministic bank contracts stay in the normal suite and the protected bunq sandbox E2E owns the external boundary;
+- generated Django migrations are the only configured source exclusions.
+
+The deleted `qbet.web.report_exports` module is not listed as an uncovered exception because repository reference audit proved it was obsolete and the live export boundary is `qbet.reporting.exports`.
 
 ## Adding Future Regressions
 
