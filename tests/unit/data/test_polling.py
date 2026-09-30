@@ -178,6 +178,29 @@ def test_engine_specific_strategy_overrides_provider_target_default() -> None:
     assert resolver.resolve(request(PollingTarget.MARKET, engine="sports_capital")) == default
 
 
+def test_resolve_for_matches_runtime_request_resolution() -> None:
+    default = strategy(
+        PollingTarget.MARKET,
+        market_interval=None,
+        market_refresh_points=(timedelta(hours=24), timedelta(hours=2), timedelta(minutes=15)),
+    )
+    override = strategy(
+        PollingTarget.MARKET,
+        engine="bonus",
+        market_interval=None,
+        market_refresh_points=(timedelta(hours=1), timedelta(minutes=15)),
+    )
+    resolver = PollingStrategyResolver((default, override))
+
+    for engine in ("bonus", "sports_capital"):
+        runtime_request = request(PollingTarget.MARKET, engine=engine)
+        assert resolver.resolve(runtime_request) == resolver.resolve_for(
+            source=runtime_request.source,
+            target=runtime_request.target,
+            engine=engine,
+        )
+
+
 def test_strategy_resolution_rejects_equal_priority_ambiguity() -> None:
     first = strategy(PollingTarget.MARKET)
     duplicate = first.model_copy()

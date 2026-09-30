@@ -14,7 +14,7 @@ Users can persist personal `BonusEngine` / `SportsCapitalEngine` Simulation and 
 
 Users can also record their sportsbook-account presence and business-safe account status against the canonical provider catalog. Manual account states remain explicitly unverified and are kept separate from Portfolio Ledger balances and provider capital locations.
 
-Smart Polling now has restart-safe PostgreSQL work state and a protected bounded hosted tick for the connected SportsCapital Simulation / The Odds API route. Supabase Cron is a wake-up mechanism only: the Python `SmartPollingPolicy` remains authoritative for freshness, timing, capacity, terminal state, and whether a provider request is actually made. Disabling a route stops future polling without deleting its durable history.
+Smart Polling now has restart-safe PostgreSQL work state and a protected bounded hosted tick for the connected SportsCapital Simulation / The Odds API route. Supabase Cron is a wake-up mechanism only: the Python `SmartPollingPolicy` remains authoritative for freshness, timing, capacity, terminal state, and whether a provider request is actually made. Staff polling settings now show the effective Default or engine Override for BonusEngine and SportsCapitalEngine, expose deterministic timing presets as concrete values, and preview resolver impact before save. Disabling a route stops future polling without deleting its durable history.
 
 Engine runtime state is explicit: `Inactive` means routing is disabled, `Ready` means the engine is enabled and ready to accept work, and `Running` is reserved for durable work that is actually processing. Monitoring, engine detail, and the dashboard use the same persisted state sources and vocabulary for that distinction.
 
