@@ -93,6 +93,15 @@ The Phase 3 consolidation intentionally retires architecture-history naming:
 
 Git history retains the original issue/phase context.
 
+## Phase 3 Consolidation Audit Decisions
+
+The #196 audit uses measured coverage and reference search to distinguish dead architecture from under-tested live behavior:
+
+- `src/qbet/web/report_exports.py` was removed after the coverage baseline reported 0% and repository search confirmed that no production or test code imported its `SimulationReportExport` path. The active customer export boundary is `qbet.reporting.exports.CustomerReportExport`, which already owns JSON/CSV/PDF business export behavior and redaction tests. Adding tests to the unused web module would have preserved obsolete architecture rather than regression value.
+- `PostgresNotificationRepository` remains live through Execution notification dispatch, so its low baseline coverage is not treated as removable code. Focused PostgreSQL integration coverage owns durable create/load/save behavior, execution-recipient idempotency across competing task ids, and fail-closed save of unknown tasks.
+
+This distinction is the cleanup rule for later passes: unused code with a superseding canonical owner is removed; live safety/persistence behavior receives a focused owner before any overlapping higher-level test is considered redundant.
+
 
 ## Legacy Scenario Audit
 
