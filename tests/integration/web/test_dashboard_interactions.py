@@ -13,6 +13,7 @@ from qbet.layers import SimulationLogRecord
 from qbet.reporting import SimulationReport
 from qbet.simulation import SimulationEngine, SimulationRunConfig, SimulationStatus
 from qbet.web.models import SimulationAvailability
+from qbet.web.simulation_control import SimulationControlService
 from qbet.web.monitoring import MonitoringService
 
 
@@ -39,6 +40,10 @@ class DashboardInteractionTests(TestCase):
             "staff-dashboard-78",
             password="Strong-pass-123",
             is_staff=True,
+        )
+        SimulationControlService().seed_portfolio(
+            amount=Decimal("100"),
+            currency="EUR",
         )
 
     def test_staff_simulation_cards_expose_progress_and_keyboard_reorder_controls(self) -> None:
@@ -76,7 +81,9 @@ class DashboardInteractionTests(TestCase):
             count=4,
         )
         self.assertContains(response, "data-drag-handle", count=4)
-        self.assertContains(response, "101,00 EUR", count=2)
+        self.assertContains(response, "Sandbox Portfolio")
+        self.assertContains(response, "100,00 EUR", count=2)
+        self.assertNotContains(response, "101,00 EUR")
 
     def test_simulation_page_formats_engine_capital_and_activity_indicators_by_state(self) -> None:
         report = SimulationReport(
@@ -105,7 +112,9 @@ class DashboardInteractionTests(TestCase):
             response = self.client.get("/simulation/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "101,00 EUR")
+        self.assertContains(response, "Sandbox Portfolio")
+        self.assertContains(response, "100,00 EUR", count=2)
+        self.assertNotContains(response, "101,00 EUR")
 
         stylesheet = (Path(__file__).parents[3] / "static/qbet_web/app.css").read_text(
             encoding="utf-8"
