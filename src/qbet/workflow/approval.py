@@ -90,12 +90,12 @@ class ExecutionApprovalService:
             owner = record.proposal.work.owner
             if owner is None:
                 raise ValueError("proposal_owner_required")
-            expired = self._reconcile_expired(
+            expired, changed = self._reconcile_expired(
                 record.proposal.work.id,
                 owner=owner,
                 now=observed_at,
             )
-            if expired.state is Lifecycle.CANCELLED:
+            if changed:
                 expired_records.append(expired)
         return tuple(expired_records)
 
@@ -197,7 +197,7 @@ class ExecutionApprovalService:
         *,
         owner: str,
         now: datetime,
-    ) -> ExecutionRecord:
+    ) -> tuple[ExecutionRecord, bool]:
         with transaction.atomic():
             loaded = self._state_repository.load(execution_id)
             if loaded is None:
@@ -209,12 +209,12 @@ class ExecutionApprovalService:
                 record.state is not Lifecycle.AWAITING_APPROVAL
                 or now < record.proposal.expires_at
             ):
-                return record
+                return record, False
 
             queue_item = self._queue_repository.load(execution_id)
             if queue_item is None:
                 raise ValueError("execution_queue_item_missing")
-            return self._expire_locked(record, ledger, queue_item, now=now)
+            return self._expire_locked(record, ledger, queue_item, now=now), True
 
     def _expire_locked(
         self,
