@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from qbet.calculations import SportsbookFreeBetInput
+from qbet.calculations import SportsbookFreeBetInput, SportsbookQualifyingBetInput
 from qbet.data import (
     CompletenessStatus,
     DataSourceMetadata,
@@ -136,8 +136,10 @@ class BonusOfferSimulationTests(TestCase):
         return BonusOffer.objects.create(
             user=user or self.user,
             provider=self.tipico,
-            name="API qualifier",
+            name="API bet-and-get reward",
+            promotion_shape=BonusOffer.PromotionShape.BET_AND_GET,
             promotion_type=BonusOffer.PromotionType.QUALIFYING_BET,
+            promotion_value=Decimal("10.00"),
             currency="EUR",
             required_stake=Decimal("10.00"),
             minimum_odds=Decimal("2.00"),
@@ -240,7 +242,7 @@ class BonusOfferSimulationTests(TestCase):
         self.assertEqual(len(bundle.opportunities), 1)
         self.assertTrue(
             bundle.opportunities[0].opportunity_id.endswith(
-                f"bonus-offer-{compatible.pk}"
+                f"bonus-offer-{compatible.pk}:v{compatible.version}"
             )
         )
 
@@ -295,6 +297,75 @@ class BonusOfferSimulationTests(TestCase):
         self.assertEqual(
             raised.exception.reason_code,
             "bonus_financial_terms_missing",
+        )
+
+    def test_bet_and_get_maps_to_existing_qualifying_math_below_healthy_coverage(self) -> None:
+        offer = self._qualifying_offer()
+        source = _source(self.user, _snapshot())
+
+        bundle = source.build(
+            SimulationRunConfig(
+                engine=SimulationEngine.BONUS,
+                starting_capital=Decimal("100"),
+            ),
+            uuid4(),
+        )
+
+        self.assertEqual(len(bundle.opportunities), 1)
+        request = bundle.opportunities[0]
+        self.assertIsInstance(request.inputs, SportsbookQualifyingBetInput)
+        self.assertEqual(request.inputs.qualifying_stake, Decimal("10.00"))
+        self.assertEqual(bundle.customer_report_input.strategy, "Bet & get · qualifying wager")
+        self.assertTrue(
+            request.opportunity_id.endswith(
+                f"bonus-offer-{offer.pk}:v{offer.version}"
+            )
+        )
+        dependency = request.bonus_offer_dependency
+        self.assertIsNotNone(dependency)
+        assert dependency is not None
+        self.assertEqual(dependency.offer_id, offer.pk)
+        self.assertEqual(dependency.offer_version, offer.version)
+        self.assertEqual(dependency.owner_id, self.user.pk)
+        self.assertEqual(dependency.sport, "tennis_atp")
+        self.assertEqual(dependency.event_id, "event-123")
+        self.assertEqual(dependency.market, "h2h")
+
+    def test_retired_offer_is_excluded_from_new_preparation(self) -> None:
+        offer = self._qualifying_offer()
+        offer.retired_at = timezone.now()
+        offer.version += 1
+        offer.save(update_fields=("retired_at", "version", "updated_at"))
+
+        with self.assertRaises(SimulationOpportunitySourceError) as raised:
+            _source(self.user, _snapshot()).build(
+                SimulationRunConfig(
+                    engine=SimulationEngine.BONUS,
+                    starting_capital=Decimal("100"),
+                ),
+                uuid4(),
+            )
+
+        self.assertEqual(raised.exception.reason_code, "bonus_offer_missing")
+
+    def test_unsupported_material_condition_fails_closed_before_market_evaluation(self) -> None:
+        offer = self._qualifying_offer()
+        offer.unsupported_terms = "Must combine three specific legs."
+        offer.save(update_fields=("unsupported_terms",))
+        source = _source(self.user, _snapshot())
+
+        with self.assertRaises(SimulationOpportunitySourceError) as raised:
+            source.build(
+                SimulationRunConfig(
+                    engine=SimulationEngine.BONUS,
+                    starting_capital=Decimal("100"),
+                ),
+                uuid4(),
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "bonus_offer_conditions_unsupported",
         )
 
     def test_free_bet_offer_uses_fixed_odds_sportsbook_input(self) -> None:

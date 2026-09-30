@@ -8,6 +8,7 @@ from typing import Iterable, Literal
 from django.db import DatabaseError
 from django.utils import timezone
 
+from qbet.web.bonus_offer_policy import evaluate_bonus_coverage
 from qbet.web.models import BonusOffer
 from qbet.web.monitoring import EngineNotice, MonitoringEngineStatus
 from qbet.web.provider_activity import ProviderActivitySnapshot
@@ -19,6 +20,7 @@ class BonusInputSnapshot:
     active_offers: int = 0
     ready_offers: int = 0
     provider_count: int = 0
+    coverage_state: str = "needs_data"
     available: bool = True
 
 
@@ -30,6 +32,7 @@ def bonus_input_snapshot(*, user_id: int) -> BonusInputSnapshot:
             BonusOffer.objects.filter(
                 user_id=user_id,
                 valid_until__gt=timezone.now(),
+                retired_at__isnull=True,
             )
             .select_related("provider")
             .order_by("valid_until", "id")
@@ -38,10 +41,16 @@ def bonus_input_snapshot(*, user_id: int) -> BonusInputSnapshot:
     except DatabaseError:
         return BonusInputSnapshot(available=False)
 
+    ready_provider_count = len({offer.provider.provider_id for offer in ready})
+    coverage = evaluate_bonus_coverage(
+        usable_offer_count=len(ready),
+        provider_count=ready_provider_count,
+    )
     return BonusInputSnapshot(
         active_offers=len(offers),
         ready_offers=len(ready),
-        provider_count=len({offer.provider.provider_id for offer in offers}),
+        provider_count=ready_provider_count,
+        coverage_state=coverage.state,
     )
 
 
@@ -98,7 +107,7 @@ def _engine_notices(
         notices.append(_run_failure_notice(latest_run.error_message, bonus_offers_url))
 
     if engine.engine_id == "bonus" and bonus_input is not None:
-        notice = _bonus_input_notice(bonus_input, bonus_offers_url)
+        notice = _bonus_input_notice(bonus_input)
         if notice is not None:
             notices.append(notice)
 
@@ -133,47 +142,15 @@ def _engine_notices(
 
 def _bonus_input_notice(
     snapshot: BonusInputSnapshot,
-    bonus_offers_url: str,
 ) -> EngineNotice | None:
+    """Keep dashboard notices for actual input-read failures, not low offer counts."""
+
     if not snapshot.available:
         return EngineNotice(
             severity="error",
             reason_code="bonus_input_unavailable",
             title="Bonus input unavailable",
             detail="Q-Bet cannot read your current Bonus Offers.",
-        )
-    if snapshot.active_offers == 0:
-        return EngineNotice(
-            severity="warning",
-            reason_code="bonus_offer_missing",
-            title="Bonus input needed",
-            detail="No active Bonus Offers are available for BonusEngine.",
-            action_label="Manage Bonus Offers",
-            action_url=bonus_offers_url,
-        )
-    if snapshot.ready_offers == 0:
-        return EngineNotice(
-            severity="warning",
-            reason_code="bonus_offer_unavailable",
-            title="Bonus offers need attention",
-            detail=(
-                f"{snapshot.active_offers} active offer(s) are recorded across "
-                f"{snapshot.provider_count} provider(s), but none is ready for API-backed preparation."
-            ),
-            action_label="Review Bonus Offers",
-            action_url=bonus_offers_url,
-        )
-    if snapshot.ready_offers < snapshot.active_offers:
-        return EngineNotice(
-            severity="warning",
-            reason_code="bonus_offer_partially_ready",
-            title="Some Bonus Offers need attention",
-            detail=(
-                f"{snapshot.ready_offers} of {snapshot.active_offers} active offer(s) across "
-                f"{snapshot.provider_count} provider(s) are ready for API-backed preparation."
-            ),
-            action_label="Review Bonus Offers",
-            action_url=bonus_offers_url,
         )
     return None
 

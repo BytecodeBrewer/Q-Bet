@@ -34,6 +34,17 @@ class BonusStrategy(str):
     pass
 
 
+class BonusOfferDependency(DomainModel):
+    """Stable promotion + match identity bound to one BonusEngine opportunity."""
+
+    offer_id: int = Field(gt=0)
+    offer_version: int = Field(gt=0)
+    owner_id: int = Field(gt=0)
+    sport: Identifier
+    event_id: Identifier
+    market: Identifier
+
+
 BonusInput = (
     QualifyingBetInput
     | FreeBetInput
@@ -55,6 +66,7 @@ class BonusEngineRequest(DomainModel):
     inputs: BonusInput
     currency: Currency
     execution_offer_ids: tuple[Identifier, Identifier]
+    bonus_offer_dependency: BonusOfferDependency | None = None
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     execution_plan_id: UUID = Field(default_factory=uuid4)
 
@@ -64,6 +76,11 @@ class BonusEngineRequest(DomainModel):
             raise ValueError("execution_offer_ids must be distinct")
         if self.generated_at.tzinfo is None or self.generated_at.utcoffset() is None:
             raise ValueError("generated_at must include timezone information")
+        dependency = self.bonus_offer_dependency
+        if dependency is not None:
+            marker = f":bonus-offer-{dependency.offer_id}:v{dependency.offer_version}"
+            if marker not in self.opportunity_id:
+                raise ValueError("opportunity_id must include the bound Bonus Offer version")
         return self
 
 

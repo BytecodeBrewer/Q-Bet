@@ -1,0 +1,46 @@
+{% extends "qbet_web/base.html" %}
+{% block title %}Edit Bonus Offer · Q-Bet{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <span class="eyebrow">BonusEngine promotion</span>
+  <h1>Edit {{ offer.name }}</h1>
+  <p>Correct the promotion terms. Q-Bet stores the previous values as an audit revision before saving the update.</p>
+</section>
+
+<section class="panel">
+  <form method="post" novalidate data-bonus-offer-form>
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% if bonus_offer_duplicate %}
+      <div class="engine-notice {% if bonus_offer_duplicate_kind == 'exact' %}engine-notice-error{% else %}engine-notice-warning{% endif %}" role="status" data-bonus-duplicate-warning>
+        <strong>
+          {% if bonus_offer_duplicate_kind == "exact" %}Exact duplicate already exists{% else %}Similar Bonus Offer found{% endif %}
+        </strong>
+        <p>
+          {{ bonus_offer_duplicate.name }} · {{ bonus_offer_duplicate.provider.display_name }} ·
+          valid until {{ bonus_offer_duplicate.valid_until|date:"Y-m-d H:i" }}
+        </p>
+        <a href="{% url 'bonus-offer-edit' bonus_offer_duplicate.pk %}">Review existing offer</a>
+        {% if bonus_offer_duplicate_kind == "near" %}
+          <input type="hidden" name="duplicate_offer_id" value="{{ bonus_offer_duplicate.pk }}">
+          <label class="bonus-offer-duplicate-confirm">
+            {{ form.confirm_near_duplicate }}
+            <span>{{ form.confirm_near_duplicate.label }}</span>
+          </label>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% include "qbet_web/bonus_offer_form_fields.html" with form=form %}
+
+    <p class="bonus-offer-form-note">
+      Non-zero turnover requirements or other material conditions remain visible but put the offer into <strong>Needs review</strong>.
+    </p>
+    <div class="bonus-offer-actions">
+      <a class="secondary-button" href="{% url 'bonus-offer-list' %}">Cancel</a>
+      <button class="primary" type="submit">Save changes</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

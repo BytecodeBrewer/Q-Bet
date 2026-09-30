@@ -253,6 +253,30 @@ QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS = os.environ.get(
     "QBET_BONUS_SPORTSBOOK_FINANCIAL_TERMS",
     "",
 ).strip()
+QBET_BONUS_COVERAGE_COMPARE_OFFERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_COMPARE_OFFERS",
+    5,
+)
+QBET_BONUS_COVERAGE_COMPARE_PROVIDERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_COMPARE_PROVIDERS",
+    2,
+)
+QBET_BONUS_COVERAGE_GOOD_OFFERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_GOOD_OFFERS",
+    10,
+)
+QBET_BONUS_COVERAGE_GOOD_PROVIDERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_GOOD_PROVIDERS",
+    3,
+)
+QBET_BONUS_COVERAGE_HEALTHY_OFFERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_HEALTHY_OFFERS",
+    15,
+)
+QBET_BONUS_COVERAGE_HEALTHY_PROVIDERS = _environment_positive_int(
+    "QBET_BONUS_COVERAGE_HEALTHY_PROVIDERS",
+    4,
+)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
