@@ -11,7 +11,8 @@ The review treats the Phase 3 Django application as Internet-exposed and assumes
 | `/` | GET | Public | Presentation only |
 | `/health/` | GET | Public | Coarse readiness and immutable release metadata only |
 | `/metrics/` | GET | Machine | Bearer token; otherwise 404 |
-| `/internal/polling/tick/` | POST | Machine | Bearer token, bounded Smart Polling plus expired-approval maintenance, POST-only; intentionally CSRF-exempt because it is not a browser session endpoint |
+| `/internal/execution/tick/` | POST | Machine | Bearer token, bounded expiry maintenance for pending Execution approvals/manual actions, POST-only; intentionally CSRF-exempt because it is not a browser session endpoint |
+| `/internal/polling/tick/` | POST | Machine | Bearer token, bounded Smart Polling work, POST-only; intentionally CSRF-exempt because it is not a browser session endpoint |
 | Registration | GET, POST | Public | Django CSRF on POST; account starts inactive |
 | Verification pending | GET | Public | Read-only |
 | Email verification link | GET, POST | Public/token holder | GET validates and renders confirmation only; CSRF-protected POST revalidates under row locks and activates |
@@ -33,7 +34,7 @@ The review treats the Phase 3 Django application as Internet-exposed and assumes
 | Provider capital location update | POST | Authenticated owner | Owner-scoped state with explicit Execution-ledger access requirement |
 | Capital approvals | GET | Authenticated owner | Owner-scoped read |
 | Capital decision / manual performed | POST | Authenticated owner | CSRF, owner check, approval lifecycle; performed acknowledgement remains pending reconciliation |
-| Execution approvals | GET | Authenticated owner | Read-only projection. Expired records are hidden without mutating Execution, queue, Monitoring, or ledger state |
+| Execution approvals | GET | Authenticated owner | Read-only approval and manual-action projections. Expired records are hidden without mutating Execution, queue, Monitoring, or ledger state |
 | Execution decision | POST | Authenticated owner | CSRF, owner check, expiry handling, revalidation remains required before dispatch |
 | Engine runtime controls | POST | Staff | Explicit staff check, typed engine/mode/action |
 | Sandbox Execution controls | POST | Staff | Explicit staff check, supported-engine/action validation |
@@ -54,7 +55,7 @@ The review treats the Phase 3 Django application as Internet-exposed and assumes
 | `/admin/` | Django Admin methods | Staff/permissioned | Django Admin authentication and model permissions |
 | Account boundary | GET | Authenticated | Read-only authenticated boundary |
 
-Django's global CSRF middleware protects browser-session state changes. The polling tick is the sole intentional `csrf_exempt` Q-Bet route found in the review; it is a machine endpoint protected by constant-time bearer-token comparison and POST-only semantics.
+Django's global CSRF middleware protects browser-session state changes. The execution and polling ticks are the intentional `csrf_exempt` Q-Bet machine routes found in the current review; both are POST-only and protected by constant-time bearer-token comparison rather than browser-session CSRF.
 
 ## Findings fixed in this ticket
 
@@ -101,7 +102,7 @@ Expired-registration cleanup also no longer runs from safe GET requests or reque
 
 `ExecutionApprovalService.pending_for()` previously reconciled expired approvals while rendering the approval list. Reading the page could therefore cancel Execution and queue state.
 
-The projection is now read-only. Expired approvals are omitted from the list and navigation count without any persistence change. A bounded maintenance pass runs only after the protected machine POST wake-up is authenticated and terminalizes expired `AWAITING_APPROVAL` / `RECHECK` state without dispatch. The authoritative user POST decision boundary also expires an approval fail-closed at or after its deadline.
+The approval projection is now read-only. Expired approvals are omitted from the list and navigation count without any persistence change. The later-added manual Execution projection follows the same rule: expired manual actions are hidden on GET without terminalizing state. The protected `POST /internal/execution/tick/` runs a single bounded maintenance budget across expired approvals and manual actions, terminalizing their authoritative Execution/queue state without provider dispatch. The authoritative user POST decision boundary also expires an approval fail-closed at or after its deadline.
 
 ### Customer correlation probing
 
