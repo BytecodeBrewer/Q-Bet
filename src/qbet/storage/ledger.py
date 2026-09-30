@@ -522,6 +522,7 @@ class ModeWorkQueueRepository:
             row.payload = cancelled.model_dump(mode="json")
             row.save(update_fields=("state", "payload", "updated_at"))
             return cancelled
+
     @transaction.atomic
     def invalidate_bonus_offer(
         self,
