@@ -125,6 +125,7 @@ class BonusOfferSimulationTests(TestCase):
             password="Strong-pass-123",
             is_staff=True,
         )
+        SimulationControlService().seed_portfolio(amount=Decimal("100"), currency="EUR")
         PostgresSportsbookCatalogRepository().replace(load_german_sportsbook_catalog())
         self.tipico = SportsbookProviderRow.objects.get(provider_id="tipico")
         self.provider_states = PostgresProviderStateRepository()
@@ -158,7 +159,7 @@ class BonusOfferSimulationTests(TestCase):
 
         run = service.start(
             engine=SimulationEngine.BONUS,
-            starting_capital=Decimal("100"),
+            currency="EUR",
             initiated_by=self.user,
         )
 
@@ -170,17 +171,19 @@ class BonusOfferSimulationTests(TestCase):
         report = reader.load_report(run.report_id)
         records = reader.load_records(run.run_id)
         self.assertEqual(report.engine, SimulationEngine.BONUS.value)
-        self.assertEqual(report.customer_report_input.provider, self.tipico.display_name)
+        customer_input = report.customer_report_input
+        assert customer_input is not None
+        self.assertEqual(customer_input.provider, self.tipico.display_name)
         self.assertEqual(
-            report.customer_report_input.invested_capital,
+            customer_input.invested_capital,
             Decimal("20.00"),
         )
         self.assertEqual(
-            tuple(term.tax_mode for term in report.customer_report_input.financial_terms),
+            tuple(term.tax_mode for term in customer_input.financial_terms),
             ("none", "none"),
         )
         self.assertEqual(
-            tuple(term.fee_rate for term in report.customer_report_input.financial_terms),
+            tuple(term.fee_rate for term in customer_input.financial_terms),
             (Decimal("0"), Decimal("0")),
         )
         stages = {
@@ -254,7 +257,7 @@ class BonusOfferSimulationTests(TestCase):
 
         run = service.start(
             engine=SimulationEngine.BONUS,
-            starting_capital=Decimal("100"),
+            currency="EUR",
             initiated_by=self.user,
         )
 
