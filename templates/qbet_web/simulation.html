@@ -7,6 +7,7 @@
 </section>
 
 <div data-simulation-control>
+  {% include "qbet_web/_simulation_portfolio.html" %}
   <section class="provider-activity activity-state activity-{{ provider_activity.state }}" data-provider-activity aria-live="polite">
     <div>
       <span class="eyebrow">Market data</span>
@@ -29,13 +30,13 @@
 
   <section class="detail-panel">
     <h2>Start simulation</h2>
-    <p class="muted">SportsCapital and BonusEngine use their configured Simulation market sources. BonusEngine combines your active promotion terms with fresh fixed-odds sportsbook data. Choose virtual starting capital; it remains inside the Simulation ledger and sandbox boundary. {% currency_preference_note "EUR" display_preferences %}</p>
+    <p class="muted">Choose an enabled engine and the currency slice of the shared Sandbox Portfolio it should use. Engine controls never own or seed capital. {% currency_preference_note "EUR" display_preferences %}</p>
     <form method="post" action="{% url 'simulation-start' %}">
       {% csrf_token %}
       {{ start_form.non_field_errors }}
       <div class="metric-list">
         <div><dt>{{ start_form.engine.label_tag }}</dt><dd>{{ start_form.engine }} {{ start_form.engine.errors }}</dd></div>
-        <div><dt>{{ start_form.starting_capital.label_tag }}</dt><dd>{{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</dd></div>
+        <div><dt>{{ start_form.currency.label_tag }}</dt><dd>{{ start_form.currency }} {{ start_form.currency.errors }}</dd></div>
       </div>
       <button class="primary" type="submit">Start simulation</button>
     </form>
@@ -80,7 +81,7 @@
             <dl class="metric-list">
               <div><dt>Run / correlation id</dt><dd>{{ run.run_id }}</dd></div>
               <div><dt>Progress</dt><dd>{{ run.progress }}</dd></div>
-              <div><dt>Virtual capital</dt><dd>{% localized_money run.current_capital "EUR" display_preferences %}</dd></div>
+              <div><dt>Available after run</dt><dd>{% localized_money run.current_capital run.portfolio_currency display_preferences %}</dd></div>
             </dl>
             {% if run.error_message %}<p class="status-error">{{ run.error_message }}</p>{% endif %}
             {% if run.is_active %}
@@ -109,7 +110,6 @@
           <div><dt>Status</dt><dd>{{ engine.detail }}</dd></div>
           <div><dt>Progress</dt><dd>{% if engine.latest_report_id %}Available in latest report{% else %}Unavailable{% endif %}</dd></div>
           <div><dt>Running / pending</dt><dd>{{ engine.running_matches }} / {{ engine.pending_matches }}</dd></div>
-          <div><dt>Virtual capital</dt><dd>{% if engine.involved_capital is not None %}{% localized_money engine.involved_capital "EUR" display_preferences %}{% else %}Unavailable{% endif %}</dd></div>
         </dl>
         {% include "qbet_web/_engine_notices.html" with engine=engine %}
         {% if engine.latest_report_id %}
