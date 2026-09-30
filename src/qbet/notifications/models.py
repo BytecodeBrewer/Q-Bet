@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from qbet.domain.models import Currency, DomainModel, Identifier, PositiveDecimal
+from qbet.domain.models import (
+    Currency,
+    DomainModel,
+    Identifier,
+    NonNegativeDecimal,
+    OfferSide,
+    PositiveDecimal,
+)
 
 
 class NotificationStatus(StrEnum):
@@ -30,6 +38,10 @@ class ExecutionNotificationInstruction(DomainModel):
     offer_id: Identifier
     amount: PositiveDecimal
     currency: Currency
+    selection: Identifier | None = None
+    side: OfferSide | None = None
+    odds: Decimal | None = Field(default=None, gt=Decimal(1), allow_inf_nan=False)
+    available_limit: NonNegativeDecimal | None = None
 
 
 class ExecutionNotificationTask(DomainModel):
@@ -42,6 +54,9 @@ class ExecutionNotificationTask(DomainModel):
     opportunity_id: Identifier
     engine: Identifier
     strategy: Identifier
+    event_id: Identifier | None = None
+    sport: Identifier | None = None
+    market: Identifier | None = None
     instructions: tuple[ExecutionNotificationInstruction, ...] = Field(min_length=1)
     action_starts_at: AwareDatetime
     action_deadline: AwareDatetime
