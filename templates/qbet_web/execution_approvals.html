@@ -10,7 +10,7 @@
 
 {% if not approvals_available %}
   <section class="surface-panel">
-    <h2>Execution actions temporarily unavailable</h2>
+    <h2>Approvals temporarily unavailable</h2>
     <p class="muted">Q-Bet cannot read the durable execution state right now. No decision or confirmation was changed.</p>
   </section>
 {% else %}
@@ -131,7 +131,7 @@
 
   {% if not approvals and not manual_actions %}
     <section class="surface-panel">
-      <h2>No execution actions</h2>
+      <h2>No pending approvals</h2>
       <p class="muted">There is currently no execution opportunity waiting for approval or manual confirmation.</p>
     </section>
   {% endif %}
