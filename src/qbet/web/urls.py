@@ -15,6 +15,7 @@ from qbet.web.execution_approvals import (
     execution_approvals,
     execution_manual_confirmation,
 )
+from qbet.web.execution_tick import execution_tick
 from qbet.web.polling_settings import polling_settings
 from qbet.web.polling_tick import polling_tick
 from qbet.web.routing_settings import routing_settings
@@ -23,6 +24,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("health/", views.health, name="health"),
     path("metrics/", views.metrics, name="metrics"),
+    path("internal/execution/tick/", execution_tick, name="execution-tick"),
     path("internal/polling/tick/", polling_tick, name="polling-tick"),
     path("register/", views.register, name="register"),
     path("verification/pending/", views.verification_pending, name="verification-pending"),

@@ -80,14 +80,16 @@ class ManualExecutionService:
         self,
         *,
         now: datetime | None = None,
+        limit: int = 10,
     ) -> tuple[ExecutionRecord, ...]:
-        """Expire silent manual actions from a scheduler/background boundary."""
+        """Expire a bounded batch of silent manual actions from an Execution scheduler."""
 
         observed_at = now or datetime.now(UTC)
         expired_records: list[ExecutionRecord] = []
-        for record in self._record_repository.list_manual_action_pending():
-            if observed_at < record.proposal.expires_at:
-                continue
+        for record in self._record_repository.list_due_manual_action_pending(
+            now=observed_at,
+            limit=limit,
+        ):
             queued = self._queue_repository.load(record.proposal.work.id)
             if queued is None:
                 raise ValueError("execution_queue_item_missing")

@@ -109,4 +109,6 @@ Normal CI never receives provider credentials and does not make live The Odds AP
 
 Ordinary Smart Polling is Data Aggregation work. It must not become an alternative implementation of last-mile Execution revalidation.
 
-Live Execution continues to use the existing `RequestHandler` targeted revalidation boundary. Simulation polling does not place bets, approve execution, move capital, or send execution notifications.
+Live Execution continues to use the existing `RequestHandler` targeted revalidation boundary. Simulation polling does not place bets, approve execution, move capital, reconcile manual Execution timeouts, or send execution notifications.
+
+Manual Execution timeout reconciliation has its own protected hosted boundary at `POST /internal/execution/tick/`. It uses `QBET_EXECUTION_TICK_TOKEN` for scheduler authentication and `QBET_EXECUTION_TICK_MAX_WORK` to bound each wake-up. That endpoint only reconciles already-expired manual Execution actions and their authoritative reservation release; it does not perform provider execution or quotation polling.

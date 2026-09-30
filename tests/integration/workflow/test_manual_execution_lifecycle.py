@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import UUID
 
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 
 from qbet.data import (
     DataSourceMetadata,
@@ -91,8 +92,9 @@ class ManualExecutionLifecycleTests(TransactionTestCase):
         *,
         request: BonusEngineRequest | None = None,
         context: TargetedMarketRevalidationContext | None = None,
+        opportunity_id: str = "manual-phase3-opportunity",
+        correlation_id: UUID = CORRELATION_ID,
     ):
-        opportunity_id = "manual-phase3-opportunity"
         selected_request = request or bonus_request(opportunity_id, generated_at=NOW)
         selected_context = context or market_context()
         transport = CaptureEmailTransport()
@@ -118,15 +120,15 @@ class ManualExecutionLifecycleTests(TransactionTestCase):
         (scheduled,) = coordinator.schedule(
             selected_request,
             owner="owner",
-            correlation_id=CORRELATION_ID,
+            correlation_id=correlation_id,
             scheduled_for=NOW,
             expires_at=NOW + timedelta(minutes=30),
             market_revalidation=selected_context,
         )
         return scheduled, coordinator, transport
 
-    def open_action_window(self):
-        scheduled, coordinator, transport = self.stage()
+    def open_action_window(self, **stage_kwargs):
+        scheduled, coordinator, transport = self.stage(**stage_kwargs)
 
         (waiting_approval,) = coordinator.dispatch_due(now=NOW, owner="owner")
         self.assertEqual(waiting_approval.state, WorkState.RECHECK)
@@ -348,23 +350,68 @@ class ManualExecutionLifecycleTests(TransactionTestCase):
         )
         self.assertEqual(final_ledger.positions[str(scheduled.work.id)].state, "pending")
 
-    def test_background_expiry_marks_silent_action_missed_and_releases_capital(self) -> None:
-        scheduled, _, _, _ = self.open_action_window()
-
-        expired = ManualExecutionService().expire_due(
-            now=NOW + timedelta(minutes=31),
+    @override_settings(QBET_EXECUTION_TICK_TOKEN="test-execution-token")
+    def test_execution_tick_rejects_missing_or_wrong_bearer_token(self) -> None:
+        missing = self.client.post("/internal/execution/tick/")
+        wrong = self.client.post(
+            "/internal/execution/tick/",
+            HTTP_AUTHORIZATION="Bearer wrong-token",
         )
 
-        self.assertEqual(len(expired), 1)
-        self.assertEqual(expired[0].proposal.work.id, scheduled.work.id)
-        persisted = ExecutionStateRepository().load(scheduled.work.id)
-        queue = ModeWorkQueueRepository().load(scheduled.work.id)
-        assert persisted is not None and queue is not None
-        record, ledger = persisted
-        self.assertEqual(record.state, Lifecycle.CANCELLED)
-        self.assertEqual(record.error, "manual_action_window_expired")
-        self.assertEqual(ledger.positions[str(scheduled.work.id)].state, "released")
-        self.assertEqual(queue.state, WorkState.CANCELLED)
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(wrong.status_code, 404)
+
+    @override_settings(
+        QBET_EXECUTION_TICK_TOKEN="test-execution-token",
+        QBET_EXECUTION_TICK_MAX_WORK=1,
+    )
+    def test_execution_tick_expires_silent_actions_bounded_and_restart_safe(self) -> None:
+        first, _, _, _ = self.open_action_window()
+        second, _, _, _ = self.open_action_window(
+            opportunity_id="manual-phase3-opportunity-two",
+            correlation_id=UUID("42345678-1234-5678-1234-567812345678"),
+        )
+        expired_at = NOW + timedelta(minutes=31)
+
+        with patch("qbet.web.execution_tick.timezone.now", return_value=expired_at):
+            first_response = self.client.post(
+                "/internal/execution/tick/",
+                HTTP_AUTHORIZATION="Bearer test-execution-token",
+            )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(first_response.json()["processed"], 1)
+        first_state = ExecutionStateRepository().load(first.work.id)
+        second_state = ExecutionStateRepository().load(second.work.id)
+        assert first_state is not None and second_state is not None
+        states = (first_state[0].state, second_state[0].state)
+        self.assertEqual(states.count(Lifecycle.CANCELLED), 1)
+        self.assertEqual(states.count(Lifecycle.AWAITING_CONFIRMATION), 1)
+
+        with patch("qbet.web.execution_tick.timezone.now", return_value=expired_at):
+            second_response = self.client.post(
+                "/internal/execution/tick/",
+                HTTP_AUTHORIZATION="Bearer test-execution-token",
+            )
+            replay_response = self.client.post(
+                "/internal/execution/tick/",
+                HTTP_AUTHORIZATION="Bearer test-execution-token",
+            )
+
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(second_response.json()["processed"], 1)
+        self.assertEqual(replay_response.status_code, 200)
+        self.assertEqual(replay_response.json()["processed"], 0)
+
+        for scheduled in (first, second):
+            persisted = ExecutionStateRepository().load(scheduled.work.id)
+            queue = ModeWorkQueueRepository().load(scheduled.work.id)
+            assert persisted is not None and queue is not None
+            record, ledger = persisted
+            self.assertEqual(record.state, Lifecycle.CANCELLED)
+            self.assertEqual(record.error, "manual_action_window_expired")
+            self.assertEqual(ledger.positions[str(scheduled.work.id)].state, "released")
+            self.assertEqual(queue.state, WorkState.CANCELLED)
 
     def test_reservation_failure_terminalizes_execution_and_queue(self) -> None:
         request = bonus_request(
