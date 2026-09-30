@@ -287,7 +287,12 @@ class RoutingConfigurationRepository:
                 )
                 current = RoutingConfiguration.model_validate(row.payload)
                 modes = engine_modes(current, engine)
-                updated_modes = modes.model_copy(update={mode.value: active})
+                changes: dict[str, bool] = {mode.value: active}
+                if mode is WorkflowMode.EXECUTION:
+                    # The ordinary Execution control is the human-in-the-loop route.
+                    # Sandbox execution remains an explicit separate administrator control.
+                    changes["execution_sandbox"] = False
+                updated_modes = modes.model_copy(update=changes)
                 updated = current.model_copy(update={engine: updated_modes})
                 row.payload = updated.model_dump(mode="json")
                 row.save(update_fields=("payload", "updated_at"))
