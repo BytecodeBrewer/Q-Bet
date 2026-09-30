@@ -33,6 +33,19 @@ class SimulationPortfolioLedgerRepository:
                 "simulation_ledger_unavailable"
             ) from error
 
+    def load(self, *, currency: str) -> PortfolioLedger | None:
+        """Load one currency slice of the explicitly initialized sandbox portfolio."""
+
+        try:
+            row = PortfolioLedgerRow.objects.filter(
+                mode="simulation", currency=currency
+            ).first()
+            return PortfolioLedger.model_validate(row.payload) if row is not None else None
+        except DatabaseError as error:
+            raise AuthoritativePersistenceError(
+                "simulation_ledger_unavailable"
+            ) from error
+
     @transaction.atomic
     def merge(self, incoming: PortfolioLedger) -> PortfolioLedger:
         """Merge command deltas onto the latest locked Simulation ledger snapshot."""
