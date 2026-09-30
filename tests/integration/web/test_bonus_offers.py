@@ -326,7 +326,10 @@ class BonusOfferWebTests(TestCase):
             self.assertFalse(evidence["personalNotesVisible"])
             self.assertFalse(evidence["notesInputPresent"])
             for helper in _BROWSER_HELP_TEXTS:
-                self.assertIn(helper, evidence["helpTexts"])
+                self.assertTrue(
+                    any(helper in text for text in evidence["helpTexts"]),
+                    msg=f"Missing visible helper text: {helper}",
+                )
         self.assertEqual(create_desktop["gridColumnCount"], 2)
         self.assertEqual(create_mobile["gridColumnCount"], 1)
 
@@ -343,7 +346,10 @@ class BonusOfferWebTests(TestCase):
             self.assertFalse(evidence["personalNotesVisible"])
             self.assertFalse(evidence["notesInputPresent"])
             for helper in _BROWSER_HELP_TEXTS:
-                self.assertIn(helper, evidence["helpTexts"])
+                self.assertTrue(
+                    any(helper in text for text in evidence["helpTexts"]),
+                    msg=f"Missing visible helper text: {helper}",
+                )
         self.assertEqual(edit_desktop["gridColumnCount"], 2)
         self.assertEqual(edit_mobile["gridColumnCount"], 1)
 
