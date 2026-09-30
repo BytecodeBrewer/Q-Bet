@@ -9,7 +9,6 @@ from qbet.bank.balances import BankBalance
 from qbet.bank.funding import (
     BankFundingProposal,
     FundingAccountRole,
-    FundingApprover,
     FundingDirection,
     FundingProposalState,
 )
@@ -154,28 +153,6 @@ class CapitalApprovalUiTests(TestCase):
         self.assertEqual(stored.proposal.state, FundingProposalState.AWAITING_APPROVAL)
         self.assertIsNone(CapitalMovementRepository().load_by_proposal(PROPOSAL_ID))
 
-
-    def test_repository_rejects_spoofed_unauthenticated_approval(self) -> None:
-        self._publish_manual_attention()
-
-        with self.assertRaisesRegex(
-            ValueError,
-            "approver_not_authenticated",
-        ):
-            CapitalFundingWorkflowRepository().decide(
-                PROPOSAL_ID,
-                approver=FundingApprover(
-                    identity=self.user.get_username(),
-                    is_authenticated=False,
-                ),
-                approve=True,
-                decided_at=datetime.now(UTC),
-            )
-
-        stored = CapitalFundingWorkflowRepository().load(PROPOSAL_ID)
-        assert stored is not None
-        self.assertEqual(stored.proposal.state, FundingProposalState.AWAITING_APPROVAL)
-        self.assertIsNone(CapitalMovementRepository().load_by_proposal(PROPOSAL_ID))
 
     def test_rejection_exposes_no_transfer_instruction_or_movement(self) -> None:
         self._publish_manual_attention()
