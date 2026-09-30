@@ -1,7 +1,6 @@
 {% extends "qbet_web/base.html" %}
 {% load static %}
-{% block title %}Bonus Offers · Q-Bet<script src="{% static 'qbet_web/engine_notices.js' %}" defer></script>
-{% endblock %}
+{% block title %}Bonus Offers · Q-Bet{% endblock %}
 {% block content %}
 <section class="page-heading">
   <span class="eyebrow">BonusEngine</span>
@@ -106,4 +105,5 @@
 {% else %}
   <p class="empty-state">No Bonus Offers yet. Add the promotion terms a sportsbook actually advertises; Q-Bet will derive the supported calculation stage.</p>
 {% endif %}
+<script src="{% static 'qbet_web/engine_notices.js' %}" defer></script>
 {% endblock %}
