@@ -30,7 +30,7 @@
 
   <section class="detail-panel">
     <h2>Start simulation</h2>
-    <p class="muted">Choose an enabled engine and the currency slice of the shared Sandbox Portfolio it should use. Engine controls never own or seed capital. {% currency_preference_note "EUR" display_preferences %}</p>
+    <p class="muted">SportsCapital and BonusEngine use their configured Simulation market sources. BonusEngine combines your active promotion terms with fresh fixed-odds sportsbook data. Choose an enabled engine and the currency slice of the shared Sandbox Portfolio it should use; engine controls never own or seed capital. {% currency_preference_note "EUR" display_preferences %}</p>
     <form method="post" action="{% url 'simulation-start' %}">
       {% csrf_token %}
       {{ start_form.non_field_errors }}
