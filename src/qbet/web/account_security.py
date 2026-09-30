@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -10,7 +9,6 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.db import DatabaseError
-from django.http import HttpRequest, HttpResponse
 from django.utils import timezone
 
 from qbet.web.models import AccountVerification
@@ -94,22 +92,3 @@ def remove_expired_unverified_accounts() -> int:
     except DatabaseError:
         return 0
     return len(user_ids)
-
-
-_ACCOUNT_CLEANUP_PATH_PREFIXES = (
-    "/register/",
-    "/verification/",
-    "/verify-email/",
-)
-
-
-class ExpiredUnverifiedAccountCleanupMiddleware:
-    """Lazily clean expired registrations on account-verification surfaces only."""
-
-    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
-        self.get_response = get_response
-
-    def __call__(self, request: HttpRequest) -> HttpResponse:
-        if request.path.startswith(_ACCOUNT_CLEANUP_PATH_PREFIXES):
-            remove_expired_unverified_accounts()
-        return self.get_response(request)

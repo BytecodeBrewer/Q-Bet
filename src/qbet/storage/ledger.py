@@ -231,6 +231,31 @@ class ExecutionRecordRepository:
         )
         return tuple(ExecutionRecord.model_validate(payload) for payload in payloads)
 
+    def list_due_awaiting_approval(
+        self,
+        *,
+        now: datetime,
+        limit: int,
+    ) -> tuple[ExecutionRecord, ...]:
+        """Return a bounded batch of expired approvals for Execution maintenance."""
+
+        if limit <= 0:
+            raise ValueError("approval_expiry_limit_must_be_positive")
+        proposal_expires_at = Cast(
+            KeyTextTransform.from_lookup("payload__proposal__expires_at"),
+            output_field=DateTimeField(),
+        )
+        payloads = (
+            ExecutionRecordRow.objects.filter(
+                state=Lifecycle.AWAITING_APPROVAL.value,
+            )
+            .annotate(proposal_expires_at=proposal_expires_at)
+            .filter(proposal_expires_at__lte=now)
+            .order_by("proposal_expires_at", "record_id")
+            .values_list("payload", flat=True)[:limit]
+        )
+        return tuple(ExecutionRecord.model_validate(payload) for payload in payloads)
+
     def list_manual_action_pending(
         self,
         *,
