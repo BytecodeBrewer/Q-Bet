@@ -27,9 +27,6 @@ def test_pull_request_vercel_gate_builds_without_deploying() -> None:
     assert "postgresql://qbet:qbet@127.0.0.1:5432/qbet_build_only" in block
     assert "qbet-ci-build-only-secret" in block
     assert 'QBET_HOSTED_RUNTIME: "true"' in block
-    assert "QBET_DJANGO_ALLOWED_HOSTS=q-bet.vercel.app" in block
-    assert "QBET_DJANGO_ALLOWED_HOSTS=.vercel.app" not in block
-    assert 'QBET_HOSTED_RUNTIME: "true"' in block
     assert "QBET_DJANGO_ALLOWED_HOSTS: q-bet.vercel.app" in block
     assert "QBET_DJANGO_ALLOWED_HOSTS: .vercel.app" not in block
     assert "vercel deploy" not in block
@@ -68,6 +65,9 @@ def test_develop_cd_deploys_preview_only() -> None:
     assert 'curl --fail --silent --show-error "$STABLE_URL/health/"' in block
     assert 'curl --fail --silent --show-error "$STABLE_URL/accounts/login/"' in block
     assert 'curl --fail --silent --show-error "$STABLE_URL/static/qbet_web/app.css"' in block
+    assert "--env QBET_HOSTED_RUNTIME=true" in block
+    assert "--env QBET_DJANGO_ALLOWED_HOSTS=q-bet.vercel.app" in block
+    assert "--env QBET_DJANGO_ALLOWED_HOSTS=.vercel.app" not in block
 
 
 def test_pull_request_vercel_build_runs_after_failed_quality_gates() -> None:
