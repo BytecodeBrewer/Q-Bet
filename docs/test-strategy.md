@@ -137,7 +137,7 @@ The following decisions cover every scenario from the four named legacy files in
 | Issue 112: persisted owner used by global due claim | keep and rename | `test_durable_simulation_and_dispatch.py` |
 | Issue 112: routed Simulation durable merge | keep and rename | `test_durable_simulation_and_dispatch.py` |
 
-The remaining `tests/integration/web/test_phase2_visuals.py` name is intentionally not changed in this ticket while #159 owns overlapping Monitoring/operability UI surfaces. That avoids a parallel rename/edit conflict; it is not part of the four legacy gates audited above.
+The earlier temporary exception for `tests/integration/web/test_phase2_visuals.py` is closed by #196. Its surviving behavior now has current owners listed above, so no Phase 2-named web regression file remains solely for historical ticket context.
 
 ## Adding Future Regressions
 
