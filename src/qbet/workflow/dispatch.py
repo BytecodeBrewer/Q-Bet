@@ -488,7 +488,15 @@ class ModeDispatchCoordinator:
         now: datetime,
     ) -> None:
         approval = record.approval
-        if record.state is not Lifecycle.APPROVED or approval is None:
+        if (
+            record.state
+            not in {
+                Lifecycle.APPROVED,
+                Lifecycle.AWAITING_CONFIRMATION,
+                Lifecycle.ACTION_PROBLEM,
+            }
+            or approval is None
+        ):
             return
         try:
             recipients = self._notification_recipient_resolver.resolve()
