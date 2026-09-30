@@ -120,12 +120,22 @@ class ExecutionService:
             return self._persist(record, ledger)
         if position_state is not None:
             raise ValueError("manual_execution_reservation_state_invalid")
-        reserved = self._apply(
-            record,
-            ledger,
-            LedgerOperation.RESERVE,
-            record.proposal.capital_required,
+        reserved, decision = ledger.apply(
+            ledger_command(
+                record,
+                LedgerOperation.RESERVE,
+                record.proposal.capital_required,
+            )
         )
+        if not decision.accepted:
+            return self._persist(
+                transition(
+                    record,
+                    Lifecycle.FAILED,
+                    error=decision.reason or "manual_execution_reservation_rejected",
+                ),
+                ledger,
+            )
         return self._persist(record, reserved)
 
     def prepare_manual_action(

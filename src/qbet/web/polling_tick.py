@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation
 from uuid import NAMESPACE_URL, uuid5
 
 from django.conf import settings
+from django.db import DatabaseError
 from django.http import HttpRequest, JsonResponse
 from django.utils.crypto import constant_time_compare
 from django.views.decorators.csrf import csrf_exempt
@@ -20,6 +21,7 @@ from qbet.data.polling import (
 )
 from qbet.data.polling_runtime import PollingWork, SmartPollingRuntime
 from qbet.storage.ledger import (
+    AuthoritativePersistenceError,
     RoutingConfigurationPersistenceError,
     RoutingConfigurationRepository,
     UserRoutingPreferencePersistenceError,
@@ -28,6 +30,7 @@ from qbet.storage.ledger import (
 from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.polling import PollingStrategyPersistenceError, PollingStrategyRepository
 from qbet.storage.polling_work import PollingWorkPersistenceError, PostgresPollingWorkRepository
+from qbet.workflow.manual_execution import ManualExecutionService
 from qbet.workflow.routing import effective_engine_modes
 
 
@@ -155,6 +158,7 @@ def polling_tick(request: HttpRequest) -> JsonResponse:
 
     now = datetime.now(UTC)
     try:
+        expired_manual_actions = ManualExecutionService().expire_due(now=now)
         configured = configured_polling_work(now=now)
         result = _runtime(configured=bool(configured)).tick(
             active_work=configured,
@@ -163,6 +167,8 @@ def polling_tick(request: HttpRequest) -> JsonResponse:
             lease_for=timedelta(seconds=settings.QBET_POLLING_CLAIM_SECONDS),
         )
     except (
+        AuthoritativePersistenceError,
+        DatabaseError,
         PollingTickConfigurationError,
         PollingStrategyPersistenceError,
         PollingWorkPersistenceError,
@@ -177,6 +183,7 @@ def polling_tick(request: HttpRequest) -> JsonResponse:
     return JsonResponse(
         {
             "status": "ok",
+            "expired_manual_actions": len(expired_manual_actions),
             "processed": result.processed,
             "provider_requests": result.provider_requests,
             "outcomes": [outcome.value for outcome in result.outcomes],

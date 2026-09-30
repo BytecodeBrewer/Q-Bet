@@ -76,6 +76,29 @@ class ManualExecutionService:
             actions.append(self._projection(record, queued))
         return tuple(actions)
 
+    def expire_due(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[ExecutionRecord, ...]:
+        """Expire silent manual actions from a scheduler/background boundary."""
+
+        observed_at = now or datetime.now(UTC)
+        expired_records: list[ExecutionRecord] = []
+        for record in self._record_repository.list_manual_action_pending():
+            if observed_at < record.proposal.expires_at:
+                continue
+            queued = self._queue_repository.load(record.proposal.work.id)
+            if queued is None:
+                raise ValueError("execution_queue_item_missing")
+            owner = record.proposal.work.owner
+            if owner is None:
+                raise ValueError("proposal_owner_required")
+            expired = self._expire(record, queued, owner=owner, now=observed_at)
+            if expired.state is Lifecycle.CANCELLED:
+                expired_records.append(expired)
+        return tuple(expired_records)
+
     def confirm(
         self,
         execution_id: UUID,
@@ -146,13 +169,12 @@ class ManualExecutionService:
             if loaded is None:
                 raise ValueError("execution_state_missing")
             current, ledger = loaded
+            if queued.state not in {WorkState.PENDING, WorkState.RECHECK}:
+                return current
             expired, _ = ExecutionService(
                 state_writer=self._state_repository
             ).expire_manual_action(current, ledger, now=now)
-            if expired.state is Lifecycle.CANCELLED and queued.state in {
-                WorkState.PENDING,
-                WorkState.RECHECK,
-            }:
+            if expired.state is Lifecycle.CANCELLED:
                 self._queue_repository.cancel(
                     record.proposal.work.id,
                     now=now,

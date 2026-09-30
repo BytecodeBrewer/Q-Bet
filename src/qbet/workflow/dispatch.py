@@ -345,6 +345,23 @@ class ModeDispatchCoordinator:
                         dispatch_id=str(item.work.id),
                         occurred_at=now,
                     )
+                    if record.state is Lifecycle.FAILED:
+                        self._record_event(
+                            item,
+                            stage="execution",
+                            event_type="lifecycle_transition",
+                            status=record.state.value,
+                            reason_code=record.error or "execution_reservation_rejected",
+                            occurred_at=now,
+                            references={"execution_id": str(item.work.id)},
+                        )
+                        return self._save_queue(
+                            item.transition(
+                                WorkState.FAILED,
+                                now=now,
+                                reason=record.error or "execution_reservation_rejected",
+                            )
+                        )
                 self._record_event(
                     item,
                     stage="execution",

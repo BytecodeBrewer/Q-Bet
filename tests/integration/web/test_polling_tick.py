@@ -130,6 +130,25 @@ class PollingTickEndpointTests(TestCase):
         self.assertEqual(wrong.status_code, 404)
         self.assertEqual(PostgresPollingWorkRepository().list(), ())
 
+    def test_tick_runs_manual_execution_expiry_without_page_read(self) -> None:
+        collector = RecordingCollector()
+        with self.settings(**self.source_settings):
+            with (
+                patch(
+                    "qbet.web.polling_tick.ManualExecutionService.expire_due",
+                    return_value=(),
+                ) as expire_due,
+                patch("qbet.web.polling_tick.TheOddsApiAdapter", return_value=collector),
+            ):
+                response = self.client.post(
+                    "/internal/polling/tick/",
+                    HTTP_AUTHORIZATION="Bearer test-polling-token",
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["expired_manual_actions"], 0)
+        expire_due.assert_called_once()
+
     def test_first_tick_schedules_without_calling_provider(self) -> None:
         collector = RecordingCollector()
         with self.settings(**self.source_settings):

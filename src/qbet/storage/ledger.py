@@ -227,18 +227,20 @@ class ExecutionRecordRepository:
         )
         return tuple(ExecutionRecord.model_validate(payload) for payload in payloads)
 
-    def list_manual_action_pending(self, *, owner: str) -> tuple[ExecutionRecord, ...]:
-        payloads = (
-            ExecutionRecordRow.objects.filter(
-                state__in=(
-                    Lifecycle.AWAITING_CONFIRMATION.value,
-                    Lifecycle.ACTION_PROBLEM.value,
-                ),
-                payload__proposal__work__owner=owner,
+    def list_manual_action_pending(
+        self,
+        *,
+        owner: str | None = None,
+    ) -> tuple[ExecutionRecord, ...]:
+        rows = ExecutionRecordRow.objects.filter(
+            state__in=(
+                Lifecycle.AWAITING_CONFIRMATION.value,
+                Lifecycle.ACTION_PROBLEM.value,
             )
-            .order_by("updated_at")
-            .values_list("payload", flat=True)
         )
+        if owner is not None:
+            rows = rows.filter(payload__proposal__work__owner=owner)
+        payloads = rows.order_by("updated_at").values_list("payload", flat=True)
         return tuple(ExecutionRecord.model_validate(payload) for payload in payloads)
 
     @transaction.atomic

@@ -18,6 +18,7 @@ from qbet.data import (
     SourceTransport,
 )
 from qbet.domain.models import OfferSide
+from qbet.engines import BonusEngineRequest
 from qbet.execution.models import Lifecycle, ManualExecutionDecision
 from qbet.notifications import (
     CaptureEmailTransport,
@@ -56,34 +57,44 @@ class OwnerRecipientResolver:
         )
 
 
-def market_context() -> TargetedMarketRevalidationContext:
+def market_context(*, reversed_order: bool = False) -> TargetedMarketRevalidationContext:
+    offers = (
+        ExpectedMarketOffer(
+            provider="Book One",
+            selection="Home",
+            side=OfferSide.BACK,
+            odds=Decimal("2.50"),
+        ),
+        ExpectedMarketOffer(
+            provider="Book Two",
+            selection="Away",
+            side=OfferSide.LAY,
+            odds=Decimal("2.60"),
+        ),
+    )
+    if reversed_order:
+        offers = tuple(reversed(offers))
     return TargetedMarketRevalidationContext(
         source=SOURCE,
         target=DataTarget.BONUS,
         sport=TARGET.sport,
         event_id=TARGET.event_id,
         market="match_winner",
-        expected_offers=(
-            ExpectedMarketOffer(
-                provider="Book One",
-                selection="Home",
-                side=OfferSide.BACK,
-                odds=Decimal("2.50"),
-            ),
-            ExpectedMarketOffer(
-                provider="Book Two",
-                selection="Away",
-                side=OfferSide.LAY,
-                odds=Decimal("2.60"),
-            ),
-        ),
+        expected_offers=offers,
         expires_at=NOW + timedelta(minutes=30),
     )
 
 
 class ManualExecutionLifecycleTests(TransactionTestCase):
-    def stage(self):
+    def stage(
+        self,
+        *,
+        request: BonusEngineRequest | None = None,
+        context: TargetedMarketRevalidationContext | None = None,
+    ):
         opportunity_id = "manual-phase3-opportunity"
+        selected_request = request or bonus_request(opportunity_id, generated_at=NOW)
+        selected_context = context or market_context()
         transport = CaptureEmailTransport()
         notifications = ExecutionNotificationService(
             repository=InMemoryNotificationRepository(),
@@ -105,12 +116,12 @@ class ManualExecutionLifecycleTests(TransactionTestCase):
             notification_recipient_resolver=OwnerRecipientResolver(),
         )
         (scheduled,) = coordinator.schedule(
-            bonus_request(opportunity_id, generated_at=NOW),
+            selected_request,
             owner="owner",
             correlation_id=CORRELATION_ID,
             scheduled_for=NOW,
             expires_at=NOW + timedelta(minutes=30),
-            market_revalidation=market_context(),
+            market_revalidation=selected_context,
         )
         return scheduled, coordinator, transport
 
@@ -174,6 +185,38 @@ class ManualExecutionLifecycleTests(TransactionTestCase):
         )
         self.assertEqual(record.result, None)
         self.assertEqual(ledger.positions[str(scheduled.work.id)].state, "reserved")
+        self.assertEqual(len(transport.messages), 1)
+
+    def test_reordered_revalidation_offers_keep_instruction_identity(self) -> None:
+        scheduled, coordinator, transport = self.stage(
+            context=market_context(reversed_order=True)
+        )
+
+        coordinator.dispatch_due(now=NOW, owner="owner")
+        ExecutionApprovalService().decide(
+            scheduled.work.id,
+            actor="owner",
+            approve=True,
+            now=NOW + timedelta(seconds=1),
+        )
+        coordinator.dispatch_due(now=NOW + timedelta(seconds=2), owner="owner")
+
+        actions = ManualExecutionService().pending_for(
+            "owner",
+            now=NOW + timedelta(seconds=3),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(
+            tuple(
+                (item.offer_id, item.provider, item.selection, item.side, item.odds)
+                for item in actions[0].instructions
+            ),
+            (
+                ("book", "Book One", "Home", OfferSide.BACK, Decimal("2.50")),
+                ("exchange", "Book Two", "Away", OfferSide.LAY, Decimal("2.60")),
+            ),
+        )
         self.assertEqual(len(transport.messages), 1)
 
     def test_done_is_user_attested_pending_then_existing_result_boundary_settles_once(self) -> None:
@@ -305,15 +348,15 @@ class ManualExecutionLifecycleTests(TransactionTestCase):
         )
         self.assertEqual(final_ledger.positions[str(scheduled.work.id)].state, "pending")
 
-    def test_silence_past_deadline_marks_missed_and_releases_reserved_capital(self) -> None:
+    def test_background_expiry_marks_silent_action_missed_and_releases_capital(self) -> None:
         scheduled, _, _, _ = self.open_action_window()
 
-        actions = ManualExecutionService().pending_for(
-            "owner",
+        expired = ManualExecutionService().expire_due(
             now=NOW + timedelta(minutes=31),
         )
 
-        self.assertEqual(actions, ())
+        self.assertEqual(len(expired), 1)
+        self.assertEqual(expired[0].proposal.work.id, scheduled.work.id)
         persisted = ExecutionStateRepository().load(scheduled.work.id)
         queue = ModeWorkQueueRepository().load(scheduled.work.id)
         assert persisted is not None and queue is not None
@@ -322,6 +365,34 @@ class ManualExecutionLifecycleTests(TransactionTestCase):
         self.assertEqual(record.error, "manual_action_window_expired")
         self.assertEqual(ledger.positions[str(scheduled.work.id)].state, "released")
         self.assertEqual(queue.state, WorkState.CANCELLED)
+
+    def test_reservation_failure_terminalizes_execution_and_queue(self) -> None:
+        request = bonus_request(
+            "manual-phase3-opportunity",
+            generated_at=NOW,
+            back_stake=Decimal("900"),
+            max_lay_liability=Decimal("5000"),
+        )
+        scheduled, coordinator, transport = self.stage(request=request)
+
+        (failed,) = coordinator.dispatch_due(now=NOW, owner="owner")
+
+        persisted = ExecutionStateRepository().load(scheduled.work.id)
+        assert persisted is not None
+        record, ledger = persisted
+        self.assertEqual(failed.state, WorkState.FAILED)
+        self.assertEqual(record.state, Lifecycle.FAILED)
+        self.assertEqual(record.error, "insufficient_available_capital")
+        self.assertEqual(ledger.balance.available, Decimal("1000"))
+        self.assertNotIn(str(scheduled.work.id), ledger.positions)
+        self.assertEqual(
+            ExecutionApprovalService().pending_for(
+                "owner",
+                now=NOW + timedelta(seconds=1),
+            ),
+            (),
+        )
+        self.assertEqual(len(transport.messages), 0)
 
     def test_rejection_after_preapproval_reservation_releases_capital(self) -> None:
         scheduled, coordinator, transport = self.stage()
