@@ -2,7 +2,10 @@
 
 from django.db import DatabaseError, transaction
 
+from qbet.domain.ledger import LedgerCommand, LedgerOperation
 from qbet.ledger import PortfolioLedger
+from qbet.orchestrator import CapitalSnapshot, LiquidityChecker as CapitalLiquidityChecker
+from qbet.workflow.models import WorkflowDecision, WorkflowStageDecision
 from qbet.storage.ledger import AuthoritativePersistenceError, AuthoritativeStateConflict
 from qbet.storage.models import PortfolioLedgerRow
 
@@ -41,6 +44,50 @@ class SimulationPortfolioLedgerRepository:
                 mode="simulation", currency=currency
             ).first()
             return PortfolioLedger.model_validate(row.payload) if row is not None else None
+        except DatabaseError as error:
+            raise AuthoritativePersistenceError(
+                "simulation_ledger_unavailable"
+            ) from error
+
+    @transaction.atomic
+    def reserve_with_liquidity(
+        self,
+        command: LedgerCommand,
+    ) -> tuple[PortfolioLedger, WorkflowStageDecision]:
+        """Decide and reserve against one freshly locked authoritative ledger row."""
+
+        if command.operation is not LedgerOperation.RESERVE:
+            raise ValueError("simulation liquidity boundary requires a reserve command")
+        try:
+            row = PortfolioLedgerRow.objects.select_for_update().get(
+                mode="simulation",
+                currency=command.currency,
+            )
+            current = PortfolioLedger.model_validate(row.payload)
+            decision = CapitalLiquidityChecker.capital_decision(
+                CapitalSnapshot(
+                    available_capital=current.balance.available,
+                    currency=current.balance.currency,
+                ),
+                required_capital=command.amount,
+                currency=command.currency,
+            )
+            if decision.decision is not WorkflowDecision.ALLOW:
+                return current, decision
+
+            updated, ledger_decision = current.apply(command)
+            if not ledger_decision.accepted:
+                raise AuthoritativeStateConflict(
+                    f"simulation_liquidity_reserve_failed:{ledger_decision.reason or 'rejected'}"
+                )
+            if updated != current:
+                row.payload = updated.model_dump(mode="json")
+                row.save(update_fields=("payload", "updated_at"))
+            return updated, decision
+        except PortfolioLedgerRow.DoesNotExist as error:
+            raise AuthoritativePersistenceError(
+                "simulation_ledger_missing"
+            ) from error
         except DatabaseError as error:
             raise AuthoritativePersistenceError(
                 "simulation_ledger_unavailable"
