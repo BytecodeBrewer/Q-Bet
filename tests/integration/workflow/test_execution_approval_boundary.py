@@ -213,12 +213,12 @@ class ExecutionApprovalBoundaryTests(TransactionTestCase):
             "qbet.execution.service.BonusSandboxAdapter.dispatch",
             side_effect=AssertionError("expired approval maintenance must never dispatch"),
         ):
-            reconciled = approvals.reconcile_expired(
+            expired = approvals.expire_due(
                 now=NOW + timedelta(minutes=5),
                 limit=10,
             )
 
-        self.assertEqual(reconciled, (scheduled.work.id,))
+        self.assertEqual(tuple(record.proposal.work.id for record in expired), (scheduled.work.id,))
         persisted = ExecutionStateRepository().load(scheduled.work.id)
         queue = ModeWorkQueueRepository().load(scheduled.work.id)
         assert persisted is not None and queue is not None
@@ -229,7 +229,7 @@ class ExecutionApprovalBoundaryTests(TransactionTestCase):
         self.assertEqual(queue.history[-1].reason, "approval_expired")
         self.assertFalse(ledger.commands)
 
-        repeated = approvals.reconcile_expired(
+        repeated = approvals.expire_due(
             now=NOW + timedelta(minutes=6),
             limit=10,
         )
