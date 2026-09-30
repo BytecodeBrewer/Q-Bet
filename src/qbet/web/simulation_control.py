@@ -3,16 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
+from typing import cast
 from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone
 from pydantic import ValidationError
 
-from qbet.domain.ledger import PortfolioBalance
+from qbet.domain.ledger import Currency, PortfolioBalance
 from qbet.ledger import PortfolioLedger
 from qbet.simulation import (
     SimulationContext,
@@ -30,12 +31,18 @@ from qbet.simulation.opportunity_source import (
 )
 from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
+from qbet.storage.models import ModeWorkQueueRow, PortfolioLedgerRow
 from qbet.storage.simulation_ledger import SimulationPortfolioLedgerRepository
 from qbet.web.bonus_offer_simulation import (
     BonusOfferSimulationConfig,
     BonusOfferSimulationOpportunitySource,
 )
-from qbet.web.models import SimulationAvailability, SimulationRunState
+from qbet.web.models import (
+    SimulationAvailability,
+    SimulationPortfolioResetArchive,
+    SimulationPortfolioState,
+    SimulationRunState,
+)
 
 _ACTIVE_STATUSES = (
     SimulationRunState.Status.PENDING,
@@ -51,6 +58,7 @@ _SUPPORTED_ENGINES = (
     SimulationEngine.SPORTS_CAPITAL,
 )
 _DEFAULT_MAX_DURATION = timedelta(hours=24)
+_ACTIVE_QUEUE_STATES = ("pending", "processing", "recheck")
 
 
 class SimulationControlError(RuntimeError):
@@ -73,6 +81,10 @@ class SimulationDisableBlockedError(SimulationControlError):
     pass
 
 
+class SimulationPortfolioResetBlockedError(SimulationControlError):
+    pass
+
+
 @dataclass(frozen=True)
 class SimulationAvailabilitySnapshot:
     enabled: bool
@@ -84,6 +96,7 @@ class SimulationRunSnapshot:
     run_id: UUID
     engine: str
     status: str
+    portfolio_currency: Currency
     progress: Decimal
     current_capital: Decimal
     report_id: UUID | None
@@ -101,11 +114,32 @@ class SimulationRunSnapshot:
 @dataclass(frozen=True)
 class SimulationControlSnapshot:
     availability: SimulationAvailabilitySnapshot
+    portfolio: "SimulationPortfolioSnapshot"
     runs: tuple[SimulationRunSnapshot, ...]
 
     @property
     def active_runs(self) -> tuple[SimulationRunSnapshot, ...]:
         return tuple(run for run in self.runs if run.is_active)
+
+
+@dataclass(frozen=True)
+class SimulationPortfolioBalanceSnapshot:
+    currency: Currency
+    seed_amount: Decimal
+    available: Decimal
+    reserved: Decimal
+    locked: Decimal
+    pending: Decimal
+    settled: Decimal
+    cost: Decimal
+    working: Decimal
+
+
+@dataclass(frozen=True)
+class SimulationPortfolioSnapshot:
+    configured: bool
+    balances: tuple[SimulationPortfolioBalanceSnapshot, ...]
+    reset_count: int
 
 
 class SimulationControlService:
@@ -138,8 +172,137 @@ class SimulationControlService:
             rows = ()
         return SimulationControlSnapshot(
             availability=self.availability(),
+            portfolio=self.portfolio_snapshot(),
             runs=tuple(self._snapshot_from_row(row) for row in rows),
         )
+
+    def portfolio_snapshot(self) -> SimulationPortfolioSnapshot:
+        state = SimulationPortfolioState.objects.filter(pk=1).first()
+        ledger_rows = PortfolioLedgerRow.objects.filter(mode="simulation").order_by("currency")
+        ledgers = {
+            row.currency: PortfolioLedger.model_validate(row.payload)
+            for row in ledger_rows
+        }
+        seeds = state.seed_balances if state is not None else {}
+        balances = tuple(
+            SimulationPortfolioBalanceSnapshot(
+                currency=ledger.balance.currency,
+                seed_amount=Decimal(str(seeds.get(currency, ledger.balance.available))),
+                available=ledger.balance.available,
+                reserved=ledger.balance.reserved,
+                locked=ledger.balance.locked,
+                pending=ledger.balance.pending,
+                settled=ledger.balance.settled,
+                cost=ledger.balance.cost,
+                working=ledger.balance.reserved + ledger.balance.locked + ledger.balance.pending,
+            )
+            for currency, ledger in ledgers.items()
+        )
+        return SimulationPortfolioSnapshot(
+            configured=state is not None and bool(balances),
+            balances=balances,
+            reset_count=SimulationPortfolioResetArchive.objects.count(),
+        )
+
+    def seed_portfolio(self, *, amount: Decimal, currency: Currency) -> SimulationPortfolioSnapshot:
+        if amount <= 0:
+            raise SimulationControlError("Sandbox seed amount must be greater than zero.")
+        initial = PortfolioLedger(
+            balance=PortfolioBalance(mode="simulation", currency=currency, available=amount)
+        )
+        try:
+            with transaction.atomic():
+                if SimulationPortfolioState.objects.select_for_update().filter(pk=1).exists():
+                    raise SimulationControlError("The Simulation sandbox portfolio is already initialized.")
+                if PortfolioLedgerRow.objects.select_for_update().filter(mode="simulation").exists():
+                    raise SimulationControlError("A Simulation ledger already exists; use its reset control.")
+                SimulationPortfolioState.objects.create(
+                    pk=1,
+                    seed_balances={currency: str(amount)},
+                )
+                PortfolioLedgerRow.objects.create(
+                    mode="simulation",
+                    currency=currency,
+                    payload=initial.model_dump(mode="json"),
+                )
+        except SimulationControlError:
+            raise
+        except DatabaseError as error:
+            raise SimulationControlError("Simulation portfolio state is unavailable.") from error
+        return self.portfolio_snapshot()
+
+    def reset_portfolio(self, *, reset_by: User | None = None) -> SimulationPortfolioSnapshot:
+        try:
+            with transaction.atomic():
+                state = SimulationPortfolioState.objects.select_for_update().filter(pk=1).first()
+                if state is None:
+                    raise SimulationControlError("Initialize the Simulation sandbox before resetting it.")
+                if SimulationRunState.objects.filter(status__in=_ACTIVE_STATUSES).exists():
+                    raise SimulationPortfolioResetBlockedError(
+                        "Stop or finish active Simulation runs before resetting the sandbox."
+                    )
+                if ModeWorkQueueRow.objects.select_for_update().filter(
+                    mode="simulation", state__in=_ACTIVE_QUEUE_STATES
+                ).exists():
+                    raise SimulationPortfolioResetBlockedError(
+                        "Finish or cancel queued Simulation work before resetting the sandbox."
+                    )
+
+                rows = tuple(
+                    PortfolioLedgerRow.objects.select_for_update()
+                    .filter(mode="simulation")
+                    .order_by("currency")
+                )
+                if not rows:
+                    raise SimulationControlError("The Simulation sandbox ledger is unavailable.")
+                ledgers = {
+                    row.currency: PortfolioLedger.model_validate(row.payload)
+                    for row in rows
+                }
+                if any(
+                    ledger.balance.reserved > 0
+                    or ledger.balance.locked > 0
+                    or ledger.balance.pending > 0
+                    or any(position.state in {"reserved", "locked", "pending"} for position in ledger.positions.values())
+                    for ledger in ledgers.values()
+                ):
+                    raise SimulationPortfolioResetBlockedError(
+                        "Settle or release all working Simulation capital before resetting the sandbox."
+                    )
+
+                SimulationPortfolioResetArchive.objects.create(
+                    portfolio_payload={
+                        "seed_balances": state.seed_balances,
+                        "ledgers": {row.currency: row.payload for row in rows},
+                    },
+                    reset_by=reset_by,
+                )
+                seeds = {
+                    str(currency): Decimal(str(amount))
+                    for currency, amount in state.seed_balances.items()
+                }
+                PortfolioLedgerRow.objects.filter(mode="simulation").delete()
+                PortfolioLedgerRow.objects.bulk_create(
+                    [
+                        PortfolioLedgerRow(
+                            mode="simulation",
+                            currency=currency,
+                            payload=PortfolioLedger(
+                                balance=PortfolioBalance(
+                                    mode="simulation",
+                                    currency=cast(Currency, currency),
+                                    available=amount,
+                                )
+                            ).model_dump(mode="json"),
+                        )
+                        for currency, amount in seeds.items()
+                    ]
+                )
+        except SimulationControlError:
+            raise
+        except DatabaseError as error:
+            raise SimulationControlError("Simulation portfolio state is unavailable.") from error
+        return self.portfolio_snapshot()
 
     def set_enabled(self, enabled: bool) -> SimulationAvailabilitySnapshot:
         try:
@@ -169,7 +332,7 @@ class SimulationControlService:
         self,
         *,
         engine: SimulationEngine,
-        starting_capital: Decimal,
+        currency: Currency = "EUR",
         initiated_by: User | None = None,
     ) -> SimulationRunSnapshot:
         """Persist a visible running lifecycle before the synchronous worker request starts."""
@@ -186,6 +349,14 @@ class SimulationControlService:
                 )
                 if not availability.enabled:
                     raise SimulationDisabledError("Simulation is disabled by the administrator.")
+                portfolio = SimulationPortfolioState.objects.select_for_update().filter(pk=1).first()
+                if portfolio is None or currency not in portfolio.seed_balances:
+                    raise SimulationControlError("Initialize the shared Simulation sandbox portfolio first.")
+                ledger_row = PortfolioLedgerRow.objects.select_for_update().filter(
+                    mode="simulation", currency=currency
+                ).first()
+                if ledger_row is None:
+                    raise SimulationControlError("The selected Simulation portfolio currency is unavailable.")
                 if SimulationRunState.objects.filter(
                     engine=engine.value,
                     status__in=_ACTIVE_STATUSES,
@@ -198,10 +369,11 @@ class SimulationControlService:
                     engine=engine.value,
                     status=SimulationRunState.Status.RUNNING,
                     progress=Decimal("0"),
-                    current_capital=starting_capital,
+                    current_capital=PortfolioLedger.model_validate(ledger_row.payload).balance.available,
+                    portfolio_currency=currency,
                     initiated_by=initiated_by,
                 )
-        except (SimulationDisabledError, SimulationAlreadyRunningError):
+        except (SimulationControlError, SimulationDisabledError, SimulationAlreadyRunningError):
             raise
         except (OperationalError, ProgrammingError) as error:
             raise SimulationControlError(
@@ -251,14 +423,14 @@ class SimulationControlService:
             max_duration=max_duration,
         )
         ledger_repository = SimulationPortfolioLedgerRepository()
-        initial_ledger = PortfolioLedger(
-            balance=PortfolioBalance(
-                mode="simulation",
-                currency="EUR",
-                available=row.current_capital,
+        simulation_ledger = ledger_repository.load(currency=row.portfolio_currency)
+        if simulation_ledger is None:
+            self._update_run(
+                run_id,
+                status=SimulationRunState.Status.FAILED,
+                error_message="simulation_portfolio_missing",
             )
-        )
-        simulation_ledger = ledger_repository.load_or_create(initial_ledger)
+            raise SimulationControlError("The shared Simulation portfolio is unavailable.")
         effective_config = config.model_copy(
             update={"starting_capital": simulation_ledger.balance.available}
         )
@@ -375,7 +547,7 @@ class SimulationControlService:
         self,
         *,
         engine: SimulationEngine,
-        starting_capital: Decimal,
+        currency: Currency = "EUR",
         max_duration: timedelta = _DEFAULT_MAX_DURATION,
         initiated_by: User | None = None,
     ) -> SimulationRunSnapshot:
@@ -383,7 +555,7 @@ class SimulationControlService:
 
         run = self.begin(
             engine=engine,
-            starting_capital=starting_capital,
+            currency=currency,
             initiated_by=initiated_by,
         )
         return self.run(run.run_id, max_duration=max_duration)
@@ -404,6 +576,7 @@ class SimulationControlService:
                 if row.status == SimulationRunState.Status.PROCESSING
                 else row.status
             ),
+            portfolio_currency=row.portfolio_currency,
             progress=row.progress,
             current_capital=row.current_capital,
             report_id=row.report_id,
