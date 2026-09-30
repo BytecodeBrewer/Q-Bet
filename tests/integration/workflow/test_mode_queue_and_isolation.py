@@ -239,14 +239,12 @@ class ModeQueueAndIsolationIntegrationTests(TransactionTestCase):
             if transition.stage is WorkflowStage.LIQUIDITY_CHECK
         )
         self.assertEqual(liquidity.reason, RejectionReason.CAPITAL_LIMIT.value)
+        during_contention = repository.load(currency="EUR")
+        assert during_contention is not None
         self.assertFalse(
             any(
                 command.correlation_id == str(second.correlation_id)
-                for command in (
-                    repository.load(currency="EUR").commands.values()
-                    if repository.load(currency="EUR") is not None
-                    else ()
-                )
+                for command in during_contention.commands.values()
             )
         )
 
