@@ -165,31 +165,6 @@ class ExecutionApprovalService:
                 )
             return decided
 
-    def _reconcile_expired(
-        self,
-        execution_id: UUID,
-        *,
-        owner: str,
-        now: datetime,
-    ) -> ExecutionRecord:
-        with transaction.atomic():
-            loaded = self._state_repository.load(execution_id)
-            if loaded is None:
-                raise ValueError("execution_state_missing")
-            record, ledger = loaded
-            if record.proposal.work.owner != owner:
-                raise PermissionError("proposal_owner_required")
-            if (
-                record.state is not Lifecycle.AWAITING_APPROVAL
-                or now < record.proposal.expires_at
-            ):
-                return record
-
-            queue_item = self._queue_repository.load(execution_id)
-            if queue_item is None:
-                raise ValueError("execution_queue_item_missing")
-            return self._expire_locked(record, ledger, queue_item, now=now)
-
     def _expire_locked(
         self,
         record: ExecutionRecord,
