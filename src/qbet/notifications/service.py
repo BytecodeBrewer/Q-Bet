@@ -396,6 +396,20 @@ def execution_instructions(
         if details is None:
             raise ValueError("manual_execution_offer_identity_missing")
         selection, side, odds, available_limit = details
+
+        if not expected_offers:
+            instructions.append(
+                ExecutionNotificationInstruction(
+                    provider=step.offer_id,
+                    offer_id=step.offer_id,
+                    amount=step.stake,
+                    currency=record.proposal.currency,
+                    odds=odds,
+                    available_limit=available_limit,
+                )
+            )
+            continue
+
         matches = tuple(
             expected
             for expected in expected_offers
