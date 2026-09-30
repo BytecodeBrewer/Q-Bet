@@ -36,6 +36,16 @@ urlpatterns = [
     path("notifications/", views.notification_inbox, name="notification-inbox"),
     path("bonus-offers/", bonus_offers.bonus_offer_list, name="bonus-offer-list"),
     path("bonus-offers/create/", bonus_offers.bonus_offer_create, name="bonus-offer-create"),
+    path(
+        "bonus-offers/<int:offer_id>/edit/",
+        bonus_offers.bonus_offer_edit,
+        name="bonus-offer-edit",
+    ),
+    path(
+        "bonus-offers/<int:offer_id>/remove/",
+        bonus_offers.bonus_offer_remove,
+        name="bonus-offer-remove",
+    ),
     path("provider-accounts/", provider_accounts.provider_account_list, name="provider-account-list"),
     path(
         "provider-accounts/<str:provider_id>/",
