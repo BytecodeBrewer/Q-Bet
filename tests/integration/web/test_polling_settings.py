@@ -1,3 +1,4 @@
+import re
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -52,6 +53,29 @@ class PollingSettingsTests(TestCase):
         payload.update(changes)
         return payload
 
+    @staticmethod
+    def _preview_token(response: object) -> str:
+        content = getattr(response, "content").decode()
+        match = re.search(r'name="preview_token" value="([^"]+)"', content)
+        assert match is not None
+        return match.group(1)
+
+    def preview_strategy(
+        self,
+        payload: dict[str, str],
+    ) -> tuple[object, str]:
+        preview_payload = dict(payload)
+        preview_payload["action"] = "preview"
+        response = self.client.post("/admin-area/polling/", preview_payload)
+        self.assertEqual(response.status_code, 200)
+        return response, self._preview_token(response)
+
+    def save_strategy(self, payload: dict[str, str]) -> object:
+        _, token = self.preview_strategy(payload)
+        save_payload = dict(payload)
+        save_payload.update({"action": "save", "preview_token": token})
+        return self.client.post("/admin-area/polling/", save_payload)
+
     def test_polling_settings_are_staff_only(self) -> None:
         self.assertEqual(self.client.get("/admin-area/polling/").status_code, 302)
 
@@ -66,7 +90,7 @@ class PollingSettingsTests(TestCase):
     def test_staff_can_create_and_update_provider_engine_strategy(self) -> None:
         self.client.force_login(self.staff)
 
-        created = self.client.post("/admin-area/polling/", self.market_payload())
+        created = self.save_strategy(self.market_payload())
         self.assertRedirects(created, "/admin-area/polling/")
 
         repository = PollingStrategyRepository()
@@ -81,9 +105,8 @@ class PollingSettingsTests(TestCase):
         self.assertEqual(len(strategy.market_refresh_points), 3)
         self.assertEqual(strategy.capacity_units, 100)
 
-        updated = self.client.post(
-            "/admin-area/polling/",
-            self.market_payload(enabled="", capacity_units="0"),
+        updated = self.save_strategy(
+            self.market_payload(enabled="", capacity_units="0")
         )
         self.assertRedirects(updated, "/admin-area/polling/")
         reloaded = repository.load(
@@ -99,17 +122,15 @@ class PollingSettingsTests(TestCase):
 
     def test_overview_shows_default_override_and_missing_effective_route(self) -> None:
         self.client.force_login(self.staff)
-        self.client.post(
-            "/admin-area/polling/",
-            self.market_payload(engine="", freshness_minutes="8"),
+        self.save_strategy(
+            self.market_payload(engine="", freshness_minutes="8")
         )
-        self.client.post(
-            "/admin-area/polling/",
+        self.save_strategy(
             self.market_payload(
                 engine="bonus",
                 freshness_minutes="2",
                 market_refresh_points_minutes="120,15",
-            ),
+            )
         )
 
         response = self.client.get("/admin-area/polling/")
@@ -131,10 +152,7 @@ class PollingSettingsTests(TestCase):
 
     def test_override_without_default_makes_other_engine_visibly_unavailable(self) -> None:
         self.client.force_login(self.staff)
-        self.client.post(
-            "/admin-area/polling/",
-            self.market_payload(engine="bonus"),
-        )
+        self.save_strategy(self.market_payload(engine="bonus"))
 
         response = self.client.get("/admin-area/polling/")
 
@@ -146,8 +164,8 @@ class PollingSettingsTests(TestCase):
 
     def test_market_and_result_targets_are_grouped_separately(self) -> None:
         self.client.force_login(self.staff)
-        self.client.post("/admin-area/polling/", self.market_payload(engine=""))
-        self.client.post("/admin-area/polling/", self.result_payload(engine=""))
+        self.save_strategy(self.market_payload(engine=""))
+        self.save_strategy(self.result_payload(engine=""))
 
         response = self.client.get("/admin-area/polling/")
 
@@ -157,13 +175,12 @@ class PollingSettingsTests(TestCase):
 
     def test_edit_mode_preloads_current_values_and_cancel_does_not_mutate(self) -> None:
         self.client.force_login(self.staff)
-        self.client.post(
-            "/admin-area/polling/",
+        self.save_strategy(
             self.market_payload(
                 engine="bonus",
                 freshness_minutes="7",
                 capacity_units="42",
-            ),
+            )
         )
 
         response = self.client.get(
@@ -222,17 +239,15 @@ class PollingSettingsTests(TestCase):
 
     def test_preview_uses_effective_resolution_and_does_not_mutate(self) -> None:
         self.client.force_login(self.staff)
-        self.client.post(
-            "/admin-area/polling/",
-            self.market_payload(engine="", freshness_minutes="5"),
+        self.save_strategy(
+            self.market_payload(engine="", freshness_minutes="5")
         )
-        self.client.post(
-            "/admin-area/polling/",
+        self.save_strategy(
             self.market_payload(
                 engine="bonus",
                 freshness_minutes="2",
                 market_refresh_points_minutes="120,15",
-            ),
+            )
         )
 
         preview_payload = self.market_payload(
@@ -258,11 +273,62 @@ class PollingSettingsTests(TestCase):
         assert persisted is not None
         self.assertEqual(int(persisted.freshness_window.total_seconds() // 60), 5)
 
+    def test_direct_save_without_preview_is_rejected_and_not_persisted(self) -> None:
+        self.client.force_login(self.staff)
+        payload = self.market_payload()
+        payload["action"] = "save"
+
+        response = self.client.post("/admin-area/polling/", payload)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertContains(
+            response,
+            "Save was not applied. Review this updated effective resolution",
+            status_code=409,
+        )
+        self.assertContains(
+            response,
+            "Save reviewed Smart Polling strategy",
+            status_code=409,
+        )
+        self.assertEqual(PollingStrategyRepository().list(), ())
+
+    def test_changed_values_after_preview_require_new_preview_before_save(self) -> None:
+        self.client.force_login(self.staff)
+        preview_payload = self.market_payload(freshness_minutes="9")
+        _, token = self.preview_strategy(preview_payload)
+
+        changed_payload = self.market_payload(freshness_minutes="2")
+        changed_payload.update({"action": "save", "preview_token": token})
+        response = self.client.post("/admin-area/polling/", changed_payload)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertContains(
+            response,
+            "Save was not applied. Review this updated effective resolution",
+            status_code=409,
+        )
+        self.assertContains(response, "freshness 2 min", status_code=409)
+        self.assertEqual(PollingStrategyRepository().list(), ())
+
+        replacement_token = self._preview_token(response)
+        changed_payload["preview_token"] = replacement_token
+        saved = self.client.post("/admin-area/polling/", changed_payload)
+
+        self.assertRedirects(saved, "/admin-area/polling/")
+        persisted = PollingStrategyRepository().load(
+            provider_id="provider-a",
+            source_id="odds",
+            target=PollingTarget.MARKET,
+            engine="sports_capital",
+        )
+        assert persisted is not None
+        self.assertEqual(int(persisted.freshness_window.total_seconds() // 60), 2)
+
     def test_edit_save_updates_same_strategy_identity(self) -> None:
         self.client.force_login(self.staff)
-        self.client.post(
-            "/admin-area/polling/",
-            self.market_payload(engine="bonus", freshness_minutes="5"),
+        self.save_strategy(
+            self.market_payload(engine="bonus", freshness_minutes="5")
         )
 
         payload = self.market_payload(
@@ -284,7 +350,7 @@ class PollingSettingsTests(TestCase):
         for field in ("provider_id", "source_id", "transport", "target", "engine"):
             payload.pop(field, None)
 
-        response = self.client.post("/admin-area/polling/", payload)
+        response = self.save_strategy(payload)
 
         self.assertRedirects(response, "/admin-area/polling/")
         repository = PollingStrategyRepository()
@@ -302,7 +368,7 @@ class PollingSettingsTests(TestCase):
     def test_staff_can_toggle_persisted_strategy_without_recreating_it(self) -> None:
         repository = PollingStrategyRepository()
         self.client.force_login(self.staff)
-        self.client.post("/admin-area/polling/", self.market_payload())
+        self.save_strategy(self.market_payload())
 
         response = self.client.post(
             "/admin-area/polling/",
@@ -364,14 +430,14 @@ class PollingSettingsTests(TestCase):
 
     def test_save_failure_keeps_safe_error_surface(self) -> None:
         self.client.force_login(self.staff)
+        payload = self.market_payload()
+        _, token = self.preview_strategy(payload)
+        payload.update({"action": "save", "preview_token": token})
         with patch(
             "qbet.web.polling_settings.PollingStrategyRepository.save",
             side_effect=PollingStrategyPersistenceError("database detail"),
         ):
-            response = self.client.post(
-                "/admin-area/polling/",
-                self.market_payload(),
-            )
+            response = self.client.post("/admin-area/polling/", payload)
 
         self.assertEqual(response.status_code, 503)
         self.assertContains(

@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
+from django.core import signing
 from django.http import Http404, HttpRequest, HttpResponse, QueryDict
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
@@ -36,7 +37,11 @@ _CONTROL_FIELDS = {
     "edit_source",
     "edit_target",
     "edit_engine",
+    "preview_token",
 }
+
+_PREVIEW_TOKEN_SALT = "qbet.polling-settings.preview"
+_PREVIEW_TOKEN_MAX_AGE_SECONDS = 30 * 60
 
 
 @dataclass(frozen=True)
@@ -486,6 +491,55 @@ def _preview(
     return StrategyPreview(candidate=_strategy_view(candidate), impacts=tuple(impacts))
 
 
+def _preview_token_payload(
+    current: tuple[PollingStrategy, ...],
+    candidate: PollingStrategy,
+) -> dict[str, object]:
+    ordered = sorted(
+        current,
+        key=lambda strategy: (
+            strategy.source.provider_id,
+            strategy.source.source_id,
+            strategy.source.transport.value,
+            strategy.target.value,
+            strategy.engine or "",
+        ),
+    )
+    return {
+        "candidate": candidate.model_dump(mode="json"),
+        "current": [strategy.model_dump(mode="json") for strategy in ordered],
+    }
+
+
+def _preview_token(
+    current: tuple[PollingStrategy, ...],
+    candidate: PollingStrategy,
+) -> str:
+    return signing.dumps(
+        _preview_token_payload(current, candidate),
+        salt=_PREVIEW_TOKEN_SALT,
+        compress=True,
+    )
+
+
+def _preview_token_matches(
+    token: str,
+    current: tuple[PollingStrategy, ...],
+    candidate: PollingStrategy,
+) -> bool:
+    if not token:
+        return False
+    try:
+        payload = signing.loads(
+            token,
+            salt=_PREVIEW_TOKEN_SALT,
+            max_age=_PREVIEW_TOKEN_MAX_AGE_SECONDS,
+        )
+    except signing.BadSignature:
+        return False
+    return payload == _preview_token_payload(current, candidate)
+
+
 def _render(
     request: HttpRequest,
     *,
@@ -495,6 +549,8 @@ def _render(
     status: int = 200,
     edit_identity: EditIdentity | None = None,
     preview: StrategyPreview | None = None,
+    preview_token: str | None = None,
+    preview_confirmation_required: bool = False,
     selected_preset: str = "standard",
 ) -> HttpResponse:
     return render(
@@ -510,6 +566,8 @@ def _render(
             "polling_selected_preset": selected_preset,
             "polling_edit_identity": edit_identity,
             "polling_preview": preview,
+            "polling_preview_token": preview_token,
+            "polling_preview_confirmation_required": preview_confirmation_required,
         },
         status=status,
     )
@@ -650,6 +708,21 @@ def polling_settings(request: HttpRequest) -> HttpResponse:
                 strategies=strategies,
                 edit_identity=edit_identity,
                 preview=_preview(strategies, candidate),
+                preview_token=_preview_token(strategies, candidate),
+                selected_preset=str(request.POST.get("preset") or "standard"),
+            )
+
+        posted_preview_token = str(request.POST.get("preview_token") or "")
+        if not _preview_token_matches(posted_preview_token, strategies, candidate):
+            return _render(
+                request,
+                form=form,
+                strategies=strategies,
+                edit_identity=edit_identity,
+                preview=_preview(strategies, candidate),
+                preview_token=_preview_token(strategies, candidate),
+                preview_confirmation_required=True,
+                status=409,
                 selected_preset=str(request.POST.get("preset") or "standard"),
             )
 

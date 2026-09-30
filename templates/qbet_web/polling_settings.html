@@ -168,6 +168,9 @@
 {% if polling_preview %}
 <section class="detail-panel" id="polling-preview">
   <span class="eyebrow">Preview only · not saved</span>
+  {% if polling_preview_confirmation_required %}
+    <p class="status-warning">Save was not applied. Review this updated effective resolution, then save these exact values.</p>
+  {% endif %}
   <h2>Effective resolution after this change</h2>
   <p>
     <strong>{{ polling_preview.candidate.role_label }}</strong>
@@ -215,6 +218,9 @@
 
   <form method="post">
     {% csrf_token %}
+    {% if polling_preview_token %}
+      <input type="hidden" name="preview_token" value="{{ polling_preview_token }}">
+    {% endif %}
     {% if polling_edit_identity %}
       <input type="hidden" name="edit_provider" value="{{ polling_edit_identity.provider_id }}">
       <input type="hidden" name="edit_source" value="{{ polling_edit_identity.source_id }}">
