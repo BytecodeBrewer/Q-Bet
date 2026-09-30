@@ -1,7 +1,9 @@
 from pathlib import Path
+import tomllib
 
 
-WORKFLOW = (Path(__file__).parents[2] / ".github" / "workflows" / "ci.yml").read_text(
+ROOT = Path(__file__).parents[2]
+WORKFLOW = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
     encoding="utf-8"
 )
 
@@ -89,3 +91,29 @@ def test_hosted_deployment_routes_develop_to_preview_and_main_to_production() ->
     assert "always()" in block
     assert "qbet_build_only" in block
     assert "qbet-ci-build-only-secret" in block
+
+
+def test_standard_validation_enforces_repository_coverage_contract() -> None:
+    validation = _job("validation", "performance")
+    performance = _job("performance", "vercel-build-check")
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    coverage = pyproject["tool"]["coverage"]
+    assert coverage["run"]["source"] == ["src/qbet"]
+    assert coverage["report"]["fail_under"] == 85
+    assert coverage["report"]["show_missing"] is True
+    assert sorted(coverage["run"]["omit"]) == [
+        "src/qbet/storage/migrations/*",
+        "src/qbet/web/migrations/*",
+    ]
+
+    assert "Run full standard Pytest suite with coverage" in validation
+    assert "--cov=src/qbet" in validation
+    assert "--cov-report=xml:coverage.xml" in validation
+    assert "--durations=20" in validation
+    assert "python -m coverage report" in validation
+    assert "q-bet-coverage-${{ github.sha }}" in validation
+    assert "if-no-files-found: ignore" in validation
+
+    assert "--cov=src/qbet" not in performance
+    assert "coverage report" not in performance

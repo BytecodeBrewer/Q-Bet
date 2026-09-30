@@ -100,8 +100,23 @@ jobs:
         run: python manage.py migrate --noinput
       - name: Verify migration plan is current
         run: python manage.py migrate --check
-      - name: Run full standard Pytest suite
-        run: python -m pytest
+      - name: Run full standard Pytest suite with coverage
+        run: >-
+          python -m pytest
+          --cov=src/qbet
+          --cov-report=xml:coverage.xml
+          --cov-report=
+          --durations=20
+      - name: Enforce repository coverage gate
+        run: python -m coverage report
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: q-bet-coverage-${{ github.sha }}
+          path: coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Check Django configuration
         run: python manage.py check
       - name: Build distribution

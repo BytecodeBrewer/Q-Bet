@@ -6,6 +6,28 @@ The test suite should make failures local and explain which architectural bounda
 
 Normal CI is offline and credential-free. Real external sandbox or read-only verification remains explicitly opt-in.
 
+## Phase 3 Final Consolidation Baseline
+
+Issue #196 treats the suite as a moving final Phase 3 baseline while the remaining product/security tickets land. The starting point for this consolidation is `develop` commit `991bfeac2c20e5d461a6739ec1660f56d9992425` on 2026-09-30:
+
+- 879 deterministic tests passed and 2 were skipped;
+- the standard Pytest step completed in 147.29 seconds on GitHub Actions;
+- 143 files existed under `tests/`;
+- 183 Python files existed under `src/`;
+- the canonical connected gate remained `tests/e2e/test_phase3_connected_sports_capital.py`.
+
+These are audit-start metrics, not the final #196 numbers. They must be refreshed after the remaining dependent Phase 3 work is merged and before this ticket is handed to review.
+
+The consolidation order is deliberate:
+
+1. establish repository-wide coverage measurement and the CI gate;
+2. use the measured uncovered lines to identify real regression gaps;
+3. reconcile against newer `develop` heads as active Phase 3 tickets land;
+4. only then remove or merge redundant tests whose behavior has a stable owner;
+5. refresh final count, runtime, coverage and intentionally uncovered areas.
+
+This avoids deleting tests against a product surface that is still changing.
+
 ## Ownership By Layer
 
 | Concern | Primary test layer | Responsibility |
@@ -109,11 +131,32 @@ The remaining `tests/integration/web/test_phase2_visuals.py` name is intentional
 
 Place a regression at the narrowest layer that can reproduce the bug without hiding the cause. Add or extend the connected E2E only when the defect is specifically about cross-boundary composition. Do not add production abstractions solely to shorten tests, and do not move unique safety/recovery behavior into one large E2E scenario.
 
+## Coverage Gate
+
+The normal deterministic suite measures line coverage for `src/qbet`. Coverage configuration lives in `pyproject.toml`; CI does not own a separate hidden threshold.
+
+The required gate is:
+
+- minimum total line coverage: **85%**;
+- generated migrations under `src/qbet/storage/migrations/` and `src/qbet/web/migrations/` are omitted because they are generated schema history rather than application behavior;
+- no application service, engine, web module, adapter, repository or safety boundary is excluded merely to reach the threshold;
+- `coverage.xml` is generated and uploaded by CI for inspection;
+- the terminal `coverage report` is the human-readable gate and reads the threshold from repository configuration.
+
+Local standard coverage validation is:
+
+```powershell
+python -m pytest --cov=src/qbet --cov-report=xml:coverage.xml --cov-report= --durations=20
+python -m coverage report
+```
+
+The explicit command keeps opt-in suites independent. The performance job and external bunq sandbox E2E do not inherit the 85% threshold and are not required to make the normal deterministic suite pass.
+
 ## CI Boundaries
 
-- normal `python -m pytest` remains offline and credential-free;
+- normal deterministic CI runs the full standard Pytest suite with repository-wide `src/qbet` line coverage;
 - `bunq_e2e` stays explicit and opt-in;
-- `performance` stays marker/environment gated;
+- `performance` stays marker/environment gated and does not contribute to the required 85%;
 - normal tests must not initiate real-money actions or uncontrolled provider writes.
 
 ## Fixture Decision

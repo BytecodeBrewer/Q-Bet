@@ -78,12 +78,13 @@ $env:QBET_TEST_DATABASE_URL='postgresql://qbet:qbet@127.0.0.1:5432/qbet_test'
 python -m pip install . -r requirements-dev.txt
 python -m ruff check .
 python -m pyright
-python -m pytest
+python -m pytest --cov=src/qbet --cov-report=xml:coverage.xml --cov-report= --durations=20
+python -m coverage report
 python manage.py check
 python -m build
 ```
 
-The GitHub Actions **PostgreSQL validation gate** is the authoritative standard result for Dev Handoffs and reviews. For pull requests it explicitly checks out and verifies the submitted PR head SHA, rather than GitHub's synthetic merge SHA; pushes verify their own push SHA. Every run receives a fresh PostgreSQL 16 service and runs `git diff --check`, Ruff, Pyright, migration checks, migrations, the full standard Pytest suite, Django checks, and the package build. The gate receives no provider or bank credentials; external bunq sandbox E2E remains in its separate opt-in workflow, and the performance baseline remains a separate job.
+The GitHub Actions **PostgreSQL validation gate** is the authoritative standard result for Dev Handoffs and reviews. For pull requests it explicitly checks out and verifies the submitted PR head SHA, rather than GitHub's synthetic merge SHA; pushes verify their own push SHA. Every run receives a fresh PostgreSQL 16 service and runs `git diff --check`, Ruff, Pyright, migration checks, migrations, the full standard Pytest suite with repository-wide line coverage, the configured 85% coverage gate, Django checks, and the package build. The gate uploads `coverage.xml` for inspection. It receives no provider or bank credentials; external bunq sandbox E2E remains in its separate opt-in workflow, and the performance baseline remains a separate job.
 
 ## Deployment
 
