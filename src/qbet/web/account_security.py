@@ -104,12 +104,12 @@ _ACCOUNT_CLEANUP_PATH_PREFIXES = (
 
 
 class ExpiredUnverifiedAccountCleanupMiddleware:
-    """Lazily clean expired registrations on account-verification surfaces only."""
+    """Clean expired registrations only while handling an explicit unsafe account action."""
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        if request.path.startswith(_ACCOUNT_CLEANUP_PATH_PREFIXES):
+        if request.method == "POST" and request.path.startswith(_ACCOUNT_CLEANUP_PATH_PREFIXES):
             remove_expired_unverified_accounts()
         return self.get_response(request)
