@@ -88,3 +88,32 @@ class RequestCorrelationMiddleware:
             )
         logger.info("request.completed", extra=extra)
         return response
+
+
+class BrowserSecurityHeadersMiddleware:
+    """Add browser policy headers that Django does not provide as one setting."""
+
+    _CSP = (
+        "default-src 'self'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'; "
+        "object-src 'none'; "
+        "img-src 'self' data:; "
+        "font-src 'self' data:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "connect-src 'self'"
+    )
+    _PERMISSIONS_POLICY = (
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    )
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        response = self.get_response(request)
+        response.setdefault("Content-Security-Policy", self._CSP)
+        response.setdefault("Permissions-Policy", self._PERMISSIONS_POLICY)
+        return response
