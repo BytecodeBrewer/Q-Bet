@@ -10,7 +10,11 @@ from qbet.web.capital_approvals import (
 )
 from qbet.web.portfolio_locations import portfolio_central_refresh, portfolio_location_update
 from qbet.web.engine_runtime import engine_runtime_control, sandbox_execution_control
-from qbet.web.execution_approvals import execution_approval_decision, execution_approvals
+from qbet.web.execution_approvals import (
+    execution_approval_decision,
+    execution_approvals,
+    execution_manual_confirmation,
+)
 from qbet.web.polling_settings import polling_settings
 from qbet.web.polling_tick import polling_tick
 from qbet.web.routing_settings import routing_settings
@@ -62,6 +66,11 @@ urlpatterns = [
         "execution/approvals/<uuid:execution_id>/decision/",
         execution_approval_decision,
         name="execution-approval-decision",
+    ),
+    path(
+        "execution/actions/<uuid:execution_id>/confirmation/",
+        execution_manual_confirmation,
+        name="execution-manual-confirmation",
     ),
     path(
         "engines/<str:engine_id>/<str:mode>/<str:action>/",
