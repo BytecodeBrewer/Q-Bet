@@ -32,7 +32,7 @@ class EngineRuntimeControlTests(TestCase):
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
         self.assertTrue(configuration.sports_capital.execution)
-        self.assertTrue(configuration.sports_capital.execution_sandbox)
+        self.assertFalse(configuration.sports_capital.execution_sandbox)
         self.assertFalse(configuration.sports_capital.simulation)
         self.assertFalse(configuration.bonus.execution)
         self.assertEqual(ModeWorkQueueRow.objects.count(), 0)
@@ -162,7 +162,7 @@ class EngineRuntimeControlTests(TestCase):
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
         self.assertTrue(configuration.sports_capital.execution)
-        self.assertTrue(configuration.sports_capital.execution_sandbox)
+        self.assertFalse(configuration.sports_capital.execution_sandbox)
         self.assertTrue(configuration.sports_capital.simulation)
 
         dashboard = self.client.get("/dashboard/")
@@ -189,7 +189,7 @@ class EngineRuntimeControlTests(TestCase):
         configuration = RoutingConfigurationRepository().load()
         assert configuration is not None
         self.assertTrue(configuration.sports_capital.execution)
-        self.assertTrue(configuration.sports_capital.execution_sandbox)
+        self.assertFalse(configuration.sports_capital.execution_sandbox)
         self.assertFalse(configuration.sports_capital.simulation)
 
     def test_staff_can_enable_bonus_simulation_while_execution_stays_blocked(self) -> None:
