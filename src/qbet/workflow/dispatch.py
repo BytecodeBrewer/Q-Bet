@@ -30,6 +30,7 @@ from qbet.request_handler import ModeRequestHandlers
 from qbet.request_handler.models import ResultStatus, TargetedMarketRevalidationContext
 from qbet.simulation.models import SimulationEngine, SimulationRunConfig
 from qbet.simulation.workflow import WorkflowSimulationRequest, WorkflowSimulationRunner
+from qbet.storage.bonus_dependencies import PostgresBonusOfferDependencyValidator
 from qbet.storage.ledger import (
     AuthoritativePersistenceError,
     AuthoritativeStateConflict,
@@ -85,6 +86,7 @@ class ModeDispatchCoordinator:
         readiness_provider: PipelineReadinessProvider | None = None,
         notification_service: ExecutionNotificationService | None = None,
         notification_recipient_resolver: NotificationRecipientResolver | None = None,
+        bonus_dependency_validator: PostgresBonusOfferDependencyValidator | None = None,
     ) -> None:
         if configuration is not None and routing_configuration_loader is not None:
             raise ValueError(
@@ -113,6 +115,9 @@ class ModeDispatchCoordinator:
         )
         self._notification_recipient_resolver = (
             notification_recipient_resolver or ActiveUserNotificationRecipientResolver()
+        )
+        self._bonus_dependency_validator = (
+            bonus_dependency_validator or PostgresBonusOfferDependencyValidator()
         )
 
     def schedule(
@@ -176,6 +181,23 @@ class ModeDispatchCoordinator:
                 reason="execution_expired_before_dispatch",
             )
             return self._save_queue(processing.transition(WorkState.EXPIRED, now=now))
+
+        if isinstance(processing.request, BonusEngineRequest):
+            dependency = self._bonus_dependency_validator.check(processing.request)
+            if not dependency.is_current:
+                reason = dependency.reason_code or "bonus_offer_dependency_invalid"
+                self._cancel_approved_execution(
+                    processing,
+                    now=now,
+                    reason=reason,
+                )
+                return self._save_queue(
+                    processing.transition(
+                        WorkState.CANCELLED,
+                        now=now,
+                        reason=reason,
+                    )
+                )
 
         readiness = self._readiness_provider.snapshot(
             processing.work.engine,
@@ -406,6 +428,19 @@ class ModeDispatchCoordinator:
                         reason="post_event_result_pending",
                     )
                 )
+
+            if isinstance(item.request, BonusEngineRequest):
+                dependency = self._bonus_dependency_validator.check(item.request)
+                if not dependency.is_current:
+                    reason = dependency.reason_code or "bonus_offer_dependency_invalid"
+                    self._cancel_approved_execution(item, now=now, reason=reason)
+                    return self._save_queue(
+                        item.transition(
+                            WorkState.CANCELLED,
+                            now=now,
+                            reason=reason,
+                        )
+                    )
 
             if not item.work.execution_sandbox:
                 if record.state in {
@@ -786,6 +821,8 @@ class ModeDispatchCoordinator:
             mode_request_handlers=self._mode_request_handlers,
             simulation_ledger=simulation_ledger,
             ledger_writer=ledger_repository.merge,
+            liquidity_reserver=ledger_repository.reserve_with_liquidity,
+            bonus_dependency_validator=self._bonus_dependency_validator,
         )
         result = runner.run(
             WorkflowSimulationRequest(
