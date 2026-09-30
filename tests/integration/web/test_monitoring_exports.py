@@ -128,7 +128,8 @@ class MonitoringExportTests(TestCase):
         )
 
         self.client.force_login(self.user)
-        customer = self.client.get(
+        customer = self.client.get("/activity/provider/")
+        customer_scoped = self.client.get(
             "/activity/provider/",
             {"correlation": str(correlation)},
         )
@@ -137,6 +138,7 @@ class MonitoringExportTests(TestCase):
         self.assertNotIn("provider", customer.json())
         self.assertNotIn("duration_ms", customer.json())
         self.assertNotIn("reason_code", customer.json())
+        self.assertEqual(customer_scoped.status_code, 404)
 
         self.client.force_login(self.staff)
         staff = self.client.get(
