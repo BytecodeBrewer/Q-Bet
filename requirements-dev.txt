@@ -1,6 +1,7 @@
 -r requirements.txt
 duckdb>=1.4,<2
 pytest>=9,<10
+pytest-cov>=7,<8
 pyright>=1.1,<2
 django-stubs>=5.2,<6
 ruff>=0.12,<1
