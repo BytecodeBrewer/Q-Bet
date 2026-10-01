@@ -96,6 +96,7 @@ def _market_payload(*, home_best: str = "2.20", away_best: str = "2.20") -> byte
                     "markets": [
                         {
                             "key": MARKET,
+                            "last_update": NOW.isoformat(),
                             "outcomes": [
                                 {"name": "Home", "price": home_best},
                                 {"name": "Away", "price": "1.80"},
@@ -108,6 +109,7 @@ def _market_payload(*, home_best: str = "2.20", away_best: str = "2.20") -> byte
                     "markets": [
                         {
                             "key": MARKET,
+                            "last_update": NOW.isoformat(),
                             "outcomes": [
                                 {"name": "Home", "price": "1.80"},
                                 {"name": "Away", "price": away_best},

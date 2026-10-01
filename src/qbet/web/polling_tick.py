@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from itertools import product
+from typing import Literal
 from uuid import NAMESPACE_URL, uuid5
 
 from django.conf import settings
@@ -12,7 +14,12 @@ from django.utils.crypto import constant_time_compare
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from qbet.data import DataSourceMetadata, SourceTransport, THE_ODDS_API_PROVIDER_ID, TheOddsApiAdapter
+from qbet.data import (
+    DataSourceMetadata,
+    SourceTransport,
+    THE_ODDS_API_PROVIDER_ID,
+    TheOddsApiAdapter,
+)
 from qbet.data.polling import (
     PollingStrategyResolutionError,
     PollingTarget,
@@ -63,18 +70,23 @@ def configured_polling_work(*, now: datetime) -> tuple[PollingWork, ...]:
         return ()
 
     preferences = UserRoutingPreferenceRepository().list()
-    route_is_eligible = any(
-        effective_engine_modes(
-            routing,
-            user_preferences,
-            "sports_capital",
-        ).simulation
-        for _, user_preferences in preferences
-    )
-    if not route_is_eligible:
+    engines: list[Literal["bonus", "sports_capital"]] = []
+    for engine in ("bonus", "sports_capital"):
+        if any(
+            effective_engine_modes(routing, preference, engine).simulation
+            for _, preference in preferences
+        ):
+            engines.append(engine)
+    if not engines:
         return ()
 
     if getattr(settings, "QBET_SIMULATION_SPORTS_SOURCE", "") != "the_odds_api":
+        return ()
+
+    sports = getattr(settings, "QBET_POLLING_DISCOVERY_SPORTS", ())
+    if sports:
+        return _discovery_work(now=now, sports=sports, engines=tuple(engines))
+    if "sports_capital" not in engines:
         return ()
 
     values = {
@@ -126,6 +138,76 @@ def configured_polling_work(*, now: datetime) -> tuple[PollingWork, ...]:
     except PollingStrategyResolutionError as error:
         raise PollingTickConfigurationError(error.reason_code) from error
     return (candidate.model_copy(update={"disabled": not strategy.enabled}),)
+
+
+def _discovery_work(
+    *,
+    now: datetime,
+    sports: tuple[str, ...],
+    engines: tuple[Literal["bonus", "sports_capital"], ...],
+) -> tuple[PollingWork, ...]:
+    if len(sports) > 10 or len(set(sports)) != len(sports) or any(not s.strip() for s in sports):
+        raise PollingTickConfigurationError("polling_discovery_sports_invalid")
+    market = getattr(settings, "QBET_SIMULATION_ODDS_MARKET", "")
+    limit = getattr(settings, "QBET_POLLING_DISCOVERY_MAX_EVENTS", 20)
+    if market != "h2h" or not 1 <= limit <= 100:
+        raise PollingTickConfigurationError("polling_discovery_configuration_invalid")
+    source = DataSourceMetadata(
+        provider_id=THE_ODDS_API_PROVIDER_ID,
+        source_id="simulation-the-odds-api",
+        transport=SourceTransport.API,
+    )
+    stored = PostgresPollingWorkRepository().list()
+    resolver = PollingStrategyRepository().resolver()
+    configured: list[PollingWork] = []
+    for engine, sport in product(engines, sports):
+        identity = f"discovery:{sport}:{market}"
+        discovery = PollingWork(
+            source=source,
+            target=PollingTarget.MARKET,
+            engine=engine,
+            mode="simulation",
+            match_id=identity,
+            sport=sport,
+            market=market,
+            correlation_id=uuid5(NAMESPACE_URL, f"qbet-discovery:{engine}:{identity}"),
+            event_starts_at=now + timedelta(days=365),
+            next_due_at=now,
+            discovery=True,
+            discovery_limit=limit,
+        )
+        try:
+            strategy = resolver.resolve(discovery.request())
+        except PollingStrategyResolutionError as error:
+            raise PollingTickConfigurationError(error.reason_code) from error
+        discovery = discovery.model_copy(update={"disabled": not strategy.enabled})
+        configured.append(discovery)
+        previous = next((w for w in stored if w.identity == discovery.identity), None)
+        if previous is None:
+            continue
+        # The parent record is the recoverable discovery handoff. Synchronization
+        # materializes its event targets idempotently on this or a later wake.
+        for event in previous.discovered_events:
+            configured.append(
+                discovery.model_copy(
+                    update={
+                        "discovery": False,
+                        "discovered_events": (),
+                        "match_id": event.event_id,
+                        "event_starts_at": event.starts_at,
+                        "correlation_id": uuid5(
+                            NAMESPACE_URL,
+                            f"qbet-discovered:{engine}:{sport}:{event.event_id}:{market}",
+                        ),
+                        "terminal": event.starts_at <= now,
+                        "last_outcome": "terminal" if event.starts_at <= now else None,
+                        "last_reason": "discovery_event_expired"
+                        if event.starts_at <= now
+                        else None,
+                    }
+                )
+            )
+    return tuple(configured)
 
 
 def _runtime(*, configured: bool) -> SmartPollingRuntime:

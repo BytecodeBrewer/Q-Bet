@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -15,7 +16,7 @@ from qbet.data.models import (
     SourceTransport,
 )
 from qbet.data.polling import PollingStrategy, PollingTarget
-from qbet.data.the_odds_api import TheOddsApiTransportError
+from qbet.data.the_odds_api import TheOddsApiAdapter, TheOddsApiTransportError
 from qbet.monitoring import MonitoringQuery
 from qbet.storage.ledger import RoutingConfigurationRepository, UserRoutingPreferenceRepository
 from qbet.storage.monitoring import PostgresMonitoringRepository
@@ -72,6 +73,139 @@ class RecordingCollector:
 
 
 class PollingTickEndpointTests(TestCase):
+    def test_discovery_endpoint_materializes_deduplicated_targets_and_fetches_them(self) -> None:
+        now = datetime.now(UTC)
+        requests = []
+
+        def transport(url):
+            requests.append(url)
+            if "/events?" in url:
+                return (
+                    200,
+                    {},
+                    json.dumps(
+                        [
+                            {
+                                "id": event_id,
+                                "sport_key": "soccer_germany_bundesliga",
+                                "commence_time": (now + timedelta(hours=2)).isoformat(),
+                            }
+                            for event_id in ("one", "two", "one")
+                        ]
+                    ).encode(),
+                )
+            event_id = "one" if "/events/one/" in url else "two"
+            return (
+                200,
+                {},
+                json.dumps(
+                    {
+                        "id": event_id,
+                        "sport_key": "soccer_germany_bundesliga",
+                        "bookmakers": [
+                            {
+                                "key": "unknown-provider",
+                                "markets": [
+                                    {
+                                        "key": "h2h",
+                                        "last_update": now.isoformat(),
+                                        "outcomes": [
+                                            {"name": "Home", "price": 2.1},
+                                            {"name": "Away", "price": 2.1},
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ).encode(),
+            )
+
+        adapter = TheOddsApiAdapter(
+            api_key="test",
+            clock=lambda: now,
+            available_stake=Decimal("100"),
+            http_get=transport,
+        )
+        config = dict(self.source_settings)
+        config.update(
+            QBET_POLLING_DISCOVERY_SPORTS=("soccer_germany_bundesliga",),
+            QBET_SIMULATION_ODDS_EVENT_ID="",
+            QBET_SIMULATION_ODDS_EVENT_STARTS_AT="",
+        )
+        repo = PostgresPollingWorkRepository()
+        with (
+            self.settings(**config),
+            patch("qbet.web.polling_tick.TheOddsApiAdapter", return_value=adapter),
+        ):
+
+            def wake():
+                response = self.client.post(
+                    "/internal/polling/tick/", HTTP_AUTHORIZATION="Bearer test-polling-token"
+                )
+                self.assertEqual(response.status_code, 200)
+                return response
+
+            wake()  # Persist the discovery schedule via the real HTTP entry point.
+            parent = repo.list()[0]
+            repo.save(parent.model_copy(update={"next_due_at": now - timedelta(seconds=1)}))
+            wake()
+            self.assertEqual(len(repo.list()[0].discovered_events), 2)
+            wake()  # Materialize children from the recoverable parent contract.
+            self.assertEqual(len(repo.list()), 3)
+            for work in repo.list():
+                if not work.discovery:
+                    repo.save(work.model_copy(update={"next_due_at": now - timedelta(seconds=1)}))
+            wake()
+            wake()
+            self.assertEqual(len(repo.list()), 3)
+        children = [w for w in repo.list() if not w.discovery]
+        self.assertEqual({w.match_id for w in children}, {"one", "two"})
+        self.assertEqual(len(requests), 3)  # One discovery and two existing targeted reads.
+        for work in children:
+            snapshot = work.latest_snapshot
+            self.assertIsNotNone(snapshot)
+            self.assertEqual(snapshot.event_id, work.match_id)
+            self.assertEqual(snapshot.offers[0].source_updated_at, now)
+            self.assertFalse(snapshot.offers[0].licensed_catalog_presence)
+            self.assertFalse(snapshot.offers[0].account_availability_verified)
+            self.assertEqual(snapshot.offers[0].stake_capacity_basis, "simulation_assumed")
+
+    def test_discovery_failure_is_durable_and_repeated_wake_respects_backoff(self) -> None:
+        now = datetime.now(UTC)
+        requests = []
+        adapter = TheOddsApiAdapter(
+            api_key="test",
+            http_get=lambda url: (requests.append(url) or 429, {}, b""),
+        )
+        config = dict(self.source_settings)
+        config.update(
+            QBET_POLLING_DISCOVERY_SPORTS=("soccer_germany_bundesliga",),
+            QBET_SIMULATION_ODDS_EVENT_ID="",
+        )
+        repo = PostgresPollingWorkRepository()
+        with (
+            self.settings(**config),
+            patch("qbet.web.polling_tick.TheOddsApiAdapter", return_value=adapter),
+        ):
+            self.client.post(
+                "/internal/polling/tick/", HTTP_AUTHORIZATION="Bearer test-polling-token"
+            )
+            parent = repo.list()[0]
+            repo.save(parent.model_copy(update={"next_due_at": now - timedelta(seconds=1)}))
+            response = self.client.post(
+                "/internal/polling/tick/", HTTP_AUTHORIZATION="Bearer test-polling-token"
+            )
+            self.assertEqual(response.json()["outcomes"], ["delayed"])
+            self.client.post(
+                "/internal/polling/tick/", HTTP_AUTHORIZATION="Bearer test-polling-token"
+            )
+        parent = repo.list()[0]
+        self.assertEqual(parent.attempt, 1)
+        self.assertEqual(parent.last_reason, "polling_provider_rate_limited")
+        self.assertEqual(parent.discovered_events, ())
+        self.assertEqual(len(requests), 1)
+
     def setUp(self) -> None:
         self.owner = "polling-owner"
         self.source_settings = {

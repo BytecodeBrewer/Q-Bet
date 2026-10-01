@@ -83,6 +83,8 @@ class PostgresPollingWorkRepository:
                             "market": candidate.market,
                             "event_starts_at": candidate.event_starts_at,
                             "disabled": candidate.disabled,
+                            "discovery_limit": candidate.discovery_limit,
+                            "terminal": current.terminal or candidate.terminal,
                         }
                     )
                     self._write_row(row, updated, clear_claim=False)
