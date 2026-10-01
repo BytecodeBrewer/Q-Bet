@@ -50,9 +50,9 @@ For Vercel, configure `QBET_DATABASE_URL` for Preview and Production as required
 
 `/health/` is an operational readiness probe, not merely a Django-process liveness check. It performs a read-only PostgreSQL connection check and asks Django for the current migration plan. It returns HTTP 200 only when the configured authoritative database is reachable and has no unapplied migrations. Database failures, inconsistent migration state, or pending migrations return HTTP 503 with a stable non-sensitive reason code.
 
-The Vercel preview smoke always inspects `/health/`. A deployment is operationally ready only when the endpoint reports `status=ok` and `persistence=ready`.
+The Vercel candidate preflight always inspects `/health/` on the exact protected Preview deployment. A release is promotable only when the endpoint reports the expected release SHA, `status=ok`, `persistence=ready`, and `readiness=ready`.
 
-Preview and `develop` / staging validation treat the specific `migrations_pending` state as a visible warning rather than a merge-blocking code failure because normal CI is not allowed to mutate the shared hosted database. Other readiness failures such as database unavailability, invalid migration state, or an unexpected health response still fail validation. This keeps schema drift visible without creating a CI deadlock that could only be resolved by an unauthorized database write. Production promotion still requires operators to apply the intended migrations so `/health/` can return `persistence=ready`.
+A candidate reporting `migrations_pending` is a blocking preflight result, not permission for CI to mutate the shared hosted database. The workflow surfaces the non-sensitive readiness response and stops. An authorized operator must apply the intended migrations through the explicit migration path, after which the candidate can be revalidated. Database unavailability, invalid migration state, or an unexpected health response fail the same gate. Production promotion therefore cannot use a green build as a substitute for a running, migration-ready release.
 
 Deploying Q-Bet never runs migrations from a web request, serverless cold start, or normal preview smoke. Schema changes remain an explicit operator action:
 

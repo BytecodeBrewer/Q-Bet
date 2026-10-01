@@ -90,9 +90,9 @@ The GitHub Actions **PostgreSQL validation gate** is the authoritative standard 
 
 ## Deployment
 
-Pull requests run a Vercel Preview build check against the exact PR head after the normal validation and performance jobs. It verifies that the app can be built, but does not create a deployment for feature branches. A push to `develop` also runs the Vercel Preview build check, then creates a Preview deployment. Only a push to `main` builds and deploys to the Production Vercel environment and checks the public stable Q-Bet URL.
+Pull requests and integration pushes first build the exact release, then deploy it as a protected Vercel Preview candidate after the PostgreSQL validation and performance gates are green. The candidate preflight verifies the exact release SHA, read-only persistence/migration readiness, and public shell/login/static routes through Vercel-authenticated access. A candidate with pending migrations or any other readiness failure blocks the deployment chain. Only a push to `main` may continue to the Production Vercel environment, and only after the same candidate preflight succeeds.
 
-Production and Preview configuration, including runtime secrets, live in the corresponding Vercel environments. GitHub Actions does not connect to the application database or copy secrets out of Supabase during deployment. Deployments do not run schema migrations or gate on migration state; schema changes remain an explicit operator-controlled task.
+Production and Preview configuration, including runtime secrets, live in the corresponding Vercel environments. GitHub Actions does not connect directly to the application database or copy database secrets out of Supabase during deployment. Candidate and Production deployments never run schema migrations; schema changes remain an explicit operator-controlled task. Vercel Preview protection keeps candidate URLs non-public while CI uses authenticated Vercel tooling to exercise them.
 
 Day-to-day deployment management is handled through the Vercel project UI and the GitHub Actions workflow; the README intentionally does not duplicate Vercel's own operating instructions.
 
