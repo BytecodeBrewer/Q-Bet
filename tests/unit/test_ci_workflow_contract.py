@@ -130,6 +130,7 @@ def test_standard_validation_enforces_repository_coverage_contract() -> None:
     assert "python -m coverage report" in validation
     assert "q-bet-coverage-${{ github.sha }}" in validation
     assert "if-no-files-found: ignore" in validation
+    assert "continue-on-error: true" in validation
 
     assert "--cov=src/qbet" not in performance
     assert "coverage report" not in performance
