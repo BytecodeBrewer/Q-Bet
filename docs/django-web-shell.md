@@ -62,6 +62,10 @@ python manage.py migrate --plan
 python manage.py migrate --noinput
 ```
 
+For the hosted Preview environment, the repository also provides the manually triggered `Preview migration operator` GitHub Actions workflow. It checks out an operator-selected ref and runs Django's migration plan/apply/check sequence through `vercel env run -e preview`, so the database URL remains inside the protected Vercel Preview environment instead of being copied into ordinary PR jobs.
+
+The running candidate preflight then logs in through Django's normal CSRF/session boundary using a dedicated low-privilege Preview smoke identity. Store that identity only as protected Preview environment secrets named `QBET_PREVIEW_SMOKE_USERNAME` and `QBET_PREVIEW_SMOKE_PASSWORD`. The smoke identity must not be staff, superuser, or a real customer account.
+
 The first two commands are useful read-only checks. Run the final migration command only with the intended target `QBET_DATABASE_URL` and the required operational authorization. After applying migrations, `/health/` should return `status=ok` and `persistence=ready`.
 
 Normal GitHub Actions still use disposable PostgreSQL. CI additionally runs `makemigrations --check --dry-run` and `migrate --check` so model changes without committed migrations and incomplete disposable test schemas fail before deployment.

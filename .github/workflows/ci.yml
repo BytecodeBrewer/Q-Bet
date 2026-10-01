@@ -198,6 +198,8 @@ jobs:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       EXPECTED_RELEASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      QBET_PREVIEW_SMOKE_USERNAME: ${{ secrets.QBET_PREVIEW_SMOKE_USERNAME }}
+      QBET_PREVIEW_SMOKE_PASSWORD: ${{ secrets.QBET_PREVIEW_SMOKE_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -305,6 +307,80 @@ jobs:
             --fail --silent --output /dev/null
 
           echo "Candidate serves exact release $EXPECTED_RELEASE with ready persistence and public runtime routes." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify authenticated candidate product routes
+        shell: bash
+        run: |
+          test -n "$QBET_PREVIEW_SMOKE_USERNAME" || {
+            echo "::error::Missing QBET_PREVIEW_SMOKE_USERNAME in the protected preview environment."
+            exit 1
+          }
+          test -n "$QBET_PREVIEW_SMOKE_PASSWORD" || {
+            echo "::error::Missing QBET_PREVIEW_SMOKE_PASSWORD in the protected preview environment."
+            exit 1
+          }
+
+          deployment_url="${{ steps.candidate.outputs.url }}"
+          cookie_jar="$(mktemp)"
+          login_html="$(mktemp)"
+          trap 'rm -f "$cookie_jar" "$login_html"' EXIT
+
+          vercel curl /accounts/login/ --deployment "$deployment_url" -- \
+            --fail --silent --show-error \
+            --cookie-jar "$cookie_jar" \
+            --output "$login_html"
+
+          csrf_token="$(
+            python - "$login_html" <<'PY'
+          import html
+          import re
+          import sys
+          from pathlib import Path
+
+          body = Path(sys.argv[1]).read_text(encoding="utf-8")
+          match = re.search(
+              r'name=["\x27]csrfmiddlewaretoken["\x27][^>]*value=["\x27]([^"\x27]+)',
+              body,
+          )
+          if not match:
+              raise SystemExit("csrf token not found")
+          print(html.unescape(match.group(1)))
+          PY
+          )"
+
+          login_status="$(
+            vercel curl /accounts/login/ --deployment "$deployment_url" -- \
+              --silent --show-error \
+              --request POST \
+              --cookie "$cookie_jar" \
+              --cookie-jar "$cookie_jar" \
+              --header "Referer: $deployment_url/accounts/login/" \
+              --data-urlencode "username=$QBET_PREVIEW_SMOKE_USERNAME" \
+              --data-urlencode "password=$QBET_PREVIEW_SMOKE_PASSWORD" \
+              --data-urlencode "csrfmiddlewaretoken=$csrf_token" \
+              --output /dev/null \
+              --write-out "%{http_code}"
+          )"
+          test "$login_status" = "302" || {
+            echo "::error::Preview smoke identity could not authenticate."
+            exit 1
+          }
+
+          for route in /dashboard/ /reports/ /portfolio/; do
+            route_status="$(
+              vercel curl "$route" --deployment "$deployment_url" -- \
+                --silent --show-error \
+                --cookie "$cookie_jar" \
+                --output /dev/null \
+                --write-out "%{http_code}"
+            )"
+            test "$route_status" = "200" || {
+              echo "::error::Authenticated candidate route $route returned HTTP $route_status."
+              exit 1
+            }
+          done
+
+          echo "Authenticated candidate Dashboard, Reports, and Portfolio routes passed." >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     name: Vercel deployment

@@ -6,6 +6,9 @@ ROOT = Path(__file__).parents[2]
 WORKFLOW = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
     encoding="utf-8"
 )
+PREVIEW_MIGRATIONS = (ROOT / ".github" / "workflows" / "preview-migrations.yml").read_text(
+    encoding="utf-8"
+)
 
 
 def _job(name: str, next_name: str | None = None) -> str:
@@ -41,6 +44,10 @@ def test_pull_request_vercel_gate_builds_and_exercises_protected_candidate() -> 
     assert "operator-controlled migration path" in block
     assert "vercel curl /accounts/login/" in block
     assert "vercel curl /static/qbet_web/app.css" in block
+    assert "QBET_PREVIEW_SMOKE_USERNAME" in block
+    assert "QBET_PREVIEW_SMOKE_PASSWORD" in block
+    assert 'csrfmiddlewaretoken' in block
+    assert 'route in /dashboard/ /reports/ /portfolio/' in block
     assert "vercel deploy --prebuilt --prod" not in block
     assert "manage.py migrate" not in block
     assert "psycopg.connect" not in block
@@ -149,3 +156,17 @@ def test_standard_validation_enforces_repository_coverage_contract() -> None:
 
     assert "--cov=src/qbet" not in performance
     assert "coverage report" not in performance
+
+
+def test_preview_migrations_are_manual_and_keep_database_secrets_in_vercel() -> None:
+    assert "workflow_dispatch:" in PREVIEW_MIGRATIONS
+    assert "pull_request:" not in PREVIEW_MIGRATIONS
+    assert "push:" not in PREVIEW_MIGRATIONS
+    assert "environment: preview" in PREVIEW_MIGRATIONS
+    assert "vercel pull --yes --environment=preview" in PREVIEW_MIGRATIONS
+    assert "vercel env run -e preview" in PREVIEW_MIGRATIONS
+    assert "python manage.py migrate --plan" in PREVIEW_MIGRATIONS
+    assert "python manage.py migrate --noinput" in PREVIEW_MIGRATIONS
+    assert "python manage.py migrate --check" in PREVIEW_MIGRATIONS
+    assert "QBET_DATABASE_URL" not in PREVIEW_MIGRATIONS
+    assert "QBET_MIGRATION_DATABASE_URL" not in PREVIEW_MIGRATIONS
