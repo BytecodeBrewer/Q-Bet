@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from django.conf import settings
-from django.contrib.auth import get_user_model, login, logout
+from django.contrib.auth import login, logout
+from django.contrib.auth.models import User
 from django.http import HttpRequest, JsonResponse
 from django.utils.crypto import constant_time_compare
 from django.views.decorators.csrf import csrf_exempt
@@ -33,7 +34,6 @@ def preview_smoke_session(request: HttpRequest) -> JsonResponse:
         logout(request)
         return JsonResponse({"status": "cleared"})
 
-    User = get_user_model()
     try:
         user = User.objects.get(username=_SMOKE_USERNAME)
     except User.DoesNotExist:
