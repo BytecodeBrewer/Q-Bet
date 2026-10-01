@@ -237,9 +237,19 @@ class SimulationSharedLiquidityConcurrencyTests(TransactionTestCase):
         assert persisted is not None
         self.assertGreaterEqual(len(persisted.commands), 4)
 
+        allowed_run = next(
+            run
+            for run in results.values()
+            if run.workflow_results[0].final_decision is WorkflowDecision.ALLOW
+        )
+        rejected_run = next(
+            run
+            for run in results.values()
+            if run.workflow_results[0].final_decision is WorkflowDecision.REJECT
+        )
         persisted_correlations = {
             command.correlation_id for command in persisted.commands.values()
         }
-        self.assertIn(str(allowed[0].correlation_id), persisted_correlations)
-        self.assertNotIn(str(rejected[0].correlation_id), persisted_correlations)
-        self.assertEqual(rejected[0].simulation_result.completed_steps, ())
+        self.assertIn(str(allowed_run.correlation_id), persisted_correlations)
+        self.assertNotIn(str(rejected_run.correlation_id), persisted_correlations)
+        self.assertEqual(rejected_run.simulation_result.completed_steps, ())
