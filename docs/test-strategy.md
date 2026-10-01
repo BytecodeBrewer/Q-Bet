@@ -30,7 +30,7 @@ This permits useful consolidation now while keeping later correction rounds expl
 
 ## Current Test Inventory By Purpose
 
-The current #196 working baseline after reconciling accepted #195 and #213 contains **122 Python test files**. This inventory is grouped by regression purpose rather than historical ticket names:
+The current #196 working baseline after reconciling accepted #195, #209 and #213 contains **123 Python test files**. This inventory is grouped by regression purpose rather than historical ticket names:
 
 | Group | Files | Primary ownership |
 | --- | ---: | --- |
@@ -41,7 +41,7 @@ The current #196 working baseline after reconciling accepted #195 and #213 conta
 | other focused unit | 23 | reporting, Monitoring, notifications, storage/web helpers and CI contracts |
 | PostgreSQL integration | 7 | durable repositories, recovery, idempotency, row-level persistence guarantees |
 | web integration | 33 | authentication, authorization, state-changing HTTP actions and customer/staff surfaces |
-| workflow integration | 10 | queue lifecycle, approval/revalidation, dispatch and mode isolation |
+| workflow integration | 11 | queue lifecycle, approval/revalidation, dispatch, mode isolation and authoritative Simulation liquidity |
 | other integration | 8 | bank, notifications, settlement and observability composition |
 | connected E2E | 2 | canonical product composition plus protected bunq sandbox boundary |
 | performance | 1 | Phase 3 connected performance budget |
@@ -125,7 +125,7 @@ The #196 audit uses measured coverage and reference search to distinguish dead a
 - The accepted Phase 3 security hardening is now owned by `test_account_security.py` and `test_security_hardening.py`; these cover token lifetime/redaction, session rotation, CSRF/method constraints, staff-only runtime controls and security headers. The earlier GUI control-plane duplicates stay removed.
 - Execution approval and manual-action lifecycle ownership now stays with `test_execution_approval_ui.py`, `test_execution_approval_boundary.py`, and `test_manual_execution_lifecycle.py`. Capital approval remains a separate money-movement concern and is not merged into those execution tests.
 - The accepted Bonus Offer redesign is owned by `test_bonus_offers.py`, `test_bonus_offer_simulation.py`, `test_bonus_offer_dependency_invalidation.py`, and `test_engine_notices.py`. These add promotion-term intake, duplicate handling, connected Bonus simulation, dependency invalidation and coverage/readiness presentation rather than duplicating the SportsCapital connected E2E.
-- Issue #209 is still active at this reconciliation point. Its shared Simulation-portfolio changes are intentionally not pre-empted here; once they land, #196 must re-run the same ownership/coverage audit for the Simulation layer before final Phase 3 acceptance.
+- Accepted #209 shared-Simulation ownership is now explicit: `test_simulation_liquidity_concurrency.py` owns authoritative shared-capital contention and currency-mismatch behavior under the PostgreSQL row-lock boundary; `test_mode_queue_and_isolation.py` owns queue timing, claim/recheck/expiry and cross-mode isolation, without duplicating the capital-contention scenario. Web Simulation controls own seed/reset/routing/user-surface behavior, and focused unit tests own runner-level LiquidityChecker decisions.
 
 This distinction is the cleanup rule for later passes: unused code with a superseding canonical owner is removed; live safety/persistence behavior receives a focused owner before any overlapping higher-level test is considered redundant.
 
@@ -165,27 +165,17 @@ The earlier temporary exception for `tests/integration/web/test_phase2_visuals.p
 
 ## Current #196 Reconciled Result
 
-After merging the accepted #195 security/approval work and #213 Bonus Offer redesign into the existing #196 branch, Validation #803 measured the shared head `6c269220aaa867ab6a57d0498e2790bc1da1af09`:
+The accepted #209 shared Simulation portfolio has now been merged into the existing #196 branch. The ownership audit is complete, including consolidation of the duplicate shared-capital contention regression into the dedicated Simulation liquidity-concurrency suite.
 
-- **913 passed, 2 skipped** in **182.69 seconds**;
-- **89.10% total line coverage**, above the required 85% gate;
-- **122 Python test files** in the current ownership inventory;
-- the PR is synchronized with the reviewed `develop` baseline and the #196 diff remains limited to its 14 consolidation/configuration/test files;
-- accepted Security ownership now lives in the dedicated account/security hardening suites rather than restored GUI-control duplicates;
-- accepted Approval/manual Execution ownership remains in the explicit approval-boundary and manual-lifecycle suites;
-- accepted Bonus Offer ownership remains in promotion-intake, connected Bonus simulation, dependency invalidation, and engine-notice suites;
-- the slowest deterministic test is the real-browser Bonus Offer create/edit interaction at **16.81s**; the next slowest tests are all approximately 1.4s or less;
-- that browser interaction remains inside the normal suite because it verifies the rendered progressive-form behavior required by the Bonus Offer product contract, while the separate performance job continues to own pipeline performance budgets.
+Current structural inventory before final exact-head measurement:
 
-Material intentionally uncovered areas remain narrow:
+- **123 Python test files**;
+- authoritative shared Simulation liquidity concurrency/currency behavior has one focused PostgreSQL integration owner;
+- queue/mode-isolation coverage no longer duplicates that contention scenario;
+- #195 Security/Approval and #213 Bonus Offer ownership remain unchanged;
+- the PR diff remains limited to #196 consolidation/configuration/test changes plus the test consolidation required by the final #209 audit.
 
-- `qbet.web.wsgi` is a five-line deployment bootstrap. It remains in the coverage denominator rather than being excluded, while Django checks, package build and Vercel build validation own its deployability;
-- concrete external bunq SDK/network branches remain partially uncovered by normal CI because provider credentials and sandbox writes are explicitly opt-in. Deterministic bank contracts stay in the normal suite and the protected bunq sandbox E2E owns the external boundary;
-- generated Django migrations are the only configured source exclusions.
-
-The deleted `qbet.web.report_exports` module is not listed as an uncovered exception because repository reference audit proved it was obsolete and the live export boundary is `qbet.reporting.exports`.
-
-Issue #209 is still active at this measurement point. When its shared Simulation-portfolio changes land, #196 requires another reconciliation of Simulation ownership/counts/coverage before final Phase 3 acceptance; this is an expected later correction round, not a competing baseline.
+Final deterministic test count, runtime and coverage are intentionally recorded only after the exact-head validation below completes.
 
 ## Adding Future Regressions
 
