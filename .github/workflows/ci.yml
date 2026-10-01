@@ -219,9 +219,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install Vercel Python build tooling
-        run: |
-          python -m pip install uv
-          python -m pip install .
+        run: python -m pip install uv
 
       - uses: actions/setup-node@v4
         with:
@@ -252,9 +250,19 @@ jobs:
           QBET_SIMULATION_MODE_ENABLED: "false"
         run: vercel build --yes --token "$VERCEL_TOKEN"
 
+      - name: Generate ephemeral Preview smoke token
+        id: preview-smoke
+        shell: bash
+        run: |
+          token="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
       - name: Deploy protected Preview candidate
         id: candidate
         shell: bash
+        env:
+          QBET_PREVIEW_SMOKE_TOKEN: ${{ steps.preview-smoke.outputs.token }}
         run: |
           deployment_url="$(
             vercel deploy --prebuilt --yes \
@@ -264,7 +272,8 @@ jobs:
               --env QBET_DJANGO_DEBUG=false \
               --env QBET_DJANGO_ALLOWED_HOSTS=q-bet.vercel.app \
               --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
-              --env QBET_SIMULATION_MODE_ENABLED=false
+              --env QBET_SIMULATION_MODE_ENABLED=false \
+              --env QBET_PREVIEW_SMOKE_TOKEN="$QBET_PREVIEW_SMOKE_TOKEN"
           )"
           test -n "$deployment_url"
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
@@ -310,70 +319,32 @@ jobs:
 
       - name: Verify authenticated candidate product routes
         shell: bash
+        env:
+          QBET_PREVIEW_SMOKE_TOKEN: ${{ steps.preview-smoke.outputs.token }}
         run: |
           deployment_url="${{ steps.candidate.outputs.url }}"
+          cookie_jar="$(mktemp)"
+          trap 'rm -f "$cookie_jar"' EXIT
 
-          session_key="$(
-            vercel env run -e preview --token "$VERCEL_TOKEN" -- \
-              python - <<'PY' | tail -n 1
-          import os
-
-          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
-
-          import django
-
-          django.setup()
-
-          from django.contrib.auth import get_user_model
-          from django.test import Client
-
-          username = "qbet-preview-smoke"
-          User = get_user_model()
-          user = User.objects.get(username=username)
-          if not user.is_active or user.is_staff or user.is_superuser:
-              raise SystemExit("preview smoke identity must be active and non-privileged")
-
-          client = Client()
-          client.force_login(user)
-          session = client.session
-          session.set_expiry(300)
-          session.save()
-          cookie = client.cookies.get("sessionid")
-          if cookie is None or not cookie.value:
-              raise SystemExit("preview smoke session was not created")
-          print(cookie.value)
-          PY
+          login_status="$(
+            vercel curl /internal/preview-smoke/session/ --deployment "$deployment_url" -- \
+              --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer $QBET_PREVIEW_SMOKE_TOKEN" \
+              --cookie-jar "$cookie_jar" \
+              --output /dev/null \
+              --write-out "%{http_code}"
           )"
-
-          test -n "$session_key" || {
-            echo "::error::Could not create the ephemeral Preview smoke session."
+          test "$login_status" = "200" || {
+            echo "::error::Preview smoke session boundary returned HTTP $login_status."
             exit 1
           }
-
-          cleanup_session() {
-            vercel env run -e preview --token "$VERCEL_TOKEN" -- \
-              python - "$session_key" <<'PY' >/dev/null 2>&1 || true
-          import os
-          import sys
-
-          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
-
-          import django
-
-          django.setup()
-
-          from django.contrib.sessions.models import Session
-
-          Session.objects.filter(session_key=sys.argv[1]).delete()
-          PY
-          }
-          trap cleanup_session EXIT
 
           for route in /dashboard/ /reports/ /portfolio/; do
             route_status="$(
               vercel curl "$route" --deployment "$deployment_url" -- \
                 --silent --show-error \
-                --cookie "sessionid=$session_key" \
+                --cookie "$cookie_jar" \
                 --output /dev/null \
                 --write-out "%{http_code}"
             )"
@@ -383,7 +354,21 @@ jobs:
             }
           done
 
-          echo "Authenticated candidate Dashboard, Reports, and Portfolio routes passed with an ephemeral low-privilege Django session." >> "$GITHUB_STEP_SUMMARY"
+          logout_status="$(
+            vercel curl /internal/preview-smoke/session/ --deployment "$deployment_url" -- \
+              --silent --show-error \
+              --request DELETE \
+              --header "Authorization: Bearer $QBET_PREVIEW_SMOKE_TOKEN" \
+              --cookie "$cookie_jar" \
+              --output /dev/null \
+              --write-out "%{http_code}"
+          )"
+          test "$logout_status" = "200" || {
+            echo "::error::Preview smoke session cleanup returned HTTP $logout_status."
+            exit 1
+          }
+
+          echo "Authenticated candidate Dashboard, Reports, and Portfolio routes passed through the Preview-only smoke boundary." >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     name: Vercel deployment

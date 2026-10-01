@@ -27,6 +27,7 @@ With the intended Q-Bet development configuration, local and hosted application 
 - `QBET_SUPABASE_URL` and `QBET_SUPABASE_STORAGE_SECRET_KEY`: server-only configuration for private profile-avatar object storage. Keep the bucket private and configure the key only in the deployment environment's secret store; never expose it to templates, browser code, or logs. Avatar files are normalized before upload and served only through the authenticated Django account route.
 - `QBET_HOSTED_RUNTIME`: explicit hosted-runtime signal used by Preview and Production security checks. Vercel `preview` and `production` environments are also detected automatically.
 - `QBET_HOSTED_PREVIEW`: retained as a compatibility signal for Preview; it no longer defines the complete hosted security boundary.
+- `QBET_PREVIEW_SMOKE_TOKEN`: ephemeral per-deployment token used only by the protected Preview candidate smoke boundary. CI generates and masks it for the candidate deployment; it is not a persistent application credential.
 - `QBET_SESSION_COOKIE_AGE_SECONDS`: optional positive session lifetime override. The default is 12 hours.
 - `QBET_SIMULATION_MODE_ENABLED`: bootstrap/default Simulation availability. Preview CI sets this to `false`; another deployed environment may explicitly enable it.
 - `QBET_TEST_DATABASE_URL`: disposable PostgreSQL connection used by pytest. Tests replace `QBET_DATABASE_URL` inside the pytest process with this value so they cannot accidentally mutate the shared Supabase database.
@@ -62,9 +63,9 @@ python manage.py migrate --plan
 python manage.py migrate --noinput
 ```
 
-For the hosted Preview environment, the repository also provides the manually triggered `Preview migration operator` GitHub Actions workflow. It checks out an operator-selected ref and runs Django's migration plan/apply/check sequence through `vercel env run -e preview`, so the database URL remains inside the protected Vercel Preview environment instead of being copied into ordinary PR jobs.
+Hosted migrations remain an explicit operator action using an authorized Django/Supabase database environment. Ordinary PR validation never receives the hosted database URL and never runs shared migrations. After an operator applies the committed migration plan, the exact candidate is rerun and must report `persistence=ready` before promotion.
 
-The running candidate preflight exercises authenticated routes with the dedicated low-privilege `qbet-preview-smoke` identity. CI creates a short-lived Django database session through `vercel env run -e preview`, verifies that the identity is active and neither staff nor superuser, sends only that session cookie to the protected candidate, and deletes the session on exit. The identity keeps an unusable password, so the smoke path needs no reusable application credential or HTTP authentication bypass.
+The running candidate preflight exercises authenticated routes with the dedicated low-privilege `qbet-preview-smoke` identity through `/internal/preview-smoke/session/`. CI generates a fresh masked token for each protected Preview deployment and passes it only as that candidate's runtime environment. The machine boundary returns 404 outside Preview or for a wrong/missing token, refuses inactive/staff/superuser identities, creates a five-minute normal Django session on POST, and clears it on DELETE. The smoke identity keeps an unusable password, so no reusable application credential or database secret reaches the PR runner.
 
 The first two commands are useful read-only checks. Run the final migration command only with the intended target `QBET_DATABASE_URL` and the required operational authorization. After applying migrations, `/health/` should return `status=ok` and `persistence=ready`.
 
