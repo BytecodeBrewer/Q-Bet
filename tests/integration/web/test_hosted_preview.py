@@ -10,7 +10,10 @@ class HostedPostgresTests(TestCase):
             password="Strong-pass-123",
             is_staff=True,
         )
-        self.smoke = User.objects.create_user("qbet-preview-smoke", password=None)
+        self.smoke = User.objects.create_user(
+            "qbet-preview-smoke",
+            password=None,
+        )
 
     def test_public_shell_health_and_auth_are_available(self) -> None:
         home = self.client.get("/")
