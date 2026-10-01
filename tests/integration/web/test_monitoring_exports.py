@@ -254,6 +254,18 @@ class MonitoringExportTests(TestCase):
         self.assertEqual(json_export.json(), [])
         self.assertEqual(len(csv_export.content.decode().strip().splitlines()), 1)
 
+    def test_unavailable_history_page_is_explicitly_unavailable(self) -> None:
+        self.client.force_login(self.staff)
+        unavailable = MonitoringService(_UnavailableReader())
+
+        with patch("qbet.web.views.WORKFLOW_MONITORING_SERVICE", unavailable):
+            response = self.client.get("/monitoring/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Monitoring history unavailable")
+        self.assertContains(response, "Workflow history cannot be read")
+        self.assertContains(response, "Readiness")
+
     def test_unavailable_history_exports_are_explicitly_unavailable(self) -> None:
         self.client.force_login(self.staff)
         unavailable = MonitoringService(_UnavailableReader())

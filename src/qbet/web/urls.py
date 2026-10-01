@@ -18,6 +18,7 @@ from qbet.web.execution_approvals import (
 from qbet.web.execution_tick import execution_tick
 from qbet.web.polling_settings import polling_settings
 from qbet.web.polling_tick import polling_tick
+from qbet.web.preview_smoke import preview_smoke_session
 from qbet.web.routing_settings import routing_settings
 
 urlpatterns = [
@@ -26,6 +27,7 @@ urlpatterns = [
     path("metrics/", views.metrics, name="metrics"),
     path("internal/execution/tick/", execution_tick, name="execution-tick"),
     path("internal/polling/tick/", polling_tick, name="polling-tick"),
+    path("internal/preview-smoke/session/", preview_smoke_session, name="preview-smoke-session"),
     path("register/", views.register, name="register"),
     path("verification/pending/", views.verification_pending, name="verification-pending"),
     path("verify-email/<str:uidb64>/<str:token>/", views.verify_email, name="verify-email"),

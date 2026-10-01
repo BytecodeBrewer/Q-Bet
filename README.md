@@ -80,18 +80,19 @@ $env:QBET_TEST_DATABASE_URL='postgresql://qbet:qbet@127.0.0.1:5432/qbet_test'
 python -m pip install . -r requirements-dev.txt
 python -m ruff check .
 python -m pyright
-python -m pytest
+python -m pytest --cov=src/qbet --cov-report=xml:coverage.xml --cov-report= --durations=20
+python -m coverage report
 python manage.py check
 python -m build
 ```
 
-The GitHub Actions **PostgreSQL validation gate** is the authoritative standard result for Dev Handoffs and reviews. For pull requests it explicitly checks out and verifies the submitted PR head SHA, rather than GitHub's synthetic merge SHA; pushes verify their own push SHA. Every run receives a fresh PostgreSQL 16 service and runs `git diff --check`, Ruff, Pyright, migration checks, migrations, the full standard Pytest suite, Django checks, and the package build. The gate receives no provider or bank credentials; external bunq sandbox E2E remains in its separate opt-in workflow, and the performance baseline remains a separate job.
+The GitHub Actions **PostgreSQL validation gate** is the authoritative standard result for Dev Handoffs and reviews. For pull requests it explicitly checks out and verifies the submitted PR head SHA, rather than GitHub's synthetic merge SHA; pushes verify their own push SHA. Every run receives a fresh PostgreSQL 16 service and runs `git diff --check`, Ruff, Pyright, migration checks, migrations, the full standard Pytest suite with repository-wide line coverage, the configured 85% coverage gate, Django checks, and the package build. The gate uploads `coverage.xml` for inspection. It receives no provider or bank credentials; external bunq sandbox E2E remains in its separate opt-in workflow, and the performance baseline remains a separate job.
 
 ## Deployment
 
-Pull requests run a Vercel Preview build check against the exact PR head after the normal validation and performance jobs. It verifies that the app can be built, but does not create a deployment for feature branches. A push to `develop` also runs the Vercel Preview build check, then creates a Preview deployment. Only a push to `main` builds and deploys to the Production Vercel environment and checks the public stable Q-Bet URL.
+Pull requests and integration pushes first build the exact release, then deploy it as a protected Vercel Preview candidate after the PostgreSQL validation and performance gates are green. The candidate preflight verifies the exact release SHA, persistence/migration readiness, public shell/login/static routes, and authenticated Dashboard/Reports/Portfolio routes through Vercel-authenticated access. A candidate with pending migrations, failed authentication, or any other runtime readiness failure blocks the deployment chain. Only a push to `main` may continue to the Production Vercel environment, and only after the same candidate preflight succeeds.
 
-Production and Preview configuration, including runtime secrets, live in the corresponding Vercel environments. GitHub Actions does not connect to the application database or copy secrets out of Supabase during deployment. Deployments do not run schema migrations or gate on migration state; schema changes remain an explicit operator-controlled task.
+Production and Preview configuration, including runtime secrets, live in the corresponding Vercel environments. GitHub Actions does not connect directly to the application database or copy database secrets out of Supabase during ordinary PR validation. Candidate and Production deployments never run schema migrations automatically; hosted schema changes remain an explicit operator action through an authorized database/migration environment. The candidate auth smoke uses the dedicated low-privilege `qbet-preview-smoke` identity behind a Preview-only machine boundary. CI generates a fresh masked token for each candidate deployment, the runtime creates a five-minute Django session, and the same token clears that session after the smoke. No reusable application password or database credential is exposed to the PR runner. Vercel Preview protection keeps candidate URLs non-public while CI uses authenticated Vercel tooling to exercise them.
 
 Day-to-day deployment management is handled through the Vercel project UI and the GitHub Actions workflow; the README intentionally does not duplicate Vercel's own operating instructions.
 

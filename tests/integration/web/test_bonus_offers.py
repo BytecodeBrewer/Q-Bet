@@ -134,26 +134,36 @@ window.addEventListener("load", () => {
     with tempfile.TemporaryDirectory(prefix="qbet-browser-") as tmp:
         html_path = Path(tmp, "rendered.html")
         html_path.write_text(html, encoding="utf-8")
-        completed = subprocess.run(
-            (
-                browser,
-                "--headless=new",
-                "--no-sandbox",
-                "--disable-gpu",
-                "--disable-dev-shm-usage",
-                "--disable-background-networking",
-                "--allow-file-access-from-files",
-                "--run-all-compositor-stages-before-draw",
-                "--virtual-time-budget=1400",
-                f"--window-size={width},{height}",
-                "--dump-dom",
-                html_path.resolve().as_uri(),
-            ),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=40,
-        )
+        def run_browser(attempt: int) -> subprocess.CompletedProcess[str]:
+            profile = Path(tmp, f"chrome-profile-{attempt}")
+            return subprocess.run(
+                (
+                    browser,
+                    "--headless=new",
+                    "--no-sandbox",
+                    "--disable-gpu",
+                    "--disable-dev-shm-usage",
+                    "--disable-background-networking",
+                    "--disable-extensions",
+                    "--no-first-run",
+                    "--allow-file-access-from-files",
+                    "--run-all-compositor-stages-before-draw",
+                    "--virtual-time-budget=1400",
+                    f"--window-size={width},{height}",
+                    f"--user-data-dir={profile}",
+                    "--dump-dom",
+                    html_path.resolve().as_uri(),
+                ),
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=40,
+            )
+
+        try:
+            completed = run_browser(1)
+        except subprocess.TimeoutExpired:
+            completed = run_browser(2)
 
     match = re.search(
         r'<pre id="qbet-browser-evidence">(.*?)</pre>',

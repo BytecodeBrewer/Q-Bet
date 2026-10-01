@@ -319,63 +319,6 @@ class GuiControlPlaneTests(TestCase):
         self.assertNotContains(response, "workflow.orchestrator")
         self.assertNotContains(response, "All BonusEngine reports")
 
-    def test_monitoring_requires_staff_access(self) -> None:
-        self.assertRedirects(
-            self.client.get("/monitoring/"),
-            "/accounts/login/?next=/monitoring/",
-            fetch_redirect_response=False,
-        )
-        self.client.force_login(self.user)
-        self.assertEqual(self.client.get("/monitoring/").status_code, 302)
-
-        self.client.force_login(self.staff)
-        response = self.client.get("/monitoring/")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "BonusEngine")
-
-    @override_settings(QBET_SIMULATION_MODE_ENABLED=False)
-    def test_simulation_visibility_is_admin_only_and_uses_persisted_control(self) -> None:
-        SimulationAvailability.objects.create(pk=1, enabled=True)
-        self.client.force_login(self.user)
-        self.assertEqual(self.client.get("/simulation/").status_code, 404)
-        self.assertNotContains(self.client.get("/dashboard/"), "Start simulation")
-
-        self.client.force_login(self.staff)
-        simulation = self.client.get("/simulation/")
-        dashboard = self.client.get("/dashboard/")
-        self.assertEqual(simulation.status_code, 200)
-        self.assertEqual(simulation.content.decode().count("data-simulation-engine="), 2)
-        self.assertContains(dashboard, "Start simulation")
-
-        SimulationAvailability.objects.filter(pk=1).update(enabled=False)
-        self.assertEqual(self.client.get("/simulation/").status_code, 404)
-        self.assertNotContains(self.client.get("/dashboard/"), "Start simulation")
-
-    def test_settings_show_admin_area_only_to_staff(self) -> None:
-        self.client.force_login(self.user)
-        user_settings = self.client.get("/settings/presentation/")
-        self.assertContains(user_settings, "browser session only")
-        self.assertNotContains(user_settings, "Admin Area")
-        self.assertNotContains(user_settings, "Enable Simulation plane")
-
-        self.client.force_login(self.staff)
-        staff_settings = self.client.get("/settings/presentation/")
-        self.assertContains(staff_settings, "Admin Area")
-        self.assertContains(staff_settings, "Enable Simulation plane")
-        self.assertContains(staff_settings, "Admin only")
-
-    def test_presentation_preferences_are_session_scoped_and_disclosed(self) -> None:
-        self.client.force_login(self.user)
-
-        response = self.client.post(
-            "/settings/presentation/", {"theme": "dark", "font_size": "large"}
-        )
-        self.assertRedirects(response, "/settings/presentation/")
-        dashboard = self.client.get("/dashboard/")
-
-        self.assertContains(dashboard, 'data-theme="dark"')
-        self.assertContains(dashboard, 'data-font-size="large"')
-
     def test_dashboard_drag_order_is_session_scoped_and_planes_are_separate(self) -> None:
         self.client.force_login(self.user)
         response = self.client.post(

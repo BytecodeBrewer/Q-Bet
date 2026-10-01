@@ -236,3 +236,20 @@ class SimulationSharedLiquidityConcurrencyTests(TransactionTestCase):
         persisted = SimulationPortfolioLedgerRepository().load(currency="EUR")
         assert persisted is not None
         self.assertGreaterEqual(len(persisted.commands), 4)
+
+        allowed_run = next(
+            run
+            for run in results.values()
+            if run.workflow_results[0].final_decision is WorkflowDecision.ALLOW
+        )
+        rejected_run = next(
+            run
+            for run in results.values()
+            if run.workflow_results[0].final_decision is WorkflowDecision.REJECT
+        )
+        persisted_correlations = {
+            command.correlation_id for command in persisted.commands.values()
+        }
+        self.assertIn(str(allowed_run.correlation_id), persisted_correlations)
+        self.assertNotIn(str(rejected_run.correlation_id), persisted_correlations)
+        self.assertEqual(rejected_run.simulation_result.completed_steps, ())
