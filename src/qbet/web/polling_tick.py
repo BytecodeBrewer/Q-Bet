@@ -171,7 +171,7 @@ def _discovery_work(
             sport=sport,
             market=market,
             correlation_id=uuid5(NAMESPACE_URL, f"qbet-discovery:{engine}:{identity}"),
-            event_starts_at=now + timedelta(days=365),
+            event_starts_at=now,
             next_due_at=now,
             discovery=True,
             discovery_limit=limit,

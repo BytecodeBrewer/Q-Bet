@@ -53,6 +53,7 @@ class PollingRequest(DomainModel):
     result_tracking_required: bool = True
     mode: Identifier
     engine: Identifier
+    discovery: bool = False
 
     @property
     def key(self) -> tuple[PollingTarget, str, str, str, UUID, str, str]:
@@ -288,6 +289,8 @@ class SmartPollingPolicy:
                 reason="retry_attempts_exhausted",
             )
         if request.target is PollingTarget.MARKET:
+            if request.discovery:
+                return self._discovery_decision(request, strategy)
             return self._market_decision(request, strategy)
         return self._result_decision(request, strategy)
 
@@ -314,6 +317,30 @@ class SmartPollingPolicy:
             outcome=PollingOutcome.DEFERRED_CAPACITY,
             reason="polling_capacity_insufficient",
             freshness_deadline=freshness_deadline,
+        )
+
+    def _discovery_decision(
+        self, request: PollingRequest, strategy: PollingStrategy
+    ) -> PollingDecision:
+        interval = max(
+            strategy.market_interval or strategy.freshness_window, strategy.freshness_window
+        )
+        deadline = request.fetched_at + interval if request.fetched_at is not None else None
+        if deadline is not None and deadline > request.next_poll_at:
+            return PollingDecision(
+                request=request,
+                outcome=PollingOutcome.SKIPPED_FRESH,
+                reason="discovery_data_fresh",
+                freshness_deadline=deadline,
+            )
+        capacity = self._capacity_decision(request, strategy)
+        if capacity is not None:
+            return capacity
+        return PollingDecision(
+            request=request,
+            outcome=PollingOutcome.SCHEDULED,
+            reason="discovery_refresh_due",
+            scheduled_for=request.next_poll_at,
         )
 
     def _market_decision(

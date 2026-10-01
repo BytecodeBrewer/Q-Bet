@@ -99,6 +99,7 @@ class PollingWork(DomainModel):
             attempt=self.attempt,
             mode=self.mode,
             engine=self.engine,
+            discovery=self.discovery,
         )
 
     def collection_request(self) -> DataCollectionRequest:
@@ -217,7 +218,7 @@ class SmartPollingRuntime:
 
         if decision.outcome is PollingOutcome.SCHEDULED:
             assert decision.scheduled_for is not None
-            if work.last_outcome is None and work.last_success_at is None:
+            if work.last_outcome is None and work.last_success_at is None and not work.discovery:
                 updated = work.model_copy(
                     update={
                         "next_due_at": decision.scheduled_for,
@@ -425,6 +426,10 @@ class SmartPollingRuntime:
         return PollingRuntimeOutcome.SUCCESS, True
 
     def _schedule_after_success(self, work: PollingWork, *, now: AwareDatetime) -> PollingWork:
+        if work.discovery:
+            decision = self._policy.decide(work.request(evaluation_at=now))
+            if decision.freshness_deadline is not None:
+                return work.model_copy(update={"next_due_at": decision.freshness_deadline})
         planning_request = work.request(evaluation_at=now + timedelta(microseconds=1)).model_copy(
             update={"fetched_at": None}
         )

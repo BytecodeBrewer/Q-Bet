@@ -98,8 +98,14 @@ assumed-liquidity configuration remains explicit. No event id or manually
 supplied start time is required in this mode.
 
 The existing authenticated `POST /internal/polling/tick/` is the entry point.
-A discovery record first follows the existing polling schedule, then performs
-one read-only `/sports/{sport}/events` request. Its durable event-list payload
+A discovery record performs its first read-only `/sports/{sport}/events` request
+on the first eligible wake, subject to the existing capacity and retry gates.
+The existing policy repeats discovery after the larger of the configured market
+interval and freshness window; refresh-point presets use their freshness window
+(Conservative 15 minutes, Standard 5, Frequent 2). Discovery is not tied to a
+synthetic match start. Previously scheduled, never-fetched parents recover on
+synchronization without resetting failed attempts or retry backoff.
+Its durable event-list payload
 is the recoverable handoff: later wakes synchronize stable event/market targets
 into the same `PollingWorkRow` queue and perform the existing targeted odds
 reads. Repeating a wake does not create new identities or reset target state.
