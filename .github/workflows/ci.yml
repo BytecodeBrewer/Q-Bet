@@ -111,6 +111,7 @@ jobs:
         run: python -m coverage report
       - name: Upload coverage report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: q-bet-coverage-${{ github.sha }}
