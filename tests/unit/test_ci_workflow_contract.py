@@ -44,10 +44,13 @@ def test_pull_request_vercel_gate_builds_and_exercises_protected_candidate() -> 
     assert "operator-controlled migration path" in block
     assert "vercel curl /accounts/login/" in block
     assert "vercel curl /static/qbet_web/app.css" in block
-    assert "QBET_PREVIEW_SMOKE_USERNAME" in block
-    assert "QBET_PREVIEW_SMOKE_PASSWORD" in block
-    assert 'csrfmiddlewaretoken' in block
+    assert "qbet-preview-smoke" in block
+    assert "client.force_login(user)" in block
+    assert "preview smoke identity must be active and non-privileged" in block
+    assert 'Session.objects.filter(session_key=os.environ["SESSION_KEY"]).delete()' in block
     assert 'route in /dashboard/ /reports/ /portfolio/' in block
+    assert "QBET_PREVIEW_SMOKE_USERNAME" not in block
+    assert "QBET_PREVIEW_SMOKE_PASSWORD" not in block
     assert "vercel deploy --prebuilt --prod" not in block
     assert "manage.py migrate" not in block
     assert "psycopg.connect" not in block
