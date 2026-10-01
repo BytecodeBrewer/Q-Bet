@@ -1,0 +1,41 @@
+{% load display_preferences %}
+<section class="detail-panel simulation-portfolio-panel" aria-labelledby="simulation-portfolio-heading">
+  <div class="section-heading">
+    <div><span class="eyebrow">Shared Simulation capital</span><h2 id="simulation-portfolio-heading">Sandbox Portfolio</h2></div>
+    <span class="tag simulation-tag">Simulation only</span>
+  </div>
+  {% if simulation_control.portfolio.configured %}
+    {% for balance in simulation_control.portfolio.balances %}
+      <h3>{{ balance.currency }} balance</h3>
+      <dl class="metric-list">
+        <div><dt>Seed balance</dt><dd>{% localized_money balance.seed_amount balance.currency display_preferences %}</dd></div>
+        <div><dt>Available</dt><dd>{% localized_money balance.available balance.currency display_preferences %}</dd></div>
+        <div><dt>Reserved</dt><dd>{% localized_money balance.reserved balance.currency display_preferences %}</dd></div>
+        <div><dt>Locked</dt><dd>{% localized_money balance.locked balance.currency display_preferences %}</dd></div>
+        <div><dt>Pending</dt><dd>{% localized_money balance.pending balance.currency display_preferences %}</dd></div>
+        <div><dt>Working</dt><dd>{% localized_money balance.working balance.currency display_preferences %}</dd></div>
+        <div><dt>Settled</dt><dd>{% localized_money balance.settled balance.currency display_preferences %}</dd></div>
+        <div><dt>Costs</dt><dd>{% localized_money balance.cost balance.currency display_preferences %}</dd></div>
+      </dl>
+    {% endfor %}
+    <form method="post" action="{% url 'simulation-portfolio-reset' %}" class="simulation-portfolio-reset-form">
+      {% csrf_token %}
+      <input type="hidden" name="return_to" value="{{ simulation_return_to }}">
+      {{ simulation_portfolio_reset_form.confirm_reset }}
+      <button class="warning-button" type="submit">Reset sandbox to seed balance</button>
+    </form>
+    <p class="muted">Reset is blocked while Simulation work or unsettled capital remains. Previous ledger snapshots and reports are retained separately. {{ simulation_control.portfolio.reset_count }} prior reset(s).</p>
+  {% else %}
+    <p class="muted">No sandbox exists yet. Seed one shared virtual portfolio; engines will use its available capital.</p>
+    <form method="post" action="{% url 'simulation-portfolio-seed' %}">
+      {% csrf_token %}
+      <input type="hidden" name="return_to" value="{{ simulation_return_to }}">
+      {{ simulation_portfolio_seed_form.non_field_errors }}
+      <div class="simulation-form-grid">
+        <label>{{ simulation_portfolio_seed_form.amount.label }} {{ simulation_portfolio_seed_form.amount }} {{ simulation_portfolio_seed_form.amount.errors }}</label>
+        <label>{{ simulation_portfolio_seed_form.currency.label }} {{ simulation_portfolio_seed_form.currency }} {{ simulation_portfolio_seed_form.currency.errors }}</label>
+      </div>
+      <button class="primary" type="submit">Create sandbox portfolio</button>
+    </form>
+  {% endif %}
+</section>

@@ -475,12 +475,37 @@ class SimulationStartForm(forms.Form):
             (SimulationEngine.SPORTS_CAPITAL.value, "SportsCapitalEngine"),
         )
     )
-    starting_capital = forms.DecimalField(
-        min_value=Decimal("10"),
+    currency = forms.ChoiceField(
+        choices=(("EUR", "EUR"), ("GBP", "GBP"), ("USD", "USD")),
+        required=False,
+        initial="EUR",
+        label="Portfolio currency",
+    )
+
+    def clean_currency(self) -> str:
+        return self.cleaned_data["currency"] or "EUR"
+
+
+class SimulationPortfolioSeedForm(forms.Form):
+    amount = forms.DecimalField(
+        min_value=Decimal("0.01"),
         max_value=Decimal("100000000"),
         max_digits=18,
         decimal_places=2,
-        initial=Decimal("100"),
+        initial=Decimal("1000"),
+        label="Virtual seed amount",
+    )
+    currency = forms.ChoiceField(
+        choices=(("EUR", "EUR"), ("GBP", "GBP"), ("USD", "USD")),
+        initial="EUR",
+        label="Currency",
+    )
+
+
+class SimulationPortfolioResetForm(forms.Form):
+    confirm_reset = forms.BooleanField(
+        required=True,
+        label="I understand reset returns the sandbox to its seed balance.",
     )
 
 

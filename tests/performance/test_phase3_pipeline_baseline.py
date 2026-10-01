@@ -27,6 +27,7 @@ from qbet.request_handler import (
 from qbet.storage.ledger import ModeWorkQueueRepository
 from qbet.storage.models import ModeWorkQueueRow
 from qbet.storage.monitoring import PostgresMonitoringRepository
+from qbet.web.simulation_control import SimulationControlService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
 
@@ -111,6 +112,10 @@ class Phase3PipelinePerformanceBaselineTests(TransactionTestCase):
             is_staff=True,
         )
         self.routing = RoutingConfiguration(bonus=EngineModes(simulation=True))
+        SimulationControlService().seed_portfolio(
+            amount=Decimal("1000"),
+            currency="EUR",
+        )
 
     def test_connected_pipeline_baseline(self) -> None:
         measurements: list[dict[str, object]] = []

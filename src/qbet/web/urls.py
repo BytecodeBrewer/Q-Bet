@@ -98,6 +98,16 @@ urlpatterns = [
     path("simulation/", views.simulation, name="simulation"),
     path("activity/provider/", views.provider_activity, name="provider-activity"),
     path("simulation/start/", views.simulation_start, name="simulation-start"),
+    path(
+        "simulation/portfolio/seed/",
+        views.simulation_portfolio_seed,
+        name="simulation-portfolio-seed",
+    ),
+    path(
+        "simulation/portfolio/reset/",
+        views.simulation_portfolio_reset,
+        name="simulation-portfolio-reset",
+    ),
     path("simulation/<uuid:run_id>/run/", views.simulation_run, name="simulation-run"),
     path("simulation/<uuid:run_id>/stop/", views.simulation_stop, name="simulation-stop"),
     path("simulation/pipeline-dry-run/", views.pipeline_dry_run, name="pipeline-dry-run"),

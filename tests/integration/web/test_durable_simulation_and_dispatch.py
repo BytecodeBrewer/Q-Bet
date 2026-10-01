@@ -46,6 +46,7 @@ class DurableSimulationAndDispatchTests(TestCase):
             is_staff=True,
         )
         SimulationAvailability.objects.create(pk=1, enabled=True)
+        SimulationControlService().seed_portfolio(amount=Decimal("125"), currency="EUR")
         RoutingConfigurationRepository().save(
             RoutingConfiguration(sports_capital=EngineModes(simulation=True))
         )
@@ -55,7 +56,7 @@ class DurableSimulationAndDispatchTests(TestCase):
             "/simulation/start/",
             {
                 "engine": SimulationEngine.SPORTS_CAPITAL.value,
-                "starting_capital": "125.00",
+                "currency": "EUR",
             },
         )
 
@@ -81,14 +82,9 @@ class DurableSimulationAndDispatchTests(TestCase):
 
     def test_gui_simulation_preserves_existing_shared_ledger_history(self) -> None:
         repository = SimulationPortfolioLedgerRepository()
-        initial = PortfolioLedger(
-            balance=PortfolioBalance(
-                mode="simulation",
-                currency="EUR",
-                available=Decimal("200"),
-            )
-        )
-        repository.load_or_create(initial)
+        SimulationControlService().seed_portfolio(amount=Decimal("200"), currency="EUR")
+        initial = repository.load(currency="EUR")
+        assert initial is not None
         seeded, decision = initial.apply(
             LedgerCommand(
                 id="seed-cost",
@@ -117,7 +113,7 @@ class DurableSimulationAndDispatchTests(TestCase):
             "/simulation/start/",
             {
                 "engine": SimulationEngine.SPORTS_CAPITAL.value,
-                "starting_capital": "125.00",
+                "currency": "EUR",
             },
         )
 
@@ -125,7 +121,8 @@ class DurableSimulationAndDispatchTests(TestCase):
         run = SimulationRunState.objects.get()
         executed = self.client.post(f"/simulation/{run.run_id}/run/")
         self.assertEqual(executed.status_code, 200)
-        persisted = repository.load_or_create(initial)
+        persisted = repository.load(currency="EUR")
+        assert persisted is not None
         self.assertIn("seed-cost", persisted.commands)
         self.assertGreater(len(persisted.commands), 1)
         self.assertNotEqual(persisted.balance.available, Decimal("125.00"))
@@ -211,6 +208,7 @@ class DurableSimulationAndDispatchTests(TestCase):
         self.assertEqual(bob_state[0].proposal.work.owner, "bob")
 
     def test_routed_simulation_runs_directly_with_durable_merge(self) -> None:
+        SimulationControlService().seed_portfolio(amount=Decimal("100"), currency="EUR")
         opportunity_id = "direct-routed-simulation"
         coordinator = ModeDispatchCoordinator(
             RoutingConfiguration(bonus=EngineModes(simulation=True)),

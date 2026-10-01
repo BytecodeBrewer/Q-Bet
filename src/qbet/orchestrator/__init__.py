@@ -10,7 +10,13 @@ from typing import TYPE_CHECKING, Protocol
 from pydantic import Field, model_validator
 
 from qbet.calculations import FreeBetResult, QualifyingBetResult
-from qbet.domain.models import Currency, DomainModel, Identifier, PositiveDecimal
+from qbet.domain.models import (
+    Currency,
+    DomainModel,
+    Identifier,
+    NonNegativeDecimal,
+    PositiveDecimal,
+)
 from qbet.domain.verification import (
     DomainRiskStatus,
     ProviderState,
@@ -54,7 +60,7 @@ class RejectionReason(StrEnum):
 
 
 class CapitalSnapshot(DomainModel):
-    available_capital: PositiveDecimal
+    available_capital: NonNegativeDecimal
     currency: Currency
 
 
@@ -234,6 +240,29 @@ class LiquidityChecker:
             user_id=user_id,
             provider_id=provider_id,
         )
+
+    @staticmethod
+    def capital_decision(
+        snapshot: CapitalSnapshot,
+        *,
+        required_capital: Decimal,
+        currency: Currency,
+    ) -> WorkflowStageDecision:
+        """Validate one proposed allocation against authoritative available capital."""
+
+        if required_capital < 0:
+            raise ValueError("required capital must not be negative")
+        if currency != snapshot.currency:
+            return WorkflowStageDecision(
+                decision=WorkflowDecision.REJECT,
+                reason=RejectionReason.CURRENCY_MISMATCH.value,
+            )
+        if required_capital > snapshot.available_capital:
+            return WorkflowStageDecision(
+                decision=WorkflowDecision.REJECT,
+                reason=RejectionReason.CAPITAL_LIMIT.value,
+            )
+        return WorkflowStageDecision(decision=WorkflowDecision.ALLOW)
 
     def check(self, context: WorkflowContext) -> WorkflowStageDecision:
         """Run the configured proposal-only allocation at the workflow gate."""

@@ -108,19 +108,20 @@
         <article class="summary-item summary-item-primary"><span>Running matches</span><strong>{{ simulation_monitoring.summary.active_matches }}</strong><small>running now</small></article>
         <article class="summary-item"><span>Pending matches</span><strong>{{ simulation_monitoring.summary.pending_matches }}</strong><small>waiting</small></article>
         <article class="summary-item"><span>Recorded runs</span><strong>{{ simulation_monitoring.summary.recorded_activity }}</strong><small>available history</small></article>
-        <article class="summary-item"><span>Virtual capital</span><strong>{% if simulation_monitoring.summary.involved_capital is not None %}{% localized_money simulation_monitoring.summary.involved_capital "EUR" display_preferences %}{% else %}<span class="unavailable-value">Unavailable</span>{% endif %}</strong><small>simulation only</small></article>
+        <article class="summary-item"><span>Sandbox portfolio</span><strong>{% if simulation_control.portfolio.configured %}Initialized{% else %}<span class="unavailable-value">Not seeded</span>{% endif %}</strong><small>shared by Simulation engines</small></article>
       </section>
+      {% include "qbet_web/_simulation_portfolio.html" %}
       <p class="admin-metadata">Technical simulation history: {{ simulation_monitoring.summary.warning_count }} warning(s), {{ simulation_monitoring.summary.error_count }} error(s). <a href="{% url 'monitoring' %}">Open Monitoring</a></p>
 
       <section class="simulation-control-panel">
         <div class="section-heading"><div><span class="eyebrow">Sandbox</span><h3>Sandbox simulation</h3></div><span class="tag simulation-tag">Virtual only</span></div>
-        <p>SportsCapital can use its configured fixture or connected odds source. BonusEngine uses active user-owned Bonus Offers with fresh fixed-odds sportsbook market data.</p>
+        <p>SportsCapital can use its configured fixture or connected odds source. BonusEngine uses active user-owned Bonus Offers with fresh fixed-odds sportsbook market data. Both use the shared Sandbox Portfolio.</p>
         <form method="post" action="{% url 'simulation-start' %}">
           {% csrf_token %}
           {{ start_form.non_field_errors }}
           <div class="simulation-form-grid">
             <label>Engine {{ start_form.engine }} {{ start_form.engine.errors }}</label>
-            <label>Virtual capital (EUR) {{ start_form.starting_capital }} {{ start_form.starting_capital.errors }}</label>
+            <label>Portfolio currency {{ start_form.currency }} {{ start_form.currency.errors }}</label>
           </div>
           <button class="primary" type="submit">Start simulation</button>
         </form>
@@ -154,7 +155,6 @@
             <div class="engine-priority-metrics">
               <div><span>Running</span><strong>{{ engine.running_matches }}</strong></div>
               <div><span>Pending</span><strong>{{ engine.pending_matches }}</strong></div>
-              <div><span>Virtual capital</span><strong>{% if engine.involved_capital is not None %}{% localized_money engine.involved_capital "EUR" display_preferences %}{% else %}—{% endif %}</strong></div>
             </div>
             <div class="engine-secondary-metrics"><span>State <strong>{{ engine.live_state }}</strong></span><span>Progress <strong>{% if engine.latest_report_id %}{% for report in simulation_monitoring.reports %}{% if report.run_id == engine.latest_report_id %}{{ report.progress }}{% endif %}{% endfor %}{% else %}Unavailable{% endif %}</strong></span></div>
             {% include "qbet_web/_engine_notices.html" with engine=engine %}
@@ -163,7 +163,7 @@
         {% endfor %}
       </div>
 
-      {% if simulation_control.runs %}<section class="recent-runs surface-subtle"><h3>Recent simulation runs</h3><ul>{% for run in simulation_control.runs %}<li><strong>{{ run.engine }}</strong> · {{ run.status }} · {{ run.progress }} · virtual capital {% localized_money run.current_capital "EUR" display_preferences %}{% if run.report_id %} · <a href="{% url 'report-detail' run.report_id %}">report</a>{% endif %}</li>{% endfor %}</ul></section>{% endif %}
+      {% if simulation_control.runs %}<section class="recent-runs surface-subtle"><h3>Recent simulation runs</h3><ul>{% for run in simulation_control.runs %}<li><strong>{{ run.engine }}</strong> · {{ run.status }} · {{ run.progress }} · available after run {% localized_money run.current_capital run.portfolio_currency display_preferences %}{% if run.report_id %} · <a href="{% url 'report-detail' run.report_id %}">report</a>{% endif %}</li>{% endfor %}</ul></section>{% endif %}
     </section>
   {% endif %}
 </div>
