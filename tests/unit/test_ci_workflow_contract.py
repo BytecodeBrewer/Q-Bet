@@ -47,7 +47,7 @@ def test_pull_request_vercel_gate_builds_and_exercises_protected_candidate() -> 
     assert "qbet-preview-smoke" in block
     assert "client.force_login(user)" in block
     assert "preview smoke identity must be active and non-privileged" in block
-    assert 'Session.objects.filter(session_key=os.environ["SESSION_KEY"]).delete()' in block
+    assert "Session.objects.filter(session_key=sys.argv[1]).delete()" in block
     assert 'route in /dashboard/ /reports/ /portfolio/' in block
     assert "QBET_PREVIEW_SMOKE_USERNAME" not in block
     assert "QBET_PREVIEW_SMOKE_PASSWORD" not in block
