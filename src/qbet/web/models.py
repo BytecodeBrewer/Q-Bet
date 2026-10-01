@@ -23,6 +23,35 @@ class SimulationAvailability(models.Model):
         db_table = "qbet_simulation_availability"
 
 
+class SimulationPortfolioState(models.Model):
+    """Seed definition for the single shared virtual Simulation portfolio."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    seed_balances = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_simulation_portfolio_state"
+
+
+class SimulationPortfolioResetArchive(models.Model):
+    """Prior Simulation ledger snapshots retained when the sandbox is reset."""
+
+    portfolio_payload = models.JSONField()
+    reset_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="qbet_simulation_portfolio_resets",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "qbet_simulation_portfolio_reset_archives"
+        ordering = ("-created_at", "-id")
+
+
 class SimulationRunState(models.Model):
     """Authoritative GUI-visible lifecycle state for one simulation run."""
 
@@ -36,6 +65,7 @@ class SimulationRunState(models.Model):
 
     run_id = models.UUIDField(primary_key=True, editable=False)
     engine = models.CharField(max_length=32)
+    portfolio_currency = models.CharField(max_length=3, default="EUR")
     status = models.CharField(
         max_length=16,
         choices=Status.choices,

@@ -3,9 +3,12 @@ from decimal import Decimal
 from uuid import UUID
 
 from qbet.calculations import ArbitrageOffer, QualifyingBetInput, TwoWayArbitrageInput
+from qbet.domain.ledger import PortfolioBalance
 from qbet.domain.verification import ProviderState
 from qbet.engines import BonusEngineRequest, SportsCapitalEngineRequest
 from qbet.layers import SimulationLogRecordType
+from qbet.ledger import PortfolioLedger
+from qbet.orchestrator import RejectionReason
 from qbet.reporting import ReportDetailSelection, SimulationReportBuilder
 from qbet.request_handler import (
     ExecutionSandboxRequestHandler,
@@ -132,6 +135,54 @@ def test_bonus_simulation_routes_allowed_step_through_required_liquidity_gate() 
     )
     assert liquidity_transition.sequence < capital_transition.sequence
     assert {record.run_id for record in runner.last_records} == {correlation_id}
+
+
+def test_default_liquidity_checker_rejects_each_engine_before_shared_ledger_reserve() -> None:
+    cases = (
+        (SimulationEngine.BONUS, (bonus_request(),)),
+        (SimulationEngine.SPORTS_CAPITAL, (sports_request(),)),
+    )
+
+    for engine, opportunities in cases:
+        shared_ledger = PortfolioLedger(
+            balance=PortfolioBalance(
+                mode="simulation",
+                currency="EUR",
+                available=Decimal("5"),
+            )
+        )
+        writes: list[PortfolioLedger] = []
+
+        def persist(updated: PortfolioLedger) -> PortfolioLedger:
+            writes.append(updated)
+            return updated
+
+        runner = WorkflowSimulationRunner(
+            simulation_ledger=shared_ledger,
+            ledger_writer=persist,
+        )
+
+        result = runner.run(
+            request(
+                engine,
+                opportunities,
+                config=SimulationRunConfig(
+                    engine=engine,
+                    starting_capital=Decimal("5"),
+                ),
+            )
+        )
+
+        assert result.simulation_result.completed_steps == ()
+        assert result.workflow_results[0].final_decision is WorkflowDecision.REJECT
+        liquidity_transition = next(
+            transition
+            for transition in result.workflow_results[0].transitions
+            if transition.stage is WorkflowStage.LIQUIDITY_CHECK
+        )
+        assert liquidity_transition.reason == RejectionReason.CAPITAL_LIMIT.value
+        assert writes == []
+        assert runner.last_ledger == shared_ledger
 
 
 def test_sports_capital_simulation_uses_concrete_engine() -> None:
