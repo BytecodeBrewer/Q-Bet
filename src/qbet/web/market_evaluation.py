@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timedelta
+from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
 from typing import cast
 
@@ -22,7 +23,7 @@ from pydantic import ValidationError
 
 from qbet.data import DataCollectionRequest, NormalizedMarketSnapshot
 from qbet.data.polling_runtime import PollingWork
-from qbet.simulation.models import SimulationEngine
+from qbet.simulation.models import SimulationEngine, SimulationRunConfig
 from qbet.simulation.opportunity_source import (
     SimulationOpportunitySource,
     SimulationOpportunitySourceError,
@@ -118,20 +119,59 @@ def _source(work: PollingWork, payload: dict) -> tuple[SimulationOpportunitySour
     promotions = payload["promotions"]
     if not promotions:
         raise SimulationOpportunitySourceError("bonus_offer_user_missing", "No admin promotion.")
-    owner = cast(
-        User, get_user_model().objects.get(pk=promotions[0][2], is_active=True, is_staff=True)
+    routing = RoutingConfigurationRepository().load()
+    preferences = dict(UserRoutingPreferenceRepository().list())
+    config = BonusOfferSimulationConfig.model_validate(
+        {
+            key: value
+            for key, value in payload["configuration"].items()
+            if key != "financial_terms_version"
+        }
     )
-    return BonusOfferSimulationOpportunitySource(
-        user_id=owner.pk,
-        config=BonusOfferSimulationConfig.model_validate(
-            {
-                key: value
-                for key, value in payload["configuration"].items()
-                if key != "financial_terms_version"
-            }
-        ),
-        collector=collector,
-    ), owner
+    last_error = None
+    # Preparation is read-only; only a successful eligible owner starts a run.
+    for owner_id in dict.fromkeys(item[2] for item in promotions):
+        preference = preferences.get(str(owner_id))
+        if routing is None or preference is None or not effective_engine_modes(
+            routing, preference, "bonus"
+        ).simulation:
+            continue
+        owner = cast(
+            User | None,
+            get_user_model().objects.filter(pk=owner_id, is_active=True, is_staff=True).first(),
+        )
+        if owner is None:
+            continue
+        source = BonusOfferSimulationOpportunitySource(
+            user_id=owner.pk, config=config, collector=collector,
+            offer_versions={item[0]: item[1] for item in promotions if item[2] == owner_id},
+        )
+        try:
+            source.build(
+                SimulationRunConfig(
+                    engine=SimulationEngine.BONUS,
+                    starting_capital=Decimal("1"),
+                    max_duration=timedelta(seconds=30),
+                ),
+                work.correlation_id,
+            )
+        except SimulationOpportunitySourceError as error:
+            if error.reason_code in _RETRYABLE_REASONS:
+                raise SimulationControlError(error.user_message, reason_code=error.reason_code) from error
+            last_error = error
+            continue
+        return source, owner
+    if last_error is not None:
+        raise last_error
+    raise SimulationOpportunitySourceError("bonus_offer_user_missing", "No eligible admin promotion.")
+
+
+_RETRYABLE_REASONS = frozenset({
+    "simulation_failed",
+    "bonus_provider_catalog_unavailable",
+    "bonus_market_provider_unavailable",
+    "bonus_provider_state_unavailable",
+})
 
 
 def consume_snapshots(*, active_work: tuple[PollingWork, ...], now: datetime, limit: int) -> int:
@@ -207,7 +247,9 @@ def consume_snapshots(*, active_work: tuple[PollingWork, ...], now: datetime, li
                 MarketEvaluationRow.objects.filter(
                     pk=identity, outcome__in=("unevaluated", "retry")
                 ).update(
-                    outcome="missing_input" if error.reason_code else "retry",
+                    outcome="missing_input"
+                    if error.reason_code and error.reason_code not in _RETRYABLE_REASONS
+                    else "retry",
                     reason=error.reason_code or "simulation_not_ready",
                     next_due_at=now + timedelta(seconds=30),
                 )
