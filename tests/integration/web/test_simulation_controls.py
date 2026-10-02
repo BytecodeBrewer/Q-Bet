@@ -13,11 +13,13 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "qbet.web.settings")
 import django
 
 from django.contrib.auth.models import User
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.test import TestCase, TransactionTestCase, override_settings
 
 from qbet.data import TheOddsApiAdapter
+from qbet.domain.ledger import LedgerCommand, LedgerOperation, PortfolioBalance
 from qbet.layers import SimulationLogRecordType
+from qbet.ledger import PortfolioLedger
 from qbet.simulation import SimulationEngine
 from qbet.simulation.opportunity_source import (
     DeterministicSimulationOpportunitySource,
@@ -26,17 +28,25 @@ from qbet.simulation.opportunity_source import (
     TheOddsApiSportsSimulationOpportunitySource,
 )
 from qbet.storage.ledger import PortfolioLedgerRepository, RoutingConfigurationRepository
-from qbet.storage.models import ModeWorkQueueRow
+from qbet.storage.models import ModeWorkQueueRow, PortfolioLedgerRow
 from qbet.storage.postgres import PostgresSimulationReportReader
-from qbet.web.models import SimulationAvailability, SimulationRunState, UserDisplayPreference
+from qbet.web.models import (
+    SimulationAvailability,
+    SimulationPortfolioResetArchive,
+    SimulationPortfolioState,
+    SimulationRunState,
+    UserDisplayPreference,
+)
 from qbet.web.monitoring import MonitoringService
 from qbet.web.simulation_control import (
     SimulationAlreadyRunningError,
     SimulationControlError,
     SimulationControlService,
 )
-from qbet.workflow import WorkflowStage
+from qbet.workflow import WorkflowMode, WorkflowStage
+from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.routing import EngineModes, RoutingConfiguration
+from tests.support.workflow import bonus_request
 
 django.setup()
 
@@ -51,6 +61,7 @@ class SimulationGuiControlTests(TestCase):
         )
         SimulationAvailability.objects.all().delete()
         SimulationRunState.objects.all().delete()
+        SimulationControlService().seed_portfolio(amount=Decimal("100"), currency="EUR")
 
     @override_settings(QBET_SIMULATION_MODE_ENABLED=False)
     def test_admin_can_enable_and_disable_persistent_simulation_availability(self) -> None:
@@ -225,7 +236,7 @@ class SimulationGuiControlTests(TestCase):
             "/simulation/start/",
             {
                 "engine": SimulationEngine.BONUS.value,
-                "starting_capital": "100.00",
+                "currency": "EUR",
                 "max_duration_minutes": "60",
             },
         )
@@ -244,7 +255,7 @@ class SimulationGuiControlTests(TestCase):
             "/simulation/start/",
             {
                 "engine": SimulationEngine.BONUS.value,
-                "starting_capital": "100.00",
+                "currency": "EUR",
                 "max_duration_minutes": "60",
             },
         )
@@ -260,7 +271,7 @@ class SimulationGuiControlTests(TestCase):
             "/simulation/start/",
             {
                 "engine": SimulationEngine.BONUS.value,
-                "starting_capital": "100.00",
+                "currency": "EUR",
                 "max_duration_minutes": "60",
             },
         )
@@ -276,8 +287,7 @@ class SimulationGuiControlTests(TestCase):
             "/simulation/start/",
             {
                 "engine": SimulationEngine.BONUS.value,
-                "starting_capital": "1.00",
-                "max_duration_minutes": "9000",
+                "currency": "JPY",
             },
         )
 
@@ -298,7 +308,7 @@ class SimulationGuiControlTests(TestCase):
         with self.assertRaises(SimulationAlreadyRunningError):
             service.start(
                 engine=SimulationEngine.BONUS,
-                starting_capital=Decimal("100"),
+                currency="EUR",
                 max_duration=timedelta(minutes=60),
             )
 
@@ -316,7 +326,7 @@ class SimulationGuiControlTests(TestCase):
             "/simulation/start/",
             {
                 "engine": SimulationEngine.SPORTS_CAPITAL.value,
-                "starting_capital": "100.00",
+                "currency": "EUR",
             },
             follow=True,
         )
@@ -331,7 +341,7 @@ class SimulationGuiControlTests(TestCase):
             "/simulation/start/",
             {
                 "engine": SimulationEngine.SPORTS_CAPITAL.value,
-                "starting_capital": "100.00",
+                "currency": "EUR",
             },
         )
         run = SimulationRunState.objects.get()
@@ -391,7 +401,7 @@ class SimulationGuiControlTests(TestCase):
             "/simulation/start/",
             {
                 "engine": SimulationEngine.SPORTS_CAPITAL.value,
-                "starting_capital": "100.00",
+                "currency": "EUR",
             },
         )
         run = SimulationRunState.objects.get()
@@ -423,9 +433,248 @@ class SimulationGuiControlTests(TestCase):
         )
         self.assertFalse(SimulationRunState.objects.exists())
         self.assertFalse(ModeWorkQueueRow.objects.exists())
-        self.assertIsNone(
-            PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        ledger = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        self.assertIsNotNone(ledger)
+        assert ledger is not None
+        self.assertEqual(ledger.balance.available, Decimal("100"))
+        self.assertFalse(ledger.commands)
+
+    def test_simulation_portfolio_tables_are_protected_from_supabase_api_roles(self) -> None:
+        if connection.vendor != "postgresql":
+            self.skipTest("PostgreSQL RLS assertion")
+
+        tables = (
+            "qbet_simulation_portfolio_state",
+            "qbet_simulation_portfolio_reset_archives",
         )
+        with connection.cursor() as cursor:
+            for table in tables:
+                cursor.execute(
+                    "SELECT relrowsecurity FROM pg_class WHERE oid = %s::regclass",
+                    [f"public.{table}"],
+                )
+                self.assertTrue(cursor.fetchone()[0], f"{table} must have RLS enabled")
+
+                for role in ("anon", "authenticated"):
+                    cursor.execute(
+                        "SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = %s)",
+                        [role],
+                    )
+                    if not cursor.fetchone()[0]:
+                        continue
+                    for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+                        cursor.execute(
+                            "SELECT has_table_privilege(%s, %s, %s)",
+                            [role, f"public.{table}", privilege],
+                        )
+                        self.assertFalse(
+                            cursor.fetchone()[0],
+                            f"{role} retains {privilege} on {table}",
+                        )
+
+    def test_portfolio_seed_is_staff_controlled_and_cannot_be_repeated(self) -> None:
+        SimulationPortfolioState.objects.all().delete()
+        PortfolioLedgerRow.objects.filter(mode="simulation").delete()
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            "/simulation/portfolio/seed/",
+            {"amount": "1000.00", "currency": "EUR", "return_to": "simulation"},
+        )
+
+        self.assertRedirects(response, "/simulation/")
+        state = SimulationPortfolioState.objects.get(pk=1)
+        self.assertEqual(state.seed_balances, {"EUR": "1000.00"})
+        seeded_ledger = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        assert seeded_ledger is not None
+        self.assertEqual(seeded_ledger.balance.available, Decimal("1000.00"))
+        repeated = self.client.post(
+            "/simulation/portfolio/seed/",
+            {"amount": "500.00", "currency": "EUR"},
+            follow=True,
+        )
+        self.assertContains(repeated, "already initialized")
+        self.assertEqual(SimulationPortfolioResetArchive.objects.count(), 0)
+
+    def test_portfolio_reset_requires_confirmation_and_archives_simulation_only(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        simulation = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        assert simulation is not None
+        changed, decision = simulation.apply(
+            LedgerCommand(
+                id="test-cost",
+                dispatch_id="test-cost",
+                correlation_id="test-reset",
+                currency="EUR",
+                operation=LedgerOperation.COST,
+                amount=Decimal("5"),
+            )
+        )
+        self.assertTrue(decision.accepted)
+        PortfolioLedgerRepository().save(changed)
+        PortfolioLedgerRow.objects.create(
+            mode="execution",
+            currency="EUR",
+            payload=PortfolioLedger(
+                balance=PortfolioBalance(
+                    mode="execution", currency="EUR", available=Decimal("250")
+                )
+            ).model_dump(mode="json"),
+        )
+        self.client.force_login(self.staff)
+
+        unconfirmed = self.client.post("/simulation/portfolio/reset/", {})
+        self.assertRedirects(unconfirmed, "/dashboard/")
+        self.assertEqual(SimulationPortfolioResetArchive.objects.count(), 0)
+
+        confirmed = self.client.post(
+            "/simulation/portfolio/reset/", {"confirm_reset": "on"}
+        )
+
+        self.assertRedirects(confirmed, "/dashboard/")
+        reset = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        execution = PortfolioLedgerRepository().load(mode="execution", currency="EUR")
+        assert reset is not None and execution is not None
+        self.assertEqual(reset.balance.available, Decimal("100"))
+        self.assertFalse(reset.commands)
+        self.assertEqual(execution.balance.available, Decimal("250"))
+        self.assertEqual(SimulationPortfolioResetArchive.objects.count(), 1)
+        archive = SimulationPortfolioResetArchive.objects.get()
+        self.assertIn("test-cost", archive.portfolio_payload["ledgers"]["EUR"]["commands"])
+
+    def test_portfolio_reset_is_blocked_while_simulation_run_is_active(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        SimulationRunState.objects.create(
+            run_id=uuid4(),
+            engine=SimulationEngine.BONUS.value,
+            status=SimulationRunState.Status.RUNNING,
+        )
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            "/simulation/portfolio/reset/", {"confirm_reset": "on"}, follow=True
+        )
+
+        self.assertContains(response, "Stop or finish active Simulation runs")
+        self.assertEqual(SimulationPortfolioResetArchive.objects.count(), 0)
+        ledger = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        assert ledger is not None
+        self.assertEqual(ledger.balance.available, Decimal("100"))
+
+    def test_portfolio_reset_is_blocked_while_simulation_queue_has_work(self) -> None:
+        now = datetime.now(UTC)
+        coordinator = ModeDispatchCoordinator(
+            RoutingConfiguration(bonus=EngineModes(simulation=True))
+        )
+        coordinator.schedule(
+            bonus_request("reset-queued-work", generated_at=now),
+            owner=self.staff.get_username(),
+            correlation_id=uuid4(),
+            scheduled_for=now,
+            expires_at=now + timedelta(minutes=5),
+        )
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            "/simulation/portfolio/reset/",
+            {"confirm_reset": "on"},
+            follow=True,
+        )
+
+        self.assertContains(response, "Finish or cancel queued Simulation work")
+        self.assertEqual(SimulationPortfolioResetArchive.objects.count(), 0)
+        self.assertTrue(
+            ModeWorkQueueRow.objects.filter(mode="simulation", state="pending").exists()
+        )
+
+    def test_portfolio_reset_is_blocked_while_simulation_capital_is_unsettled(self) -> None:
+        ledger = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        assert ledger is not None
+        reserved, decision = ledger.apply(
+            LedgerCommand(
+                id="reset-reserved",
+                dispatch_id="reset-reserved",
+                correlation_id="reset-reserved",
+                currency="EUR",
+                operation=LedgerOperation.RESERVE,
+                amount=Decimal("10"),
+            )
+        )
+        self.assertTrue(decision.accepted)
+        PortfolioLedgerRepository().save(reserved)
+        self.client.force_login(self.staff)
+
+        response = self.client.post(
+            "/simulation/portfolio/reset/",
+            {"confirm_reset": "on"},
+            follow=True,
+        )
+
+        self.assertContains(response, "Settle or release all working Simulation capital")
+        self.assertEqual(SimulationPortfolioResetArchive.objects.count(), 0)
+        persisted = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        assert persisted is not None
+        self.assertEqual(persisted.balance.reserved, Decimal("10"))
+
+    def test_engines_consume_the_same_currency_ledger(self) -> None:
+        SimulationAvailability.objects.create(pk=1, enabled=True)
+        service = SimulationControlService(
+            opportunity_source=DeterministicSimulationOpportunitySource()
+        )
+
+        bonus_run = service.start(engine=SimulationEngine.BONUS, currency="EUR")
+        after_bonus = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        assert after_bonus is not None
+        self.assertTrue(after_bonus.commands)
+
+        sports_pending = service.begin(
+            engine=SimulationEngine.SPORTS_CAPITAL,
+            currency="EUR",
+        )
+        self.assertEqual(sports_pending.current_capital, after_bonus.balance.available)
+        sports_run = service.run(sports_pending.run_id)
+        after_sports = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        assert after_sports is not None
+
+        self.assertEqual(bonus_run.portfolio_currency, sports_run.portfolio_currency)
+        self.assertEqual(
+            PortfolioLedgerRow.objects.filter(mode="simulation").count(),
+            1,
+        )
+        correlations = {
+            command.correlation_id for command in after_sports.commands.values()
+        }
+        self.assertIn(str(bonus_run.run_id), correlations)
+        self.assertIn(str(sports_run.run_id), correlations)
+        self.assertGreater(len(after_sports.commands), len(after_bonus.commands))
+        self.assertEqual(sports_run.current_capital, after_sports.balance.available)
+        self.assertEqual(
+            SimulationPortfolioState.objects.get(pk=1).seed_balances,
+            {"EUR": "100"},
+        )
+
+    def test_engine_pause_does_not_mutate_shared_sandbox_capital(self) -> None:
+        before = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        assert before is not None
+        repository = RoutingConfigurationRepository()
+        repository.save(
+            RoutingConfiguration(
+                bonus=EngineModes(simulation=True),
+                sports_capital=EngineModes(simulation=True),
+            )
+        )
+
+        updated = repository.set_mode_active(
+            engine="bonus",
+            mode=WorkflowMode.SIMULATION,
+            active=False,
+        )
+
+        after = PortfolioLedgerRepository().load(mode="simulation", currency="EUR")
+        self.assertFalse(updated.bonus.simulation)
+        self.assertTrue(updated.sports_capital.simulation)
+        self.assertEqual(after, before)
 
 
     def test_routing_and_simulation_state_survive_service_recreation(self) -> None:
@@ -437,7 +686,7 @@ class SimulationGuiControlTests(TestCase):
 
         run = SimulationControlService().start(
             engine=SimulationEngine.SPORTS_CAPITAL,
-            starting_capital=Decimal("100"),
+            currency="EUR",
             max_duration=timedelta(minutes=60),
         )
 
@@ -472,7 +721,7 @@ class SimulationGuiControlTests(TestCase):
         with self.assertRaises(SimulationControlError) as raised:
             service.start(
                 engine=SimulationEngine.BONUS,
-                starting_capital=Decimal("100"),
+                currency="EUR",
                 max_duration=timedelta(minutes=60),
             )
 
@@ -488,7 +737,7 @@ class SimulationGuiControlTests(TestCase):
         SimulationAvailability.objects.create(pk=1, enabled=True)
         run = SimulationControlService().start(
             engine=SimulationEngine.SPORTS_CAPITAL,
-            starting_capital=Decimal("100"),
+            currency="EUR",
             max_duration=timedelta(minutes=60),
         )
 
@@ -511,6 +760,7 @@ class SimulationGuiControlTests(TestCase):
                     "markets": [
                         {
                             "key": "h2h",
+                            "last_update": now.isoformat(),
                             "outcomes": [
                                 {"name": "Home", "price": 2.4},
                                 {"name": "Away", "price": 2.2},
@@ -523,6 +773,7 @@ class SimulationGuiControlTests(TestCase):
                     "markets": [
                         {
                             "key": "h2h",
+                            "last_update": now.isoformat(),
                             "outcomes": [
                                 {"name": "Home", "price": 2.3},
                                 {"name": "Away", "price": 2.5},
@@ -557,7 +808,7 @@ class SimulationGuiControlTests(TestCase):
 
         run = service.start(
             engine=SimulationEngine.SPORTS_CAPITAL,
-            starting_capital=Decimal("100"),
+            currency="EUR",
             max_duration=timedelta(minutes=60),
         )
 
@@ -603,7 +854,7 @@ class SimulationGuiControlTests(TestCase):
         with self.assertRaises(SimulationControlError) as raised:
             service.start(
                 engine=SimulationEngine.SPORTS_CAPITAL,
-                starting_capital=Decimal("100"),
+                currency="EUR",
                 max_duration=timedelta(minutes=60),
             )
 
@@ -637,11 +888,12 @@ class _BlockingOpportunitySource:
 class SimulationRunConcurrencyTests(TransactionTestCase):
     def test_overlapping_run_requests_claim_and_execute_the_simulation_once(self) -> None:
         SimulationAvailability.objects.create(pk=1, enabled=True)
+        SimulationControlService().seed_portfolio(amount=Decimal("100"), currency="EUR")
         source = _BlockingOpportunitySource()
         service = SimulationControlService(opportunity_source=source)
         run = service.begin(
             engine=SimulationEngine.BONUS,
-            starting_capital=Decimal("100"),
+            currency="EUR",
         )
         worker_errors: list[BaseException] = []
         worker = Thread(

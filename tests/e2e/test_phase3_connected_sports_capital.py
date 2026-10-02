@@ -56,6 +56,7 @@ from qbet.storage.ledger import (
 )
 from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportReader
+from qbet.web.simulation_control import SimulationControlService
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
 from qbet.workflow.funding import SimulationSandboxFundingCoordinator
@@ -95,6 +96,7 @@ def _market_payload(*, home_best: str = "2.20", away_best: str = "2.20") -> byte
                     "markets": [
                         {
                             "key": MARKET,
+                            "last_update": NOW.isoformat(),
                             "outcomes": [
                                 {"name": "Home", "price": home_best},
                                 {"name": "Away", "price": "1.80"},
@@ -107,6 +109,7 @@ def _market_payload(*, home_best: str = "2.20", away_best: str = "2.20") -> byte
                     "markets": [
                         {
                             "key": MARKET,
+                            "last_update": NOW.isoformat(),
                             "outcomes": [
                                 {"name": "Home", "price": "1.80"},
                                 {"name": "Away", "price": away_best},
@@ -292,6 +295,7 @@ def _assert_exact_market_urls(urls: list[str]) -> None:
 
 class ConnectedSportsCapitalPhase3E2ETests(TransactionTestCase):
     def test_connected_sports_capital_lifecycle_closes_external_boundaries_once(self) -> None:
+        SimulationControlService().seed_portfolio(amount=Decimal("100"), currency="EUR")
         source_http = RecordingHttp(_market_payload())
         request = _connected_request(CORRELATION_ID, source_http)
         revalidation_http = RecordingHttp(_market_payload())

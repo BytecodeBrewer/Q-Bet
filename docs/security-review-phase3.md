@@ -55,8 +55,9 @@ The review treats the Phase 3 Django application as Internet-exposed and assumes
 | Simulation availability | POST | Staff | Staff-only, CSRF, server-side transition checks |
 | `/admin/` | Django Admin methods | Staff/permissioned | Django Admin authentication and model permissions |
 | Account boundary | GET | Authenticated | Read-only authenticated boundary |
+| Preview smoke session | POST, DELETE | Protected Preview automation only | Preview-only runtime guard, fresh per-deployment bearer token, low-privilege smoke identity, five-minute session; Production and invalid tokens return 404 |
 
-Django's global CSRF middleware protects browser-session state changes. The execution and polling ticks are the intentional `csrf_exempt` Q-Bet machine routes found in the current review; both are POST-only and protected by constant-time bearer-token comparison rather than browser-session CSRF.
+Django's global CSRF middleware protects browser-session state changes. The execution tick, polling tick, and Preview smoke-session boundary are the intentional `csrf_exempt` Q-Bet machine routes found in the current review. Execution and polling are POST-only; the Preview smoke boundary is POST/DELETE and is additionally unavailable outside hosted Preview. All three fail closed behind constant-time bearer-token comparison rather than browser-session CSRF.
 
 ## Findings fixed in this ticket
 

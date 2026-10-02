@@ -15,6 +15,7 @@ from django.core.mail import send_mail
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
 from django.db import DatabaseError, transaction
+from django.forms import ChoiceField
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -25,6 +26,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from pydantic import ValidationError
 
+from qbet.domain.models import Currency
 from qbet.web.avatars import (
     AvatarStorageError,
     AvatarValidationError,
@@ -97,6 +99,8 @@ from qbet.web.forms import (
     PresentationSettingsForm,
     RegistrationForm,
     SimulationAvailabilityForm,
+    SimulationPortfolioResetForm,
+    SimulationPortfolioSeedForm,
     SimulationStartForm,
     UserRoutingPreferencesForm,
 )
@@ -348,6 +352,15 @@ def _dashboard_context(
     }
     if _is_staff(request.user) and _simulation_enabled():
         simulation_control = SIMULATION_CONTROL.snapshot()
+        start_form_value = start_form or SimulationStartForm()
+        available_currencies = tuple(
+            (balance.currency, balance.currency)
+            for balance in simulation_control.portfolio.balances
+        )
+        cast(ChoiceField, start_form_value.fields["currency"]).choices = (
+            available_currencies
+            or (("EUR", "EUR"), ("GBP", "GBP"), ("USD", "USD"))
+        )
         simulation_monitoring = MONITORING_SERVICE.snapshot(
             runtime_configuration=routing_configuration,
             runtime_available=routing_available,
@@ -369,7 +382,10 @@ def _dashboard_context(
             simulation_layer_active=simulation_monitoring.summary.active_engines > 0,
             simulation_layer_running=simulation_monitoring.summary.running_engines > 0,
             simulation_control=simulation_control,
-            start_form=start_form or SimulationStartForm(),
+            start_form=start_form_value,
+            simulation_portfolio_seed_form=SimulationPortfolioSeedForm(),
+            simulation_portfolio_reset_form=SimulationPortfolioResetForm(),
+            simulation_return_to="dashboard",
         )
     return _context(request, **values)
 
@@ -757,7 +773,10 @@ def simulation(request: HttpRequest) -> HttpResponse:
             request,
             monitoring=monitoring,
             simulation_control=control,
-            start_form=SimulationStartForm(),
+            start_form=_simulation_start_form(control),
+            simulation_portfolio_seed_form=SimulationPortfolioSeedForm(),
+            simulation_portfolio_reset_form=SimulationPortfolioResetForm(),
+            simulation_return_to="simulation",
             pipeline_dry_run_form=PipelineDryRunForm(),
             pipeline_dry_run=request.session.pop("pipeline_dry_run", None),
             provider_activity=provider_activity,
@@ -768,6 +787,64 @@ def simulation(request: HttpRequest) -> HttpResponse:
     )
 
 
+def _simulation_start_form(control) -> SimulationStartForm:
+    form = SimulationStartForm()
+    currencies = tuple(
+        (balance.currency, balance.currency)
+        for balance in control.portfolio.balances
+    )
+    if currencies:
+        cast(ChoiceField, form.fields["currency"]).choices = currencies
+    return form
+
+
+def _simulation_return_target(request: HttpRequest) -> str:
+    target = request.POST.get("return_to")
+    return target if target in {"dashboard", "simulation"} else "dashboard"
+
+
+@login_required
+@require_POST
+def simulation_portfolio_seed(request: HttpRequest) -> HttpResponse:
+    _require_staff(request)
+    target = _simulation_return_target(request)
+    form = SimulationPortfolioSeedForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Enter a valid virtual seed amount and currency.")
+        return redirect(target)
+    try:
+        SIMULATION_CONTROL.seed_portfolio(
+            amount=form.cleaned_data["amount"],
+            currency=cast(Currency, form.cleaned_data["currency"]),
+        )
+    except SimulationControlError as error:
+        messages.error(request, str(error))
+    else:
+        messages.success(request, "Simulation sandbox portfolio initialized.")
+    return redirect(target)
+
+
+@login_required
+@require_POST
+def simulation_portfolio_reset(request: HttpRequest) -> HttpResponse:
+    _require_staff(request)
+    target = _simulation_return_target(request)
+    form = SimulationPortfolioResetForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Confirm the Simulation sandbox reset to continue.")
+        return redirect(target)
+    try:
+        SIMULATION_CONTROL.reset_portfolio(reset_by=cast(User, request.user))
+    except SimulationControlError as error:
+        messages.error(request, str(error))
+    else:
+        messages.success(
+            request,
+            "Simulation sandbox returned to its seed balance. Prior ledger state was archived.",
+        )
+    return redirect(target)
+
+
 @login_required
 @require_POST
 def simulation_start(request: HttpRequest) -> HttpResponse:
@@ -776,7 +853,14 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
         messages.error(request, "Simulation is disabled by the administrator.")
         return redirect("dashboard")
 
-    form = SimulationStartForm(request.POST)
+    control = SIMULATION_CONTROL.snapshot()
+    form = SimulationStartForm(request.POST, initial={"currency": "EUR"})
+    currencies = tuple(
+        (balance.currency, balance.currency)
+        for balance in control.portfolio.balances
+    )
+    if currencies:
+        cast(ChoiceField, form.fields["currency"]).choices = currencies
     if not form.is_valid():
         return render(
             request,
@@ -800,7 +884,7 @@ def simulation_start(request: HttpRequest) -> HttpResponse:
     try:
         run = SIMULATION_CONTROL.begin(
             engine=engine,
-            starting_capital=form.cleaned_data["starting_capital"],
+            currency=cast(Currency, form.cleaned_data["currency"]),
             initiated_by=cast(User, request.user),
         )
     except SimulationControlError as error:

@@ -86,3 +86,42 @@ A completed provider event contributes typed score/finality evidence only. It do
 Live/incomplete events return partial or not-yet-available states without mutating the ledger. Missing events remain retryable/non-final rather than being fabricated as cancellations. Identity mismatches and malformed payloads fail closed.
 
 The same `QBET_THE_ODDS_API_KEY` environment/deployment secret boundary is used for scores. Normal tests inject HTTP and remain offline; credentials, credential-bearing URLs and raw provider payloads must never be stored or surfaced.
+# Bounded Hosted Discovery
+
+Set `QBET_POLLING_DISCOVERY_SPORTS` to a comma-separated allowlist of at most
+10 sport keys, `QBET_SIMULATION_ODDS_MARKET=h2h`, and
+`QBET_SIMULATION_SPORTS_SOURCE=the_odds_api`. Set
+`QBET_POLLING_DISCOVERY_MAX_EVENTS` to 1..100 (default 20) per sport and engine.
+The existing route preferences, global availability and persisted market
+polling strategy must enable the relevant Simulation route. The existing
+assumed-liquidity configuration remains explicit. No event id or manually
+supplied start time is required in this mode.
+
+The existing authenticated `POST /internal/polling/tick/` is the entry point.
+A discovery record performs its first read-only `/sports/{sport}/events` request
+on the first eligible wake, subject to the existing capacity and retry gates.
+The existing policy repeats discovery after the larger of the configured market
+interval and freshness window; refresh-point presets use their freshness window
+(Conservative 15 minutes, Standard 5, Frequent 2). Discovery is not tied to a
+synthetic match start. Previously scheduled, never-fetched parents recover on
+synchronization without resetting failed attempts or retry backoff.
+Its durable event-list payload
+is the recoverable handoff: later wakes synchronize stable event/market targets
+into the same `PollingWorkRow` queue and perform the existing targeted odds
+reads. Repeating a wake does not create new identities or reset target state.
+Empty discovery is recorded as `discovery_no_candidate`; expired event evidence
+is terminal. Provider failures preserve the prior discovery payload and use
+the existing defer/max-attempt policy. Tick work limits, strategy capacity,
+event/response limits and reported provider quota exhaustion bound retrieval.
+
+`source_updated_at` comes from the requested provider market's `last_update`.
+`fetched_at` and `observed_at` remain receipt timestamps, not source freshness
+evidence. Missing source time yields `unknown`; old/future source time yields
+`stale`; malformed source time fails normalization. Offers separately expose
+canonical mapping and licensed-catalog presence, unverified account availability,
+and `simulation_assumed` stake capacity. None of these constitutes verified
+Execution account or limit evidence. Monitoring records include source freshness,
+unmapped-provider and discovered/expired-event counts.
+
+This is intake and quotation persistence only. Automatic snapshot evaluation,
+opportunity dispatch and notifications are a separate downstream integration.

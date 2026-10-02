@@ -59,6 +59,7 @@ def _run(reason_code: str) -> SimulationRunSnapshot:
         run_id=uuid4(),
         engine="bonus",
         status="failed",
+        portfolio_currency="EUR",
         progress=Decimal("0"),
         current_capital=Decimal("100"),
         report_id=None,
@@ -87,37 +88,41 @@ def _report(run_id) -> SimulationReport:
     )
 
 
-def test_missing_bonus_input_is_warning_with_action_not_infrastructure_error() -> None:
-    enriched = contextual_engine_statuses(
-        (_engine(),),
-        bonus_input=BonusInputSnapshot(),
-        bonus_offers_url="/bonus-offers/",
-    )
-
-    notice = enriched[0].notices[0]
-
-    assert notice.severity == "warning"
-    assert notice.reason_code == "bonus_offer_missing"
-    assert notice.title == "Bonus input needed"
-    assert notice.action_url == "/bonus-offers/"
-
-
-def test_partially_ready_bonus_input_reports_observed_counts_without_threshold() -> None:
-    enriched = contextual_engine_statuses(
-        (_engine(),),
-        bonus_input=BonusInputSnapshot(
+def test_bonus_offer_count_guidance_is_not_projected_to_engine_notices() -> None:
+    for snapshot in (
+        BonusInputSnapshot(),
+        BonusInputSnapshot(
             active_offers=5,
             ready_offers=3,
-            provider_count=4,
+            provider_count=2,
+            coverage_state="limited",
         ),
+        BonusInputSnapshot(
+            active_offers=16,
+            ready_offers=15,
+            provider_count=4,
+            coverage_state="healthy",
+        ),
+    ):
+        enriched = contextual_engine_statuses(
+            (_engine(),),
+            bonus_input=snapshot,
+            bonus_offers_url="/bonus-offers/",
+        )
+        assert enriched[0].notices == ()
+
+
+def test_bonus_input_read_failure_remains_a_real_engine_error() -> None:
+    enriched = contextual_engine_statuses(
+        (_engine(),),
+        bonus_input=BonusInputSnapshot(available=False),
     )
 
     notice = enriched[0].notices[0]
+    assert notice.severity == "error"
+    assert notice.reason_code == "bonus_input_unavailable"
+    assert notice.title == "Bonus input unavailable"
 
-    assert notice.severity == "warning"
-    assert notice.reason_code == "bonus_offer_partially_ready"
-    assert "3 of 5 active offer(s)" in notice.detail
-    assert "4 provider(s)" in notice.detail
 
 
 def test_provider_account_state_failure_is_distinct_from_missing_input() -> None:

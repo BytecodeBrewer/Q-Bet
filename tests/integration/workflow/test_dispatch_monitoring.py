@@ -1,6 +1,7 @@
 """PostgreSQL integration coverage for reconstructable administrator Monitoring traces."""
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from unittest.mock import patch
 from uuid import UUID
 
@@ -16,6 +17,7 @@ from qbet.storage.models import (
     SimulationReportRow,
 )
 from qbet.storage.monitoring import MonitoringPersistenceError, PostgresMonitoringRepository
+from qbet.web.simulation_control import SimulationControlService
 from qbet.workflow import WorkflowMode, WorkState
 from qbet.workflow.approval import ExecutionApprovalService
 from qbet.workflow.dispatch import ModeDispatchCoordinator
@@ -69,6 +71,14 @@ class DispatchMonitoringPostgresTests(TransactionTestCase):
         now: datetime,
         monitoring_writer: PostgresMonitoringRepository | None = None,
     ) -> ModeDispatchCoordinator:
+        if simulation and not PortfolioLedgerRow.objects.filter(
+            mode="simulation",
+            currency="EUR",
+        ).exists():
+            SimulationControlService().seed_portfolio(
+                amount=Decimal("100"),
+                currency="EUR",
+            )
         request = bonus_request("monitoring-bonus", generated_at=now)
         return ModeDispatchCoordinator(
             RoutingConfiguration(

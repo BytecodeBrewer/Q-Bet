@@ -100,8 +100,24 @@ jobs:
         run: python manage.py migrate --noinput
       - name: Verify migration plan is current
         run: python manage.py migrate --check
-      - name: Run full standard Pytest suite
-        run: python -m pytest
+      - name: Run full standard Pytest suite with coverage
+        run: >-
+          python -m pytest
+          --cov=src/qbet
+          --cov-report=xml:coverage.xml
+          --cov-report=
+          --durations=20
+      - name: Enforce repository coverage gate
+        run: python -m coverage report
+      - name: Upload coverage report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: q-bet-coverage-${{ github.sha }}
+          path: coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Check Django configuration
         run: python manage.py check
       - name: Check hosted production security
@@ -164,14 +180,17 @@ jobs:
           retention-days: 14
 
   vercel-build-check:
-    name: Vercel preview build check
+    name: Vercel candidate preflight
     needs:
       - validation
       - performance
     if: >-
       !cancelled() &&
+      needs.validation.result == 'success' &&
+      needs.performance.result == 'success' &&
       ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/develop'))
+      (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')))
     runs-on: ubuntu-latest
     environment: preview
     env:
@@ -219,7 +238,7 @@ jobs:
       - name: Pull Vercel preview build configuration
         run: vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
 
-      - name: Build Vercel artifacts without deploying
+      - name: Build Vercel candidate artifacts
         env:
           QBET_DATABASE_URL: postgresql://qbet:qbet@127.0.0.1:5432/qbet_build_only
           QBET_DJANGO_SECRET_KEY: qbet-ci-build-only-secret
@@ -227,11 +246,129 @@ jobs:
           QBET_HOSTED_PREVIEW: "true"
           QBET_DJANGO_DEBUG: "false"
           QBET_DJANGO_ALLOWED_HOSTS: q-bet.vercel.app
-          QBET_RELEASE_SHA: ${{ github.event.pull_request.head.sha }}
+          QBET_RELEASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           QBET_SIMULATION_MODE_ENABLED: "false"
+        run: vercel build --yes --token "$VERCEL_TOKEN"
+
+      - name: Generate ephemeral Preview smoke token
+        id: preview-smoke
+        shell: bash
         run: |
-          vercel build --yes --token "$VERCEL_TOKEN"
-          echo "Vercel build passed; no deployment was created." >> "$GITHUB_STEP_SUMMARY"
+          token="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy protected Preview candidate
+        id: candidate
+        shell: bash
+        env:
+          QBET_PREVIEW_SMOKE_TOKEN: ${{ steps.preview-smoke.outputs.token }}
+        run: |
+          deployment_url="$(
+            vercel deploy --prebuilt --yes \
+              --token "$VERCEL_TOKEN" \
+              --env QBET_HOSTED_RUNTIME=true \
+              --env QBET_HOSTED_PREVIEW=true \
+              --env QBET_DJANGO_DEBUG=false \
+              --env QBET_DJANGO_ALLOWED_HOSTS=q-bet.vercel.app \
+              --env QBET_RELEASE_SHA="$EXPECTED_RELEASE" \
+              --env QBET_SIMULATION_MODE_ENABLED=false \
+              --env QBET_PREVIEW_SMOKE_TOKEN="$QBET_PREVIEW_SMOKE_TOKEN"
+          )"
+          test -n "$deployment_url"
+          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+          echo "Protected candidate Preview: $deployment_url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify candidate release and public runtime
+        shell: bash
+        run: |
+          deployment_url="${{ steps.candidate.outputs.url }}"
+          health=""
+          for attempt in {1..12}; do
+            health="$(vercel curl /health/ --deployment "$deployment_url" --silent || true)"
+            if printf '%s' "$health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\""; then
+              break
+            fi
+            sleep 5
+          done
+
+          if printf '%s' "$health" | grep -Fq '"readiness": "migrations_pending"'; then
+            echo "::error::Candidate database has pending migrations. Apply them through the operator-controlled migration path before promotion."
+            printf 'Candidate health response: %s\n' "$health"
+            exit 1
+          fi
+
+          if ! printf '%s' "$health" | grep -Fq "\"release\": \"$EXPECTED_RELEASE\"" || \
+             ! printf '%s' "$health" | grep -Fq '"status": "ok"' || \
+             ! printf '%s' "$health" | grep -Fq '"persistence": "ready"' || \
+             ! printf '%s' "$health" | grep -Fq '"readiness": "ready"'; then
+            echo "::error::Candidate did not serve the exact healthy release $EXPECTED_RELEASE."
+            printf 'Candidate health response: %s\n' "$health"
+            exit 1
+          fi
+
+          home="$(vercel curl / --deployment "$deployment_url" --fail --silent)"
+          printf '%s' "$home" | grep -q '/static/qbet_web/app.css'
+          login="$(vercel curl /accounts/login/ --deployment "$deployment_url" --fail --silent)"
+          printf '%s' "$login" | grep -q '<form'
+          vercel curl /static/qbet_web/app.css \
+            --deployment "$deployment_url" \
+            --fail --silent --output /dev/null
+
+          echo "Candidate serves exact release $EXPECTED_RELEASE with ready persistence and public runtime routes." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify authenticated candidate product routes
+        shell: bash
+        env:
+          QBET_PREVIEW_SMOKE_TOKEN: ${{ steps.preview-smoke.outputs.token }}
+        run: |
+          deployment_url="${{ steps.candidate.outputs.url }}"
+          cookie_jar="$(mktemp)"
+          trap 'rm -f "$cookie_jar"' EXIT
+
+          login_status="$(
+            vercel curl /internal/preview-smoke/session/ --deployment "$deployment_url" -- \
+              --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer $QBET_PREVIEW_SMOKE_TOKEN" \
+              --cookie-jar "$cookie_jar" \
+              --output /dev/null \
+              --write-out "%{http_code}"
+          )"
+          test "$login_status" = "200" || {
+            echo "::error::Preview smoke session boundary returned HTTP $login_status."
+            exit 1
+          }
+
+          for route in /dashboard/ /reports/ /portfolio/; do
+            route_status="$(
+              vercel curl "$route" --deployment "$deployment_url" -- \
+                --silent --show-error \
+                --cookie "$cookie_jar" \
+                --output /dev/null \
+                --write-out "%{http_code}"
+            )"
+            test "$route_status" = "200" || {
+              echo "::error::Authenticated candidate route $route returned HTTP $route_status."
+              exit 1
+            }
+          done
+
+          logout_status="$(
+            vercel curl /internal/preview-smoke/session/ --deployment "$deployment_url" -- \
+              --silent --show-error \
+              --request DELETE \
+              --header "Authorization: Bearer $QBET_PREVIEW_SMOKE_TOKEN" \
+              --cookie "$cookie_jar" \
+              --output /dev/null \
+              --write-out "%{http_code}"
+          )"
+          test "$logout_status" = "200" || {
+            echo "::error::Preview smoke session cleanup returned HTTP $logout_status."
+            exit 1
+          }
+
+          echo "Authenticated candidate Dashboard, Reports, and Portfolio routes passed through the Preview-only smoke boundary." >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     name: Vercel deployment
@@ -243,7 +380,7 @@ jobs:
       always() &&
       needs.validation.result == 'success' &&
       needs.performance.result == 'success' &&
-      (github.ref != 'refs/heads/develop' || needs.vercel-build-check.result == 'success') &&
+      needs.vercel-build-check.result == 'success' &&
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest

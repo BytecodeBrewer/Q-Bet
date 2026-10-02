@@ -1,12 +1,39 @@
 {% extends "qbet_web/base.html" %}
+{% load static %}
 {% block title %}Bonus Offers · Q-Bet{% endblock %}
 {% block content %}
-<section class="page-heading page-heading-row">
-  <div>
-    <span class="eyebrow">BonusEngine</span>
-    <h1>Bonus Offer List</h1>
-    <p>Your recorded sportsbook promotion terms. Expired offers stay visible for history but cannot enter new work.</p>
-  </div>
+<section class="page-heading">
+  <span class="eyebrow">BonusEngine</span>
+  <h1>Bonus Offer List</h1>
+  <p>Your recorded sportsbook promotions. Expired and removed offers stay historical; unsupported material conditions remain visible and fail closed.</p>
+</section>
+
+<section class="bonus-offer-entry" aria-labelledby="bonus-offer-entry-title">
+  {% if bonus_offer_guidance %}
+    <article
+      class="engine-notice engine-notice-info bonus-offer-guidance"
+      data-engine-notice
+      data-bonus-offer-guidance
+      role="status"
+      aria-live="polite"
+    >
+      <div class="engine-notice-icon" aria-hidden="true">i</div>
+      <div class="engine-notice-copy">
+        <span class="engine-notice-level">Info · Bonus offers</span>
+        <strong id="bonus-offer-entry-title">{{ bonus_offer_guidance.title }}</strong>
+        <p>{{ bonus_offer_guidance.detail }}</p>
+      </div>
+      <button
+        type="button"
+        class="engine-notice-dismiss"
+        data-notice-dismiss
+        aria-label="Dismiss {{ bonus_offer_guidance.title|escape }}"
+        title="Dismiss"
+      >×</button>
+    </article>
+  {% else %}
+    <span id="bonus-offer-entry-title" class="visually-hidden">Add Bonus Offer</span>
+  {% endif %}
   <button class="button-link" type="button" data-bonus-offer-dialog-open>New Bonus Offer</button>
 </section>
 
@@ -19,20 +46,64 @@
             <h2>{{ offer.name }}</h2>
             <span>{{ offer.provider.display_name }}</span>
           </div>
-          <span class="bonus-offer-status {% if offer.status_label == 'Expired' %}bonus-offer-status-expired{% elif offer.status_label == 'Active' %}bonus-offer-status-active{% else %}bonus-offer-status-unavailable{% endif %}">
+          <span class="bonus-offer-status {% if offer.status_label == 'Expired' or offer.status_label == 'Removed' %}bonus-offer-status-expired{% elif offer.status_label == 'Active' %}bonus-offer-status-active{% else %}bonus-offer-status-unavailable{% endif %}">
             {{ offer.status_label }}
           </span>
         </div>
         <div class="bonus-offer-row-meta">
-          <span>{{ offer.get_promotion_type_display }}</span>
-          {% if offer.promotion_value is not None %}<span>{{ offer.promotion_value }} {{ offer.currency }}</span>{% endif %}
-          {% if offer.required_stake is not None %}<span>Required stake {{ offer.required_stake }} {{ offer.currency }}</span>{% endif %}
+          <span>{{ offer.promotion_shape_label }}</span>
+          <span>{{ offer.promotion_stage_summary }}</span>
+          <span>Current automated stage: {{ offer.automation_stage_label }}</span>
+          {% if offer.promotion_value is not None %}<span>Reward {{ offer.promotion_value }} {{ offer.currency }}</span>{% endif %}
+          {% if offer.required_stake is not None %}<span>Qualifying stake {{ offer.required_stake }} {{ offer.currency }}</span>{% endif %}
           <span>Valid until {{ offer.valid_until|date:"Y-m-d H:i" }}</span>
         </div>
+        {% if offer.unsupported_reason %}
+          <p class="bonus-offer-review-reason"><strong>Needs review:</strong> {{ offer.unsupported_reason }}</p>
+        {% endif %}
+        {% if not offer.is_expired and not offer.is_retired %}
+          <div class="bonus-offer-row-actions" aria-label="Bonus Offer actions">
+            <a
+              class="icon-action-button"
+              href="{% url 'bonus-offer-edit' offer.pk %}"
+              aria-label="Edit Bonus Offer {{ offer.name|escape }}"
+              title="Edit Bonus Offer"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 20h4.25L19.7 8.55a2.1 2.1 0 0 0 0-2.97l-1.28-1.28a2.1 2.1 0 0 0-2.97 0L4 15.75V20Z"></path>
+                <path d="m13.9 5.9 4.2 4.2"></path>
+                <path d="M4 20h16"></path>
+              </svg>
+              <span class="visually-hidden">Edit</span>
+            </a>
+            <form method="post" action="{% url 'bonus-offer-remove' offer.pk %}">
+              {% csrf_token %}
+              <button
+                class="icon-action-button icon-action-button-danger"
+                type="submit"
+                aria-label="Remove Bonus Offer {{ offer.name|escape }}"
+                title="Remove Bonus Offer"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 7h16"></path>
+                  <path d="M9 7V4h6v3"></path>
+                  <path d="M6.5 7 7.5 20h9L17.5 7"></path>
+                  <path d="M10 11v5"></path>
+                  <path d="M14 11v5"></path>
+                </svg>
+                <span class="visually-hidden">Remove</span>
+              </button>
+            </form>
+          </div>
+        {% endif %}
+        {% if offer.revisions.count %}
+          <p class="admin-metadata">{{ offer.revisions.count }} saved revision{{ offer.revisions.count|pluralize }}</p>
+        {% endif %}
       </article>
     {% endfor %}
   </div>
 {% else %}
-  <p class="empty-state">No Bonus Offers yet. Add one when a sportsbook promotion needs to enter BonusEngine preparation.</p>
+  <p class="empty-state">No Bonus Offers yet. Add the promotion terms a sportsbook actually advertises; Q-Bet will derive the supported calculation stage.</p>
 {% endif %}
+<script src="{% static 'qbet_web/engine_notices.js' %}" defer></script>
 {% endblock %}

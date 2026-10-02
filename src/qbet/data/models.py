@@ -35,6 +35,7 @@ class SourceTransport(StrEnum):
 class FreshnessStatus(StrEnum):
     FRESH = "fresh"
     STALE = "stale"
+    UNKNOWN = "unknown"
 
 
 class CompletenessStatus(StrEnum):
@@ -66,10 +67,18 @@ class NormalizedOffer(DomainModel):
     currency: Currency
     availability: OfferAvailability = OfferAvailability.AVAILABLE
     observed_at: datetime
+    source_updated_at: datetime | None = None
+    stake_capacity_basis: str = "unspecified"
+    account_availability_verified: bool = False
+    canonical_provider_id: Identifier | None = None
+    provider_mapping_status: str = "unknown"
+    licensed_catalog_presence: bool = False
 
-    @field_validator("observed_at")
+    @field_validator("observed_at", "source_updated_at")
     @classmethod
-    def observed_at_is_timezone_aware(cls, value: datetime) -> datetime:
+    def observed_at_is_timezone_aware(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("observed_at must include timezone information")
         return value
@@ -126,3 +135,16 @@ class DataCollectionRequest(DomainModel):
     sport: Identifier | None = None
     event_id: Identifier | None = None
     market: Identifier | None = None
+
+
+class DiscoveredEvent(DomainModel):
+    event_id: Identifier
+    sport: Identifier
+    starts_at: datetime
+
+    @field_validator("starts_at")
+    @classmethod
+    def starts_at_is_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("event start must include timezone information")
+        return value

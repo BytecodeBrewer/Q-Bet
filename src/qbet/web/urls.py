@@ -18,6 +18,7 @@ from qbet.web.execution_approvals import (
 from qbet.web.execution_tick import execution_tick
 from qbet.web.polling_settings import polling_settings
 from qbet.web.polling_tick import polling_tick
+from qbet.web.preview_smoke import preview_smoke_session
 from qbet.web.routing_settings import routing_settings
 
 urlpatterns = [
@@ -26,6 +27,7 @@ urlpatterns = [
     path("metrics/", views.metrics, name="metrics"),
     path("internal/execution/tick/", execution_tick, name="execution-tick"),
     path("internal/polling/tick/", polling_tick, name="polling-tick"),
+    path("internal/preview-smoke/session/", preview_smoke_session, name="preview-smoke-session"),
     path("register/", views.register, name="register"),
     path("verification/pending/", views.verification_pending, name="verification-pending"),
     path("verify-email/<str:uidb64>/<str:token>/", views.verify_email, name="verify-email"),
@@ -36,6 +38,16 @@ urlpatterns = [
     path("notifications/", views.notification_inbox, name="notification-inbox"),
     path("bonus-offers/", bonus_offers.bonus_offer_list, name="bonus-offer-list"),
     path("bonus-offers/create/", bonus_offers.bonus_offer_create, name="bonus-offer-create"),
+    path(
+        "bonus-offers/<int:offer_id>/edit/",
+        bonus_offers.bonus_offer_edit,
+        name="bonus-offer-edit",
+    ),
+    path(
+        "bonus-offers/<int:offer_id>/remove/",
+        bonus_offers.bonus_offer_remove,
+        name="bonus-offer-remove",
+    ),
     path("provider-accounts/", provider_accounts.provider_account_list, name="provider-account-list"),
     path(
         "provider-accounts/<str:provider_id>/",
@@ -88,6 +100,16 @@ urlpatterns = [
     path("simulation/", views.simulation, name="simulation"),
     path("activity/provider/", views.provider_activity, name="provider-activity"),
     path("simulation/start/", views.simulation_start, name="simulation-start"),
+    path(
+        "simulation/portfolio/seed/",
+        views.simulation_portfolio_seed,
+        name="simulation-portfolio-seed",
+    ),
+    path(
+        "simulation/portfolio/reset/",
+        views.simulation_portfolio_reset,
+        name="simulation-portfolio-reset",
+    ),
     path("simulation/<uuid:run_id>/run/", views.simulation_run, name="simulation-run"),
     path("simulation/<uuid:run_id>/stop/", views.simulation_stop, name="simulation-stop"),
     path("simulation/pipeline-dry-run/", views.pipeline_dry_run, name="pipeline-dry-run"),

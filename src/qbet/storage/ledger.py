@@ -9,6 +9,7 @@ from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast
 from pydantic import ValidationError
 
+from qbet.engines import BonusEngineRequest
 from qbet.execution.models import ExecutionRecord, Lifecycle
 from qbet.ledger import PortfolioLedger
 from qbet.storage.models import (
@@ -521,3 +522,56 @@ class ModeWorkQueueRepository:
             row.payload = cancelled.model_dump(mode="json")
             row.save(update_fields=("state", "payload", "updated_at"))
             return cancelled
+
+    @transaction.atomic
+    def invalidate_bonus_offer(
+        self,
+        offer_id: int,
+        *,
+        current_version: int,
+        now,
+        removed: bool,
+    ) -> tuple[QueuedWorkItem, ...]:
+        """Mark open work derived from an older or removed Bonus Offer as stale."""
+
+        rows = ModeWorkQueueRow.objects.select_for_update().filter(
+            state__in=(
+                WorkState.PENDING.value,
+                WorkState.PROCESSING.value,
+                WorkState.RECHECK.value,
+            )
+        )
+        updated: list[QueuedWorkItem] = []
+        reason = "bonus_offer_removed" if removed else "bonus_offer_version_changed"
+        for row in rows:
+            item = QueuedWorkItem.model_validate(row.payload)
+            request = item.request
+            if not isinstance(request, BonusEngineRequest):
+                continue
+            dependency = request.bonus_offer_dependency
+            if dependency is None or dependency.offer_id != offer_id:
+                continue
+            if not removed and dependency.offer_version == current_version:
+                continue
+
+            if removed:
+                changed = item.transition(
+                    WorkState.CANCELLED,
+                    now=now,
+                    reason=reason,
+                )
+            elif item.state is WorkState.RECHECK:
+                changed = item
+            else:
+                changed = item.transition(
+                    WorkState.RECHECK,
+                    now=now,
+                    reason=reason,
+                )
+
+            if changed is not item:
+                row.state = changed.state.value
+                row.payload = changed.model_dump(mode="json")
+                row.save(update_fields=("state", "payload", "updated_at"))
+            updated.append(changed)
+        return tuple(updated)
