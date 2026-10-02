@@ -74,7 +74,7 @@ def _report(
         completed_steps=(),
         elapsed_duration=timedelta(minutes=5),
         progress=Decimal(1),
-        generated_at=datetime(2026, 9, 2, tzinfo=UTC),
+        generated_at=datetime.now(UTC) - timedelta(days=1),
         customer_report_input=CustomerReportInput(
             match="Northbridge v Riverside",
             provider="Bookmaker A",
