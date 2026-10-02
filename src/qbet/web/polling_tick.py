@@ -36,6 +36,7 @@ from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.polling import PollingStrategyPersistenceError, PollingStrategyRepository
 from qbet.storage.polling_work import PollingWorkPersistenceError, PostgresPollingWorkRepository
 from qbet.workflow.routing import effective_engine_modes
+from qbet.web.market_evaluation import MarketEvaluationPersistenceError, consume_snapshots
 
 
 class PollingTickConfigurationError(RuntimeError):
@@ -244,12 +245,16 @@ def polling_tick(request: HttpRequest) -> JsonResponse:
             limit=settings.QBET_POLLING_TICK_MAX_WORK,
             lease_for=timedelta(seconds=settings.QBET_POLLING_CLAIM_SECONDS),
         )
+        evaluated = consume_snapshots(
+            active_work=configured, now=datetime.now(UTC), limit=settings.QBET_POLLING_TICK_MAX_WORK,
+        )
     except (
         PollingTickConfigurationError,
         PollingStrategyPersistenceError,
         PollingWorkPersistenceError,
         RoutingConfigurationPersistenceError,
         UserRoutingPreferencePersistenceError,
+        MarketEvaluationPersistenceError,
     ):
         return JsonResponse(
             {"status": "unavailable", "reason": "polling_runtime_unavailable"},
@@ -261,6 +266,7 @@ def polling_tick(request: HttpRequest) -> JsonResponse:
             "status": "ok",
             "processed": result.processed,
             "provider_requests": result.provider_requests,
+            "evaluated": evaluated,
             "outcomes": [outcome.value for outcome in result.outcomes],
         }
     )

@@ -26,7 +26,7 @@ from qbet.simulation.adapters import (
     SimulationEngineAdapter,
     SportsCapitalSimulationAdapter,
 )
-from qbet.simulation.models import SimulationResult, SimulationRunConfig, SimulationStep
+from qbet.simulation.models import SimulationEvaluation, SimulationResult, SimulationRunConfig, SimulationStep
 from qbet.simulation.reporting import ReportingSimulationRunner
 from qbet.simulation.runner import SimulationStepObserver
 from qbet.storage import SimulationReportStore
@@ -74,6 +74,7 @@ class WorkflowSimulationResult(DomainModel):
     correlation_id: UUID
     simulation_result: SimulationResult
     workflow_results: tuple[WorkflowResult, ...]
+    evaluated_candidates: tuple[SimulationEvaluation, ...] = ()
 
 
 class _RiskStageHandler(WorkflowStageHandler):
@@ -362,6 +363,7 @@ class WorkflowSimulationRunner:
             correlation_id=correlation_id,
             simulation_result=simulation_result,
             workflow_results=tuple(workflow_results),
+            evaluated_candidates=tuple(step.evaluation for step in steps if step.evaluation is not None),
         )
 
     @staticmethod

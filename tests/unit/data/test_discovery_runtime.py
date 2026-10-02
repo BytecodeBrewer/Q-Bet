@@ -337,6 +337,7 @@ def test_hosted_discovery_entry_repeats_with_all_actual_presets(monkeypatch):
             patch.object(hosted, "RoutingConfigurationRepository") as routing,
             patch.object(hosted, "UserRoutingPreferenceRepository") as preferences,
             patch.object(hosted, "TheOddsApiAdapter", return_value=adapter),
+            patch.object(hosted, "consume_snapshots", return_value=0),
             patch.object(hosted, "datetime") as clock,
         ):
             strategies.return_value.resolver.return_value = PollingStrategyResolver((strategy,))

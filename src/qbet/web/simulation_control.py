@@ -29,6 +29,7 @@ from qbet.simulation.opportunity_source import (
     TheOddsApiSportsSimulationConfig,
     TheOddsApiSportsSimulationOpportunitySource,
 )
+from qbet.simulation.workflow import WorkflowSimulationResult
 from qbet.storage.monitoring import PostgresMonitoringRepository
 from qbet.storage.postgres import PostgresSimulationReportStore
 from qbet.storage.models import ModeWorkQueueRow, PortfolioLedgerRow
@@ -147,6 +148,7 @@ class SimulationControlService:
 
     def __init__(self, *, opportunity_source: SimulationOpportunitySource | None = None) -> None:
         self._opportunity_source = opportunity_source
+        self.last_workflow_result: WorkflowSimulationResult | None = None
 
     def availability(self) -> SimulationAvailabilitySnapshot:
         try:
@@ -334,13 +336,14 @@ class SimulationControlService:
         engine: SimulationEngine,
         currency: Currency = "EUR",
         initiated_by: User | None = None,
+        run_id: UUID | None = None,
     ) -> SimulationRunSnapshot:
         """Persist a visible running lifecycle before the synchronous worker request starts."""
 
         if engine not in _SUPPORTED_ENGINES:
             raise SimulationControlError("Only the two current sports engines are supported.")
 
-        run_id = uuid4()
+        run_id = run_id or uuid4()
         try:
             with transaction.atomic():
                 availability, _ = SimulationAvailability.objects.select_for_update().get_or_create(
@@ -475,6 +478,7 @@ class SimulationControlService:
                 request,
                 on_step_completed=observe_progress,
             )
+            self.last_workflow_result = result
         except SimulationOpportunitySourceError as error:
             if self._stop_requested(run_id):
                 return self._snapshot(run_id)

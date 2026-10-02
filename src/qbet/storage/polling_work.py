@@ -144,6 +144,9 @@ class PostgresPollingWorkRepository:
             with transaction.atomic():
                 row = PollingWorkRow.objects.select_for_update().get(**_identity(work))
                 self._write_row(row, work, clear_claim=True)
+                from qbet.web.market_evaluation import enqueue_snapshot
+
+                enqueue_snapshot(work)
                 return work
         except PollingWorkRow.DoesNotExist as error:
             raise PollingWorkPersistenceError("polling work does not exist") from error
