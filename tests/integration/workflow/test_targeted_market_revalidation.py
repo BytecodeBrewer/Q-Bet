@@ -82,6 +82,7 @@ def payload(home_odds: Decimal) -> bytes:
                     "markets": [
                         {
                             "key": "h2h",
+                            "last_update": NOW.isoformat(),
                             "outcomes": [
                                 {"name": "Home", "price": str(home_odds)},
                                 {"name": "Away", "price": "2.40"},

@@ -136,14 +136,10 @@ if _CURRENT_VERCEL_HOST and _CURRENT_VERCEL_HOST not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_CURRENT_VERCEL_HOST)
 
 if QBET_HOSTED_RUNTIME and SECRET_KEY == _LOCAL_SECRET_KEY:
-    raise ImproperlyConfigured(
-        "QBET_DJANGO_SECRET_KEY must be configured for hosted deployments"
-    )
+    raise ImproperlyConfigured("QBET_DJANGO_SECRET_KEY must be configured for hosted deployments")
 if QBET_HOSTED_RUNTIME and DEBUG:
     raise ImproperlyConfigured("QBET_DJANGO_DEBUG must be false for hosted deployments")
-if QBET_HOSTED_RUNTIME and any(
-    host == "*" or host.startswith(".") for host in ALLOWED_HOSTS
-):
+if QBET_HOSTED_RUNTIME and any(host == "*" or host.startswith(".") for host in ALLOWED_HOSTS):
     raise ImproperlyConfigured(
         "Hosted QBET_DJANGO_ALLOWED_HOSTS must contain exact hosts, not wildcards"
     )
@@ -228,13 +224,19 @@ QBET_POLLING_TICK_TOKEN = os.environ.get("QBET_POLLING_TICK_TOKEN", "")
 QBET_POLLING_TICK_MAX_WORK = _environment_positive_int("QBET_POLLING_TICK_MAX_WORK", 10)
 QBET_POLLING_CLAIM_SECONDS = _environment_positive_int("QBET_POLLING_CLAIM_SECONDS", 120)
 QBET_POLLING_DEFER_SECONDS = _environment_positive_int("QBET_POLLING_DEFER_SECONDS", 300)
+QBET_POLLING_DISCOVERY_SPORTS = tuple(
+    value.strip()
+    for value in os.environ.get("QBET_POLLING_DISCOVERY_SPORTS", "").split(",")
+    if value.strip()
+)
+QBET_POLLING_DISCOVERY_MAX_EVENTS = _environment_positive_int(
+    "QBET_POLLING_DISCOVERY_MAX_EVENTS", 20
+)
 QBET_GRAFANA_URL = optional_external_url("QBET_GRAFANA_URL")
 QBET_VERCEL_DASHBOARD_URL = optional_external_url("QBET_VERCEL_DASHBOARD_URL")
 QBET_SUPABASE_DASHBOARD_URL = optional_external_url("QBET_SUPABASE_DASHBOARD_URL")
 QBET_SUPABASE_URL = optional_external_url("QBET_SUPABASE_URL")
-QBET_SUPABASE_STORAGE_SECRET_KEY = os.environ.get(
-    "QBET_SUPABASE_STORAGE_SECRET_KEY", ""
-).strip()
+QBET_SUPABASE_STORAGE_SECRET_KEY = os.environ.get("QBET_SUPABASE_STORAGE_SECRET_KEY", "").strip()
 QBET_SIMULATION_MODE_ENABLED = _environment_flag("QBET_SIMULATION_MODE_ENABLED")
 QBET_SIMULATION_SPORTS_SOURCE = (
     os.environ.get("QBET_SIMULATION_SPORTS_SOURCE", "fixture").strip().lower()

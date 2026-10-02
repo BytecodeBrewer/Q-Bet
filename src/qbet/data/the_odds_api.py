@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from qbet.data.models import (
     CompletenessStatus,
     DataCollectionRequest,
+    DiscoveredEvent,
     FreshnessStatus,
     NormalizedMarketSnapshot,
     NormalizedOffer,
@@ -24,6 +25,7 @@ from qbet.data.models import (
     SourceTransport,
 )
 from qbet.domain.models import Currency, OfferSide
+from qbet.providers import load_german_sportsbook_catalog
 
 THE_ODDS_API_PROVIDER_ID = "the_odds_api"
 _BASE_URL = "https://api.the-odds-api.com/v4"
@@ -68,6 +70,7 @@ class TheOddsApiAdapter:
         available_stake: Decimal = Decimal(0),
         http_get: HttpGet | None = None,
         clock: Clock | None = None,
+        freshness_window: timedelta = timedelta(minutes=5),
     ) -> None:
         if not region.strip():
             raise ValueError("region must not be blank")
@@ -79,6 +82,72 @@ class TheOddsApiAdapter:
         self._available_stake = available_stake
         self._http_get = http_get or _default_http_get
         self._clock = clock or (lambda: datetime.now(UTC))
+        if freshness_window <= timedelta():
+            raise ValueError("freshness_window must be positive")
+        self._freshness_window = freshness_window
+        self._quota_exhausted = False
+
+    def _get(self, url: str) -> tuple[int, Mapping[str, str], bytes]:
+        if self._quota_exhausted:
+            raise TheOddsApiRateLimitError("The Odds API reported exhausted request quota")
+        status, headers, response = self._http_get(url)
+        remaining = next(
+            (v for k, v in headers.items() if k.lower() == "x-requests-remaining"), None
+        )
+        if remaining is not None:
+            try:
+                self._quota_exhausted = int(remaining) <= 0
+            except ValueError:
+                raise TheOddsApiPayloadError("The Odds API quota header is invalid") from None
+        if len(response) > 2_000_000:
+            raise TheOddsApiPayloadError("The Odds API response exceeds the payload limit")
+        return status, headers, response
+
+    def discover(
+        self, request: DataCollectionRequest, *, limit: int
+    ) -> tuple[DiscoveredEvent, ...]:
+        """One bounded event-list request, without fetching unconfigured sports or odds."""
+        if not 1 <= limit <= 100 or request.sport is None or request.market != "h2h":
+            raise TheOddsApiConfigurationError("discovery requires a sport, h2h and limit 1..100")
+        self._validate_request(request.model_copy(update={"event_id": "discovery"}))
+        query = urlencode({"apiKey": self._configured_api_key(), "dateFormat": "iso"})
+        url = f"{_BASE_URL}/sports/{quote(request.sport, safe='')}/events?{query}"
+        try:
+            status, _, response = self._get(url)
+        except HTTPError as error:
+            raise _http_status_error(error.code) from None
+        except (URLError, OSError):
+            raise TheOddsApiTransportError("The Odds API discovery failed") from None
+        if status != 200:
+            raise _http_status_error(status)
+        try:
+            payload = json.loads(response)
+            if not isinstance(payload, list) or len(payload) > 1000:
+                raise TheOddsApiPayloadError("The Odds API event list is invalid or oversized")
+            events: dict[str, DiscoveredEvent] = {}
+            now = _ensure_aware(self._clock(), "clock result")
+            for item in payload:
+                if not isinstance(item, dict):
+                    raise TheOddsApiPayloadError("The Odds API event is invalid")
+                event = DiscoveredEvent.model_validate(
+                    {
+                        "event_id": _required_text(item, "id"),
+                        "sport": _required_text(item, "sport_key"),
+                        "starts_at": _required_text(item, "commence_time"),
+                    }
+                )
+                if event.sport != request.sport:
+                    raise TheOddsApiPayloadError("The Odds API discovery sport mismatch")
+                if event.event_id in events and events[event.event_id] != event:
+                    raise TheOddsApiPayloadError("The Odds API conflicting event identity")
+                events[event.event_id] = event
+            return tuple(
+                sorted(
+                    events.values(), key=lambda e: (e.starts_at <= now, e.starts_at, e.event_id)
+                )[:limit]
+            )
+        except (ValidationError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise TheOddsApiPayloadError("The Odds API discovery payload invalid") from error
 
     def collect(self, request: DataCollectionRequest) -> NormalizedMarketSnapshot:
         return self.fetch(request)
@@ -126,7 +195,7 @@ class TheOddsApiAdapter:
         event_id = quote(request.event_id, safe="")
         url = f"{_BASE_URL}/sports/{sport}/events/{event_id}/odds?{query}"
         try:
-            status, _, response = self._http_get(url)
+            status, _, response = self._get(url)
         except HTTPError as error:
             raise _http_status_error(error.code) from None
         except (URLError, OSError):
@@ -153,10 +222,14 @@ class TheOddsApiAdapter:
             assert request.market is not None
             event_id = _required_text(event, "id")
             if event_id != request.event_id:
-                raise TheOddsApiPayloadError("The Odds API event identity did not match the request")
+                raise TheOddsApiPayloadError(
+                    "The Odds API event identity did not match the request"
+                )
             sport = _required_text(event, "sport_key")
             if sport != request.sport:
-                raise TheOddsApiPayloadError("The Odds API sport identity did not match the request")
+                raise TheOddsApiPayloadError(
+                    "The Odds API sport identity did not match the request"
+                )
             market_id = f"{event_id}:{request.market}"
             offers = _offers_for_market(
                 event=event,
@@ -175,7 +248,19 @@ class TheOddsApiAdapter:
                 event_id=event_id,
                 market_id=market_id,
                 fetched_at=fetched_at,
-                freshness=FreshnessStatus.FRESH,
+                freshness=(
+                    FreshnessStatus.UNKNOWN
+                    if any(offer.source_updated_at is None for offer in offers)
+                    else FreshnessStatus.STALE
+                    if any(
+                        offer.source_updated_at is not None
+                        and not timedelta()
+                        <= fetched_at - offer.source_updated_at
+                        <= self._freshness_window
+                        for offer in offers
+                    )
+                    else FreshnessStatus.FRESH
+                ),
                 completeness=CompletenessStatus.COMPLETE,
                 offers=offers,
             )
@@ -205,10 +290,12 @@ def _offers_for_market(
     if not isinstance(bookmakers, list) or not bookmakers:
         raise TheOddsApiPayloadError("The Odds API response has no bookmaker data")
     offers: list[NormalizedOffer] = []
+    catalog = load_german_sportsbook_catalog()
     for bookmaker in bookmakers:
         if not isinstance(bookmaker, dict):
             raise TheOddsApiPayloadError("The Odds API bookmaker data is invalid")
         bookmaker_key = _required_text(bookmaker, "key")
+        resolution = catalog.resolve(source_id=THE_ODDS_API_PROVIDER_ID, external_key=bookmaker_key)
         markets = bookmaker.get("markets")
         if not isinstance(markets, list):
             raise TheOddsApiPayloadError("The Odds API bookmaker markets are invalid")
@@ -220,6 +307,17 @@ def _offers_for_market(
         if len(matching_markets) != 1:
             raise TheOddsApiPayloadError("The Odds API response lacks the requested market")
         market = matching_markets[0]
+        source_time = market.get("last_update")
+        if source_time is None:
+            source_updated_at = None
+        else:
+            try:
+                source_updated_at = _ensure_aware(
+                    datetime.fromisoformat(str(source_time).replace("Z", "+00:00")),
+                    "source update",
+                )
+            except ValueError as error:
+                raise TheOddsApiPayloadError("The Odds API source timestamp is invalid") from error
         outcomes = market.get("outcomes")
         if not isinstance(outcomes, list) or len(outcomes) < 2:
             raise TheOddsApiPayloadError("The Odds API market must contain at least two outcomes")
@@ -239,6 +337,13 @@ def _offers_for_market(
                     currency=currency,
                     availability=OfferAvailability.AVAILABLE,
                     observed_at=observed_at,
+                    source_updated_at=source_updated_at,
+                    stake_capacity_basis="simulation_assumed",
+                    canonical_provider_id=(
+                        resolution.provider.provider_id if resolution.provider is not None else None
+                    ),
+                    provider_mapping_status=resolution.reason.value,
+                    licensed_catalog_presence=resolution.eligible,
                 )
             )
     if not offers:
@@ -273,4 +378,4 @@ def _ensure_aware(value: datetime, name: str) -> datetime:
 
 def _default_http_get(url: str) -> tuple[int, Mapping[str, str], bytes]:
     with urlopen(url, timeout=15) as response:
-        return response.status, dict(response.headers.items()), response.read()
+        return response.status, dict(response.headers.items()), response.read(2_000_001)

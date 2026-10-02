@@ -75,6 +75,15 @@ class PostgresPollingWorkRepository:
                         continue
 
                     current = self._work_from_row(row)
+                    # Recover parents scheduled by the old match-relative policy,
+                    # without disturbing retry backoff or a successful refresh.
+                    recover_discovery = (
+                        current.discovery
+                        and current.last_success_at is None
+                        and current.attempt == 0
+                        and current.last_outcome == "scheduled"
+                        and current.last_reason != "discovery_refresh_due"
+                    )
                     updated = current.model_copy(
                         update={
                             "source": candidate.source,
@@ -83,6 +92,11 @@ class PostgresPollingWorkRepository:
                             "market": candidate.market,
                             "event_starts_at": candidate.event_starts_at,
                             "disabled": candidate.disabled,
+                            "discovery_limit": candidate.discovery_limit,
+                            "terminal": current.terminal or candidate.terminal,
+                            "next_due_at": candidate.next_due_at
+                            if recover_discovery
+                            else current.next_due_at,
                         }
                     )
                     self._write_row(row, updated, clear_claim=False)

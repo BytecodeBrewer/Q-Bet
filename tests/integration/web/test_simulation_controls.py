@@ -760,6 +760,7 @@ class SimulationGuiControlTests(TestCase):
                     "markets": [
                         {
                             "key": "h2h",
+                            "last_update": now.isoformat(),
                             "outcomes": [
                                 {"name": "Home", "price": 2.4},
                                 {"name": "Away", "price": 2.2},
@@ -772,6 +773,7 @@ class SimulationGuiControlTests(TestCase):
                     "markets": [
                         {
                             "key": "h2h",
+                            "last_update": now.isoformat(),
                             "outcomes": [
                                 {"name": "Home", "price": 2.3},
                                 {"name": "Away", "price": 2.5},

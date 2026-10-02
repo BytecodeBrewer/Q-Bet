@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from urllib.error import HTTPError
@@ -61,6 +61,7 @@ def payload(**changes: object) -> dict[str, Any]:
                 "markets": [
                     {
                         "key": "h2h",
+                        "last_update": NOW.isoformat(),
                         "outcomes": [
                             {"name": "Home", "price": 2.25},
                             {"name": "Away", "price": 2.4},
@@ -147,6 +148,7 @@ def test_adapter_uses_its_fetch_time_for_all_normalized_offers() -> None:
             "markets": [
                 {
                     "key": "h2h",
+                    "last_update": NOW.isoformat(),
                     "outcomes": [
                         {"name": "Home", "price": 2.2},
                         {"name": "Away", "price": 2.45},
@@ -292,3 +294,112 @@ def test_snapshot_validation_errors_are_translated_to_payload_error() -> None:
 
     with pytest.raises(TheOddsApiPayloadError, match="payload validation failed"):
         adapter(invalid).fetch(request())
+
+
+@pytest.mark.parametrize(
+    "timestamp, expected",
+    [
+        (None, "unknown"),
+        ((NOW - timedelta(minutes=10)).isoformat(), "stale"),
+        ((NOW + timedelta(seconds=1)).isoformat(), "stale"),
+        ((NOW - timedelta(seconds=10)).isoformat(), "fresh"),
+    ],
+)
+def test_source_freshness_is_not_receipt_freshness(timestamp, expected) -> None:
+    response = payload()
+    response["bookmakers"][0]["markets"][0]["last_update"] = timestamp
+    snapshot = adapter(response).fetch(request())
+    assert snapshot.freshness.value == expected
+    assert snapshot.fetched_at == NOW
+    assert snapshot.offers[0].observed_at == NOW
+    assert snapshot.offers[0].source_updated_at == (
+        datetime.fromisoformat(timestamp) if timestamp else None
+    )
+    assert snapshot.offers[0].stake_capacity_basis == "simulation_assumed"
+    assert not snapshot.offers[0].account_availability_verified
+    assert not snapshot.offers[0].licensed_catalog_presence
+    assert snapshot.offers[0].canonical_provider_id is None
+    if expected != "fresh":
+        with pytest.raises(ValueError, match="fresh"):
+            snapshot.require_ready_for_preparation()
+
+
+def test_malformed_source_timestamp_fails_closed() -> None:
+    response = payload()
+    response["bookmakers"][0]["markets"][0]["last_update"] = "not-a-time"
+    with pytest.raises(TheOddsApiPayloadError, match="timestamp"):
+        adapter(response).fetch(request())
+
+
+def test_discovery_is_bounded_deduplicated_and_excludes_expired_events() -> None:
+    events = [
+        {"id": name, "sport_key": "soccer_epl", "commence_time": time.isoformat()}
+        for name, time in [
+            ("later", NOW + timedelta(hours=3)),
+            ("first", NOW + timedelta(hours=1)),
+            ("first", NOW + timedelta(hours=1)),
+            ("expired", NOW - timedelta(minutes=1)),
+        ]
+    ]
+    urls = []
+    value = TheOddsApiAdapter(
+        api_key="test",
+        clock=lambda: NOW,
+        http_get=lambda url: (urls.append(url) or 200, {}, json.dumps(events).encode()),
+    )
+    result = value.discover(request(event_id=None), limit=1)
+    assert [e.event_id for e in result] == ["first"]
+    assert len(urls) == 1
+    assert "/sports/soccer_epl/events?" in urls[0]
+    assert "/odds" not in urls[0]
+
+
+@pytest.mark.parametrize(
+    "status, error",
+    [
+        (429, TheOddsApiRateLimitError),
+        (503, TheOddsApiTransportError),
+    ],
+)
+def test_discovery_classifies_provider_errors(status, error) -> None:
+    value = TheOddsApiAdapter(api_key="test", http_get=lambda _: (status, {}, b""))
+    with pytest.raises(error):
+        value.discover(request(event_id=None), limit=2)
+
+
+def test_reported_exhausted_quota_stops_further_requests_in_the_same_wake() -> None:
+    calls = []
+    value = TheOddsApiAdapter(
+        api_key="test",
+        http_get=lambda url: (
+            calls.append(url) or 200,
+            {"x-requests-remaining": "0"},
+            b"[]",
+        ),
+    )
+    assert value.discover(request(event_id=None), limit=2) == ()
+    with pytest.raises(TheOddsApiRateLimitError, match="exhausted"):
+        value.fetch(request())
+    assert len(calls) == 1
+
+
+def test_expired_discovery_event_is_retained_as_terminal_evidence() -> None:
+    value = TheOddsApiAdapter(
+        api_key="test",
+        clock=lambda: NOW,
+        http_get=lambda _: (
+            200,
+            {},
+            json.dumps(
+                [
+                    {
+                        "id": "expired",
+                        "sport_key": "soccer_epl",
+                        "commence_time": (NOW - timedelta(minutes=1)).isoformat(),
+                    }
+                ]
+            ).encode(),
+        ),
+    )
+    result = value.discover(request(event_id=None), limit=2)
+    assert result[0].starts_at < NOW

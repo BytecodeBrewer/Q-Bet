@@ -15,6 +15,8 @@ from qbet.data.models import (
     DataCollectionRequest,
     DataSourceMetadata,
     DataTarget,
+    DiscoveredEvent,
+    FreshnessStatus,
     NormalizedMarketSnapshot,
 )
 from qbet.data.polling import (
@@ -68,6 +70,9 @@ class PollingWork(DomainModel):
     terminal: bool = False
     disabled: bool = False
     latest_snapshot: NormalizedMarketSnapshot | None = None
+    discovery: bool = False
+    discovery_limit: int = Field(default=20, ge=1, le=100)
+    discovered_events: tuple[DiscoveredEvent, ...] = ()
 
     @property
     def identity(self) -> tuple[str, str, PollingTarget, str, str, str, str, str]:
@@ -94,6 +99,7 @@ class PollingWork(DomainModel):
             attempt=self.attempt,
             mode=self.mode,
             engine=self.engine,
+            discovery=self.discovery,
         )
 
     def collection_request(self) -> DataCollectionRequest:
@@ -123,6 +129,10 @@ class PollingWorkRepository(Protocol):
 
 class PollingMarketCollector(Protocol):
     def collect(self, request: DataCollectionRequest) -> NormalizedMarketSnapshot: ...
+
+    def discover(
+        self, request: DataCollectionRequest, *, limit: int
+    ) -> tuple[DiscoveredEvent, ...]: ...
 
 
 class PollingMonitoringWriter(Protocol):
@@ -208,7 +218,7 @@ class SmartPollingRuntime:
 
         if decision.outcome is PollingOutcome.SCHEDULED:
             assert decision.scheduled_for is not None
-            if work.last_outcome is None and work.last_success_at is None:
+            if work.last_outcome is None and work.last_success_at is None and not work.discovery:
                 updated = work.model_copy(
                     update={
                         "next_due_at": decision.scheduled_for,
@@ -311,6 +321,27 @@ class SmartPollingRuntime:
         self._record(work, now=now, status="fetching", reason=None)
         started = perf_counter()
         try:
+            if work.discovery:
+                events = self._collector.discover(
+                    work.collection_request(), limit=work.discovery_limit
+                )
+                updated = work.model_copy(
+                    update={
+                        "discovered_events": events,
+                        "attempt": 0,
+                        "last_success_at": now,
+                        "last_outcome": "success",
+                        "last_reason": (
+                            "discovery_candidates"
+                            if any(e.starts_at > now for e in events)
+                            else "discovery_no_candidate"
+                        ),
+                    }
+                )
+                updated = self._schedule_after_success(updated, now=now)
+                self._repository.save(updated)
+                self._record(updated, now=now, status="success", reason=updated.last_reason)
+                return PollingRuntimeOutcome.SUCCESS, True
             snapshot = self._collector.collect(work.collection_request())
         except TheOddsApiRateLimitError:
             return self._provider_failure(
@@ -367,11 +398,18 @@ class SmartPollingRuntime:
                 started=started,
             ), True
 
+        reason = (
+            "polling_source_freshness_unknown"
+            if snapshot.freshness is FreshnessStatus.UNKNOWN
+            else "polling_source_quotation_stale"
+            if snapshot.freshness is FreshnessStatus.STALE
+            else "polling_provider_fetch_success"
+        )
         updated = work.model_copy(
             update={
                 "attempt": 0,
                 "last_outcome": PollingRuntimeOutcome.SUCCESS.value,
-                "last_reason": "polling_provider_fetch_success",
+                "last_reason": reason,
                 "last_success_at": snapshot.fetched_at,
                 "latest_snapshot": snapshot,
             }
@@ -382,15 +420,19 @@ class SmartPollingRuntime:
             updated,
             now=now,
             status=PollingRuntimeOutcome.SUCCESS.value,
-            reason="polling_provider_fetch_success",
+            reason=reason,
             duration_ms=_elapsed_ms(started),
         )
         return PollingRuntimeOutcome.SUCCESS, True
 
     def _schedule_after_success(self, work: PollingWork, *, now: AwareDatetime) -> PollingWork:
-        planning_request = work.request(
-            evaluation_at=now + timedelta(microseconds=1)
-        ).model_copy(update={"fetched_at": None})
+        if work.discovery:
+            decision = self._policy.decide(work.request(evaluation_at=now))
+            if decision.freshness_deadline is not None:
+                return work.model_copy(update={"next_due_at": decision.freshness_deadline})
+        planning_request = work.request(evaluation_at=now + timedelta(microseconds=1)).model_copy(
+            update={"fetched_at": None}
+        )
         decision = self._policy.decide(planning_request)
         if decision.outcome is PollingOutcome.SCHEDULED and decision.scheduled_for is not None:
             return work.model_copy(update={"next_due_at": decision.scheduled_for})
@@ -486,6 +528,26 @@ class SmartPollingRuntime:
                         "source_id": work.source.source_id,
                         "target": work.target.value,
                         "match_id": work.match_id,
+                        "discovered_events": str(len(work.discovered_events)),
+                        "expired_events": str(
+                            sum(e.starts_at <= now for e in work.discovered_events)
+                        ),
+                        "source_freshness": (
+                            work.latest_snapshot.freshness.value
+                            if work.latest_snapshot
+                            else "unknown"
+                        ),
+                        "unmapped_providers": str(
+                            len(
+                                {
+                                    offer.provider
+                                    for offer in work.latest_snapshot.offers
+                                    if offer.canonical_provider_id is None
+                                }
+                            )
+                        )
+                        if work.latest_snapshot
+                        else "0",
                     },
                 )
             )
