@@ -377,4 +377,3 @@ class MarketEvaluationClaimTests(TransactionTestCase):
             active_work=(self.work,), now=self.now + timedelta(seconds=3), limit=10
         ), 0)
         self.assertEqual(SimulationReportRow.objects.count(), 1)
-
