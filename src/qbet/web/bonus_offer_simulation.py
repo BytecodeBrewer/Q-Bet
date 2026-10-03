@@ -83,8 +83,10 @@ class BonusOfferSimulationOpportunitySource:
         catalog_repository: PostgresSportsbookCatalogRepository | None = None,
         provider_state_repository: ProviderStateRepository | None = None,
         financial_profile_repository: SportsbookFinancialProfileRepository | None = None,
+        offer_versions: dict[int, int] | None = None,
     ) -> None:
         self._user_id = user_id
+        self._offer_versions = offer_versions
         self._config = config
         self._collector = collector or TheOddsApiAdapter(
             available_stake=config.assumed_liquidity
@@ -164,7 +166,14 @@ class BonusOfferSimulationOpportunitySource:
                     correlation_id=correlation_id,
                 )
             except SimulationOpportunitySourceError as error:
-                if error.reason_code != "bonus_market_no_compatible_offer":
+                if error.reason_code != "bonus_market_no_compatible_offer" and (
+                    self._offer_versions is None
+                    or error.reason_code in {
+                        "bonus_provider_catalog_unavailable",
+                        "bonus_market_provider_unavailable",
+                        "bonus_provider_state_unavailable",
+                    }
+                ):
                     raise
                 last_market_error = error
 
@@ -292,6 +301,11 @@ class BonusOfferSimulationOpportunitySource:
                 "Create an active Bonus Offer before starting BonusEngine Simulation.",
             )
         ready = tuple(offer for offer in active if offer.is_preparation_ready)
+        if self._offer_versions is not None:
+            ready = tuple(
+                offer for offer in ready
+                if self._offer_versions.get(offer.pk) == offer.version
+            )
         if ready:
             return ready
         review = next((offer for offer in active if offer.needs_review), None)

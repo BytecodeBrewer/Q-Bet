@@ -251,6 +251,7 @@ Before selecting a real bank connector, a research ticket must verify official A
 
 - Simulation and Execution are sibling dispatch targets.
 - Simulation uses virtual capital, simulated adapters, selectable engines, visible progress, stop/end controls, and persisted reports.
+- Simulation is one shared administrator sandbox: authorized staff share virtual capital, runs and reports. It does not allocate a separate virtual bankroll to each user. This shared Simulation context never supplies account, capital, fee/tax or approval evidence for owner-scoped Execution.
 - Placeholder adapters for later engines remain explicit until their real logic exists.
 - Live execution is enabled only for supported workflows and requires approval boundaries.
 - API execution is the preferred target for betting exchanges, prediction markets, and crypto markets. Betfair Exchange and Polymarket are concrete initial research candidates.

@@ -326,6 +326,23 @@ class NotificationInboxDeliveryRow(models.Model):
         ordering = ("-created_at",)
 
 
+class MarketEvaluationRow(models.Model):
+    """Immutable snapshot handoff and retryable shared-sandbox evaluation."""
+
+    evaluation_id = models.UUIDField(primary_key=True, editable=False)
+    payload = models.JSONField()
+    outcome = models.CharField(max_length=32, default="unevaluated", db_index=True)
+    reason = models.CharField(max_length=255, blank=True, default="")
+    next_due_at = models.DateTimeField(db_index=True)
+    attempts = models.PositiveIntegerField(default=0)
+    run_id = models.UUIDField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "qbet_market_evaluations"
+        ordering = ("next_due_at", "evaluation_id")
+
+
 class SportsbookProviderRow(models.Model):
     """Durable static sportsbook identity and German licensing metadata."""
 
